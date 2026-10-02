@@ -25,7 +25,10 @@ import {
   Info,
   Save,
   Compass,
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff,
+  Cpu
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 
@@ -151,7 +154,7 @@ export default function App() {
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
 
   // API Bağlantı Formları (Kendi API'ne Bağlan)
-  const [activeStoreTab, setActiveStoreTab] = useState<'google' | 'apple'>('google');
+  const [activeStoreTab, setActiveStoreTab] = useState<'google' | 'apple' | 'ai'>('google');
   const [googleJsonInput, setGoogleJsonInput] = useState<string>('');
   const [googlePathInput, setGooglePathInput] = useState<string>('');
   const [appleKeyIdInput, setAppleKeyIdInput] = useState<string>('');
@@ -160,6 +163,27 @@ export default function App() {
   const [isSavingGoogle, setIsSavingGoogle] = useState<boolean>(false);
   const [isSavingApple, setIsSavingApple] = useState<boolean>(false);
   const [saveGlobal, setSaveGlobal] = useState<boolean>(false);
+
+  // Yapay Zeka (AI) Motoru State'leri
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | 'anthropic' | 'conventional'>('gemini');
+  const [geminiApiKeyInput, setGeminiApiKeyInput] = useState<string>('');
+  const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-1.5-flash');
+  const [openaiApiKeyInput, setOpenaiApiKeyInput] = useState<string>('');
+  const [openaiModelInput, setOpenaiModelInput] = useState<string>('gpt-4o-mini');
+  const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState<string>('');
+  const [anthropicModelInput, setAnthropicModelInput] = useState<string>('claude-3-5-sonnet-20241022');
+  const [aiConfiguredInfo, setAiConfiguredInfo] = useState<{
+    geminiConfigured?: boolean;
+    geminiMaskedKey?: string;
+    openaiConfigured?: boolean;
+    openaiMaskedKey?: string;
+    anthropicConfigured?: boolean;
+    anthropicMaskedKey?: string;
+  }>({});
+  const [isSavingAI, setIsSavingAI] = useState<boolean>(false);
+  const [isTestingAI, setIsTestingAI] = useState<boolean>(false);
+  const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showAiKey, setShowAiKey] = useState<boolean>(false);
 
   // Proje Detayları (Fallback ve uydurma veriler kaldırıldı)
   const [projectName, setProjectName] = useState<string>('');
@@ -309,6 +333,19 @@ export default function App() {
             hasPrivateKey: boolean;
             verified: boolean;
           };
+          ai?: {
+            provider?: 'gemini' | 'openai' | 'anthropic' | 'conventional';
+            geminiConfigured?: boolean;
+            geminiMaskedKey?: string;
+            geminiModel?: string;
+            openaiConfigured?: boolean;
+            openaiMaskedKey?: string;
+            openaiModel?: string;
+            anthropicConfigured?: boolean;
+            anthropicMaskedKey?: string;
+            anthropicModel?: string;
+            verified?: boolean;
+          };
         };
 
         if (data.googlePlay?.configured) {
@@ -337,6 +374,23 @@ export default function App() {
           if (data.appStore.issuerId && !appleIssuerIdInput) {
             setAppleIssuerIdInput(data.appStore.issuerId);
           }
+        }
+
+        if (data.ai) {
+          if (data.ai.provider) {
+            setAiProvider(data.ai.provider);
+          }
+          if (data.ai.geminiModel) setGeminiModelInput(data.ai.geminiModel);
+          if (data.ai.openaiModel) setOpenaiModelInput(data.ai.openaiModel);
+          if (data.ai.anthropicModel) setAnthropicModelInput(data.ai.anthropicModel);
+          setAiConfiguredInfo({
+            geminiConfigured: data.ai.geminiConfigured,
+            geminiMaskedKey: data.ai.geminiMaskedKey,
+            openaiConfigured: data.ai.openaiConfigured,
+            openaiMaskedKey: data.ai.openaiMaskedKey,
+            anthropicConfigured: data.ai.anthropicConfigured,
+            anthropicMaskedKey: data.ai.anthropicMaskedKey,
+          });
         }
       }
     } catch (err) {
@@ -867,16 +921,23 @@ export default function App() {
   };
 
   // AI SÜRÜM NOTLARI ÜRETİMİ
-  const handleGenerateAI = async () => {
+  const handleGenerateAI = async (selectedProvider?: 'gemini' | 'openai' | 'anthropic' | 'conventional') => {
     setIsGeneratingAI(true);
+    const targetProvider = selectedProvider || aiProvider;
     try {
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commits, version: nextVersion, projectPath: activeProjectPath }),
+        body: JSON.stringify({
+          commits,
+          version: nextVersion,
+          projectPath: activeProjectPath,
+          provider: targetProvider,
+        }),
       });
       if (response.ok) {
         const data = await response.json() as {
+          provider?: string;
           notesTr?: string;
           notesEn?: string;
           notes?: { tr?: { full: string[] }; en?: { full: string[] } };
@@ -884,13 +945,13 @@ export default function App() {
         if (data.notesTr) {
           setReleaseNotesTR(data.notesTr);
         } else if (data.notes?.tr?.full) {
-          setReleaseNotesTR(data.notes.tr.full.map((item: string) => `• ${item}`).join('\n'));
+          setReleaseNotesTR(data.notes.tr.full.map((item: string) => item.startsWith('•') ? item : `• ${item}`).join('\n'));
         }
 
         if (data.notesEn) {
           setReleaseNotesEN(data.notesEn);
         } else if (data.notes?.en?.full) {
-          setReleaseNotesEN(data.notes.en.full.map((item: string) => `• ${item}`).join('\n'));
+          setReleaseNotesEN(data.notes.en.full.map((item: string) => item.startsWith('•') ? item : `• ${item}`).join('\n'));
         }
       } else {
         const errText = await response.text();
@@ -900,6 +961,87 @@ export default function App() {
       console.error('AI notları üretilemedi:', err);
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  const handleSaveAI = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingAI(true);
+    setAiTestResult(null);
+    try {
+      const res = await fetch('/api/ai/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: aiProvider,
+          geminiApiKey: geminiApiKeyInput || undefined,
+          geminiModel: geminiModelInput,
+          openaiApiKey: openaiApiKeyInput || undefined,
+          openaiModel: openaiModelInput,
+          anthropicApiKey: anthropicApiKeyInput || undefined,
+          anthropicModel: anthropicModelInput,
+          saveGlobal,
+        }),
+      });
+      const data = await res.json() as { success?: boolean; message?: string; error?: string };
+      if (res.ok && data.success) {
+        setAiTestResult({ success: true, message: data.message || 'Yapay Zeka ayarları başarıyla kaydedildi.' });
+        await loadStoreCredentials();
+      } else {
+        setAiTestResult({ success: false, message: data.error || 'Ayarlar kaydedilemedi.' });
+      }
+    } catch (err) {
+      setAiTestResult({ success: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setIsSavingAI(false);
+    }
+  };
+
+  const handleTestAI = async () => {
+    setIsTestingAI(true);
+    setAiTestResult(null);
+    try {
+      let keyToTest = '';
+      let modelToTest = '';
+      if (aiProvider === 'gemini') {
+        keyToTest = geminiApiKeyInput;
+        modelToTest = geminiModelInput;
+      } else if (aiProvider === 'openai') {
+        keyToTest = openaiApiKeyInput;
+        modelToTest = openaiModelInput;
+      } else if (aiProvider === 'anthropic') {
+        keyToTest = anthropicApiKeyInput;
+        modelToTest = anthropicModelInput;
+      }
+
+      const res = await fetch('/api/ai/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: aiProvider,
+          apiKey: keyToTest,
+          model: modelToTest,
+        }),
+      });
+      const data = await res.json() as { success?: boolean; message?: string; error?: string };
+      if (res.ok && data.success) {
+        setAiTestResult({
+          success: true,
+          message: data.message || 'Yapay zeka bağlantısı başarılı!',
+        });
+      } else {
+        setAiTestResult({
+          success: false,
+          message: data.error || 'Bağlantı testi başarısız oldu.',
+        });
+      }
+    } catch (err) {
+      setAiTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -1616,23 +1758,63 @@ export default function App() {
 
               {/* AI SÜRÜM NOTLARI */}
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    Çift Dilli AI Sürüm Notları
-                  </h4>
-                  <button
-                    onClick={() => void handleGenerateAI()}
-                    disabled={isGeneratingAI || commits.length === 0}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
-                      (!releaseNotesTR.trim() || !releaseNotesEN.trim()) && commits.length > 0
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:opacity-90 ring-2 ring-primary/30'
-                        : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border'
-                    }`}
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
-                    <span>{isGeneratingAI ? 'Yapay Zeka Yazıyor...' : 'Commitlerden Üret'}</span>
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-border/60">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                        Çift Dilli AI Sürüm Notları
+                      </h4>
+                      <span className="text-[11px] text-muted-foreground">
+                        Mağaza standartlarında madde imli (•) temiz çıktılar
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* HIZLI MOTOR SEÇİCİ */}
+                    <div className="flex items-center gap-1.5 bg-background border border-border px-2 py-1 rounded-lg">
+                      <Cpu className="w-3.5 h-3.5 text-muted-foreground" />
+                      <select
+                        value={aiProvider}
+                        onChange={(e) => setAiProvider(e.target.value as 'gemini' | 'openai' | 'anthropic' | 'conventional')}
+                        className="text-xs font-semibold bg-transparent text-foreground cursor-pointer focus:outline-none"
+                        title="Sürüm notu üretim motoru"
+                      >
+                        <option value="gemini">Google Gemini</option>
+                        <option value="openai">OpenAI (ChatGPT)</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="conventional">Konvansiyonel Çözücü</option>
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveStoreTab('ai');
+                        setShowStoreTestModal(true);
+                      }}
+                      className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                      title="API Anahtarlarını ve Modelleri Yönet"
+                    >
+                      API Ayarları
+                    </button>
+
+                    <button
+                      onClick={() => void handleGenerateAI()}
+                      disabled={isGeneratingAI || commits.length === 0}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                        (!releaseNotesTR.trim() || !releaseNotesEN.trim()) && commits.length > 0
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:opacity-90 ring-2 ring-primary/30'
+                          : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border'
+                      }`}
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
+                      <span>{isGeneratingAI ? 'Yapay Zeka Yazıyor...' : 'Commitlerden Üret'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1650,12 +1832,18 @@ export default function App() {
                       </button>
                     </div>
                     <textarea
-                      rows={5}
+                      rows={6}
                       value={releaseNotesTR}
                       onChange={(e) => setReleaseNotesTR(e.target.value)}
                       placeholder="Sürüm notu henüz oluşturulmadı. 'Commitlerden Üret' butonuna tıklayarak AI ile oluşturun veya buraya manuel girin..."
                       className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed placeholder:text-muted-foreground/60"
                     />
+                    <div className="flex items-center justify-between text-[11px] px-1">
+                      <span className="text-muted-foreground">Google Play Sınırı (Maks 500):</span>
+                      <span className={`font-mono font-medium ${releaseNotesTR.length > 500 ? 'text-rose-500 font-bold' : releaseNotesTR.length > 450 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                        {releaseNotesTR.length} / 500
+                      </span>
+                    </div>
                   </div>
 
                   {/* İNGİLİZCE NOTLAR */}
@@ -1672,12 +1860,18 @@ export default function App() {
                       </button>
                     </div>
                     <textarea
-                      rows={5}
+                      rows={6}
                       value={releaseNotesEN}
                       onChange={(e) => setReleaseNotesEN(e.target.value)}
                       placeholder="Release notes not generated yet. Click 'Generate from Commits' to create with AI or enter manually..."
                       className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed placeholder:text-muted-foreground/60"
                     />
+                    <div className="flex items-center justify-between text-[11px] px-1">
+                      <span className="text-muted-foreground">Google Play Sınırı (Maks 500):</span>
+                      <span className={`font-mono font-medium ${releaseNotesEN.length > 500 ? 'text-rose-500 font-bold' : releaseNotesEN.length > 450 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                        {releaseNotesEN.length} / 500
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2060,6 +2254,21 @@ export default function App() {
                 <span>Apple App Store Connect API</span>
                 {appStoreInfo.connected && <span className="w-2 h-2 rounded-full bg-sky-400"></span>}
               </button>
+
+              <button
+                onClick={() => setActiveStoreTab('ai')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                  activeStoreTab === 'ai'
+                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                    : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 shrink-0 text-purple-400" />
+                <span>Yapay Zeka (AI) Motoru</span>
+                {(aiConfiguredInfo.geminiConfigured || aiConfiguredInfo.openaiConfigured || aiConfiguredInfo.anthropicConfigured) && (
+                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                )}
+              </button>
             </div>
 
             {/* TAB 1: GOOGLE PLAY API BAĞLANTI FORMU */}
@@ -2254,6 +2463,270 @@ export default function App() {
                     <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
                     <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
                   </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 3: YAPAY ZEKA (AI) MOTORU BAĞLANTI FORMU */}
+            {activeStoreTab === 'ai' && (
+              <form onSubmit={(e) => void handleSaveAI(e)} className="space-y-4">
+                <div className="p-3.5 rounded-lg bg-secondary/40 border border-border text-xs space-y-1">
+                  <div className="font-semibold text-foreground flex items-center justify-between">
+                    <span>Yapay Zeka Sürüm Notu Sağlayıcısı</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">Çift Dilli (TR / EN) Otomatik Notlar</span>
+                  </div>
+                  <p className="text-muted-foreground text-[11px] leading-relaxed">
+                    İstediğiniz yapay zeka modelinin API anahtarını bağlayabilir veya sıfır yapılandırmayla çevrimdışı çalışan akıllı Konvansiyonel Çözücüyü kullanabilirsiniz.
+                  </p>
+                </div>
+
+                {/* SAĞLAYICI SEÇİMİ BUTONLARI */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('gemini')}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      aiProvider === 'gemini'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background hover:bg-secondary text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>Google Gemini</span>
+                      {aiConfiguredInfo.geminiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Flash & Pro</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('openai')}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      aiProvider === 'openai'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background hover:bg-secondary text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>OpenAI</span>
+                      {aiConfiguredInfo.openaiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">GPT-4o & Mini</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('anthropic')}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      aiProvider === 'anthropic'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background hover:bg-secondary text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>Anthropic</span>
+                      {aiConfiguredInfo.anthropicConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Claude 3.5 Sonnet</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiProvider('conventional')}
+                    className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
+                      aiProvider === 'conventional'
+                        ? 'border-primary bg-primary/10 text-foreground ring-1 ring-primary'
+                        : 'border-border bg-background hover:bg-secondary text-muted-foreground'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>Konvansiyonel</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-mono">Çevrimdışı</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">API Anahtarsız</div>
+                  </button>
+                </div>
+
+                {/* FORM DETAYLARI: GEMINI */}
+                {aiProvider === 'gemini' && (
+                  <div className="space-y-3 p-3.5 rounded-lg border border-border bg-background">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-foreground">Google Gemini API Anahtarı:</label>
+                        {aiConfiguredInfo.geminiConfigured && (
+                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.geminiMaskedKey}</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showAiKey ? 'text' : 'password'}
+                          value={geminiApiKeyInput}
+                          onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                          placeholder={aiConfiguredInfo.geminiConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'AIzaSy...'}
+                          className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAiKey(!showAiKey)}
+                          className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          {showAiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground block">Model:</label>
+                      <input
+                        type="text"
+                        value={geminiModelInput}
+                        onChange={(e) => setGeminiModelInput(e.target.value)}
+                        placeholder="gemini-1.5-flash"
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* FORM DETAYLARI: OPENAI */}
+                {aiProvider === 'openai' && (
+                  <div className="space-y-3 p-3.5 rounded-lg border border-border bg-background">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-foreground">OpenAI API Anahtarı:</label>
+                        {aiConfiguredInfo.openaiConfigured && (
+                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.openaiMaskedKey}</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showAiKey ? 'text' : 'password'}
+                          value={openaiApiKeyInput}
+                          onChange={(e) => setOpenaiApiKeyInput(e.target.value)}
+                          placeholder={aiConfiguredInfo.openaiConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'sk-proj-...'}
+                          className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAiKey(!showAiKey)}
+                          className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          {showAiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground block">Model:</label>
+                      <input
+                        type="text"
+                        value={openaiModelInput}
+                        onChange={(e) => setOpenaiModelInput(e.target.value)}
+                        placeholder="gpt-4o-mini"
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* FORM DETAYLARI: ANTHROPIC */}
+                {aiProvider === 'anthropic' && (
+                  <div className="space-y-3 p-3.5 rounded-lg border border-border bg-background">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-foreground">Anthropic Claude API Anahtarı:</label>
+                        {aiConfiguredInfo.anthropicConfigured && (
+                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.anthropicMaskedKey}</span>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showAiKey ? 'text' : 'password'}
+                          value={anthropicApiKeyInput}
+                          onChange={(e) => setAnthropicApiKeyInput(e.target.value)}
+                          placeholder={aiConfiguredInfo.anthropicConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'sk-ant-api03-...'}
+                          className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAiKey(!showAiKey)}
+                          className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          {showAiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground block">Model:</label>
+                      <input
+                        type="text"
+                        value={anthropicModelInput}
+                        onChange={(e) => setAnthropicModelInput(e.target.value)}
+                        placeholder="claude-3-5-sonnet-20241022"
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* FORM DETAYLARI: CONVENTIONAL */}
+                {aiProvider === 'conventional' && (
+                  <div className="p-3.5 rounded-lg border border-border bg-background space-y-2 text-xs">
+                    <div className="flex items-center gap-2 text-foreground font-semibold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <span>Çevrimdışı ve Sıfır Yapılandırma</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed text-[11px]">
+                      Herhangi bir API anahtarı gerekmez. Git geçmişinizdeki <code>feat:</code>, <code>fix:</code>, <code>perf:</code>, <code>refactor:</code> etiketlerini çözümleyerek mağaza standartlarında profesyonel çift dilli sürüm notu üretir.
+                    </p>
+                  </div>
+                )}
+
+                {/* TEST SONUCU BİLDİRİMİ */}
+                {aiTestResult && (
+                  <div className={`p-3 rounded-lg text-xs border ${
+                    aiTestResult.success
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                  }`}>
+                    <div className="flex items-center gap-1.5">
+                      {aiTestResult.success ? <Check className="w-3.5 h-3.5 shrink-0" /> : <X className="w-3.5 h-3.5 shrink-0" />}
+                      <span>{aiTestResult.message}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveGlobal}
+                      onChange={(e) => setSaveGlobal(e.target.checked)}
+                      className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <span>Tüm projeler için genel (global) anahtar olarak kaydet</span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleTestAI()}
+                      disabled={isTestingAI || isSavingAI}
+                      className="px-3.5 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isTestingAI ? 'Test Ediliyor...' : 'Bağlantıyı Test Et'}
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isSavingAI}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    >
+                      <Save className={`w-3.5 h-3.5 ${isSavingAI ? 'animate-spin' : ''}`} />
+                      <span>{isSavingAI ? 'Kaydediliyor...' : 'Ayarları Kaydet'}</span>
+                    </button>
+                  </div>
                 </div>
               </form>
             )}

@@ -12,7 +12,7 @@ import { VersionResolver } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
 import { DatabaseConnection, ReleaseRepository, AuditLogRepository } from '@webicro/database';
 import { ReleaseOrchestrator } from '@webicro/core';
-import { AIController, ConventionalReleaseNotesProvider, GeminiProvider } from '@webicro/ai';
+import { AIController, createAIProvider, type AIProviderType } from '@webicro/ai';
 import { ReleaseNotesValidator } from '@webicro/validation';
 import { PubspecVersionUpdater } from '@webicro/flutter';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
@@ -454,6 +454,18 @@ export function findProjectAppIcon(projectPath: string): string | null {
   return null;
 }
 
+export interface AICredentials {
+  provider?: AIProviderType;
+  geminiApiKey?: string;
+  geminiModel?: string;
+  openaiApiKey?: string;
+  openaiModel?: string;
+  anthropicApiKey?: string;
+  anthropicModel?: string;
+  verified?: boolean;
+  lastTestedAt?: string;
+}
+
 export interface StoreCredentials {
   googlePlay?: {
     serviceAccountEmail?: string;
@@ -471,6 +483,7 @@ export interface StoreCredentials {
     verified?: boolean;
     lastTestedAt?: string;
   };
+  ai?: AICredentials;
 }
 
 /**
@@ -487,7 +500,15 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
     if (fs.existsSync(cPath)) {
       try {
         const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8')) as StoreCredentials;
-        if (parsed.googlePlay || parsed.appStore) {
+        if (parsed.googlePlay || parsed.appStore || parsed.ai) {
+          if (!parsed.ai) {
+            parsed.ai = {
+              provider: process.env['GEMINI_API_KEY'] ? 'gemini' : process.env['OPENAI_API_KEY'] ? 'openai' : process.env['ANTHROPIC_API_KEY'] ? 'anthropic' : 'conventional',
+              geminiApiKey: process.env['GEMINI_API_KEY'],
+              openaiApiKey: process.env['OPENAI_API_KEY'],
+              anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
+            };
+          }
           return parsed;
         }
       } catch {
@@ -556,6 +577,21 @@ export function saveStoreCredentials(creds: StoreCredentials, projectDir?: strin
   }
   const filePath = path.join(targetDir, 'credentials.json');
   fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf8');
+}
+
+export function maskKey(key?: string): string {
+  if (!key) return '';
+  const trimmed = key.trim();
+  if (trimmed.length <= 8) return '********';
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
+
+export function formatBulletNotes(items: string[]): string {
+  return items
+    .map((it) => it.trim())
+    .filter(Boolean)
+    .map((it) => (it.startsWith('•') ? it : `• ${it}`))
+    .join('\n');
 }
 
 function cleanSemver(v: string): number[] {
@@ -1426,8 +1462,159 @@ export const uiCommand = new Command('ui')
             issuerId: creds.appStore?.issuerId || '',
             hasPrivateKey: Boolean(creds.appStore?.privateKey || creds.appStore?.privateKeyPath),
             verified: creds.appStore?.verified ?? false,
-          }
+          },
+          ai: {
+            provider: creds.ai?.provider || (process.env['GEMINI_API_KEY'] ? 'gemini' : process.env['OPENAI_API_KEY'] ? 'openai' : process.env['ANTHROPIC_API_KEY'] ? 'anthropic' : 'conventional'),
+            geminiConfigured: Boolean(creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY']),
+            geminiMaskedKey: maskKey(creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY']),
+            geminiModel: creds.ai?.geminiModel || 'gemini-1.5-flash',
+            openaiConfigured: Boolean(creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY']),
+            openaiMaskedKey: maskKey(creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY']),
+            openaiModel: creds.ai?.openaiModel || 'gpt-4o-mini',
+            anthropicConfigured: Boolean(creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY']),
+            anthropicMaskedKey: maskKey(creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY']),
+            anthropicModel: creds.ai?.anthropicModel || 'claude-3-5-sonnet-20241022',
+            verified: creds.ai?.verified ?? false,
+          },
         }));
+        return;
+      }
+
+      // 5.0 POST /api/ai/save - Yapay Zeka Sağlayıcı ve Anahtarlarını Kaydet
+      if (req.method === 'POST' && pathname === '/api/ai/save') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              provider?: AIProviderType;
+              geminiApiKey?: string;
+              geminiModel?: string;
+              openaiApiKey?: string;
+              openaiModel?: string;
+              anthropicApiKey?: string;
+              anthropicModel?: string;
+              saveGlobal?: boolean;
+            };
+
+            const creds = getStoreCredentials(activeProjectDir);
+            const currentAi = creds.ai || {};
+
+            creds.ai = {
+              provider: payload.provider ?? currentAi.provider ?? 'conventional',
+              geminiApiKey: payload.geminiApiKey !== undefined ? payload.geminiApiKey.trim() : currentAi.geminiApiKey,
+              geminiModel: payload.geminiModel ?? currentAi.geminiModel ?? 'gemini-1.5-flash',
+              openaiApiKey: payload.openaiApiKey !== undefined ? payload.openaiApiKey.trim() : currentAi.openaiApiKey,
+              openaiModel: payload.openaiModel ?? currentAi.openaiModel ?? 'gpt-4o-mini',
+              anthropicApiKey: payload.anthropicApiKey !== undefined ? payload.anthropicApiKey.trim() : currentAi.anthropicApiKey,
+              anthropicModel: payload.anthropicModel ?? currentAi.anthropicModel ?? 'claude-3-5-sonnet-20241022',
+              verified: true,
+              lastTestedAt: new Date().toISOString(),
+            };
+
+            saveStoreCredentials(creds, payload.saveGlobal ? undefined : activeProjectDir);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Yapay Zeka ayarları başarıyla kaydedildi.',
+              ai: {
+                provider: creds.ai.provider,
+                geminiConfigured: Boolean(creds.ai.geminiApiKey || process.env['GEMINI_API_KEY']),
+                geminiMaskedKey: maskKey(creds.ai.geminiApiKey || process.env['GEMINI_API_KEY']),
+                geminiModel: creds.ai.geminiModel,
+                openaiConfigured: Boolean(creds.ai.openaiApiKey || process.env['OPENAI_API_KEY']),
+                openaiMaskedKey: maskKey(creds.ai.openaiApiKey || process.env['OPENAI_API_KEY']),
+                openaiModel: creds.ai.openaiModel,
+                anthropicConfigured: Boolean(creds.ai.anthropicApiKey || process.env['ANTHROPIC_API_KEY']),
+                anthropicMaskedKey: maskKey(creds.ai.anthropicApiKey || process.env['ANTHROPIC_API_KEY']),
+                anthropicModel: creds.ai.anthropicModel,
+                verified: creds.ai.verified,
+              }
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 5.0.1 POST /api/ai/test - Yapay Zeka API Bağlantısını Canlı Test Et
+      if (req.method === 'POST' && pathname === '/api/ai/test') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              provider?: AIProviderType;
+              apiKey?: string;
+              model?: string;
+            };
+
+            const creds = getStoreCredentials(activeProjectDir);
+            const providerType: AIProviderType = payload.provider || creds.ai?.provider || 'conventional';
+            let key = payload.apiKey?.trim();
+            const model = payload.model?.trim();
+
+            if (!key) {
+              if (providerType === 'gemini') key = creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'];
+              if (providerType === 'openai') key = creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY'];
+              if (providerType === 'anthropic') key = creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY'];
+            }
+
+            if (providerType !== 'conventional' && !key) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                error: `${providerType.toUpperCase()} için geçerli bir API anahtarı girilmedi.`,
+              }));
+              return;
+            }
+
+            const provider = createAIProvider({
+              provider: providerType,
+              apiKey: key,
+              model,
+            });
+
+            // Küçük bir test bağlamı ile ping yap
+            const testContext = {
+              version: '1.0.0',
+              commits: [{
+                type: 'feat',
+                scope: null,
+                message: 'Test bağlantı doğrulaması',
+                isBreakingChange: false,
+              }],
+              languages: ['tr', 'en'],
+            };
+
+            const testResult = await provider.generateReleaseNotes(testContext);
+            const hasOutput = Boolean(testResult['tr']?.full?.length || testResult['en']?.full?.length);
+
+            if (hasOutput) {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: true,
+                message: `${providerType.toUpperCase()} bağlantısı başarıyla doğrulandı. API anahtarı aktif!`,
+                sample: testResult['tr']?.full?.[0] || 'Hazır',
+              }));
+            } else {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                error: 'Yapay zeka motorundan yanıt alınamadı.',
+              }));
+            }
+          } catch (testErr) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: testErr instanceof Error ? testErr.message : String(testErr),
+            }));
+          }
+        });
         return;
       }
 
@@ -1776,7 +1963,13 @@ export const uiCommand = new Command('ui')
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
           try {
-            const payload = JSON.parse(body || '{}') as { version?: string; projectPath?: string };
+            const payload = JSON.parse(body || '{}') as {
+              version?: string;
+              projectPath?: string;
+              provider?: AIProviderType;
+              apiKey?: string;
+              model?: string;
+            };
             const version = payload.version || '1.0.0';
             const targetDir = payload.projectPath || activeProjectDir;
             
@@ -1785,12 +1978,13 @@ export const uiCommand = new Command('ui')
             const commits = gitAnalysis.commitsSinceLastTag;
 
             if (commits.length === 0) {
-              const defaultTr = ['Genel performans iyileştirmeleri ve hata düzeltmeleri yapıldı.'];
-              const defaultEn = ['General performance enhancements and bug fixes.'];
+              const defaultTr = ['• Genel performans iyileştirmeleri ve hata düzeltmeleri yapıldı.'];
+              const defaultEn = ['• General performance enhancements and bug fixes.'];
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
-                notesTr: defaultTr.map(item => `• ${item}`).join('\n'),
-                notesEn: defaultEn.map(item => `• ${item}`).join('\n'),
+                provider: 'fallback',
+                notesTr: defaultTr.join('\n'),
+                notesEn: defaultEn.join('\n'),
                 notes: {
                   tr: { full: defaultTr },
                   en: { full: defaultEn },
@@ -1799,8 +1993,30 @@ export const uiCommand = new Command('ui')
               return;
             }
 
-            const apiKey = process.env['GEMINI_API_KEY'];
-            const provider = apiKey ? new GeminiProvider({ apiKey }) : new ConventionalReleaseNotesProvider();
+            const creds = getStoreCredentials(targetDir);
+            const requestedProvider: AIProviderType = payload.provider || creds.ai?.provider || (process.env['GEMINI_API_KEY'] ? 'gemini' : 'conventional');
+            let apiKey = payload.apiKey?.trim();
+            let model = payload.model?.trim();
+
+            if (!apiKey) {
+              if (requestedProvider === 'gemini') {
+                apiKey = creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'];
+                model = model || creds.ai?.geminiModel || 'gemini-1.5-flash';
+              } else if (requestedProvider === 'openai') {
+                apiKey = creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY'];
+                model = model || creds.ai?.openaiModel || 'gpt-4o-mini';
+              } else if (requestedProvider === 'anthropic') {
+                apiKey = creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY'];
+                model = model || creds.ai?.anthropicModel || 'claude-3-5-sonnet-20241022';
+              }
+            }
+
+            let provider = createAIProvider({
+              provider: requestedProvider,
+              apiKey,
+              model,
+            });
+
             const rawValidator = new ReleaseNotesValidator();
             const validatorAdapter = {
               validate(data: unknown) {
@@ -1811,16 +2027,30 @@ export const uiCommand = new Command('ui')
                 return data as import('@webicro/validation').ReleaseNotesMap;
               }
             };
-            const aiController = new AIController(provider, validatorAdapter);
 
-            const notes = await aiController.generate(version, commits, ['tr', 'en']);
+            let notes: import('@webicro/validation').ReleaseNotesMap;
+            try {
+              const aiController = new AIController(provider, validatorAdapter);
+              notes = await aiController.generate(version, commits, ['tr', 'en']);
+            } catch (genErr) {
+              // LLM veya API hatasi durumunda guvenli fallback: Conventional Commits
+              console.warn('AI uretim hatasi, Conventional Commits cozucu devreye aliniyor:', genErr);
+              provider = createAIProvider({ provider: 'conventional' });
+              const fallbackController = new AIController(provider, validatorAdapter);
+              notes = await fallbackController.generate(version, commits, ['tr', 'en']);
+            }
+
             const trItems = notes['tr']?.full || ['Hata düzeltmeleri ve kararlılık iyileştirmeleri yapıldı.'];
             const enItems = notes['en']?.full || ['Bug fixes and stability improvements.'];
 
+            const formattedTr = formatBulletNotes(trItems);
+            const formattedEn = formatBulletNotes(enItems);
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              notesTr: trItems.map(item => `• ${item}`).join('\n'),
-              notesEn: enItems.map(item => `• ${item}`).join('\n'),
+              provider: provider.name,
+              notesTr: formattedTr,
+              notesEn: formattedEn,
               notes: {
                 tr: { full: trItems },
                 en: { full: enItems },

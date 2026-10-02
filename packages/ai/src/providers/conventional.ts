@@ -52,32 +52,32 @@ export class ConventionalReleaseNotesProvider implements AIProvider {
     for (const lang of context.languages) {
       if (lang === 'tr') {
         const fullItems: string[] = [];
-        for (const f of features) fullItems.push(`Yeni Özellik: ${f}`);
-        for (const f of fixes) fullItems.push(`Düzeltme: ${f}`);
-        for (const i of improvements) fullItems.push(`İyileştirme: ${i}`);
+        for (const f of features) fullItems.push(`• Yeni: ${f}`);
+        for (const f of fixes) fullItems.push(`• Düzeltme: ${f}`);
+        for (const i of improvements) fullItems.push(`• İyileştirme: ${i}`);
 
         if (fullItems.length === 0) {
-          fullItems.push('Performans iyileştirmeleri ve hata düzeltmeleri yapıldı.');
+          fullItems.push('• Performans iyileştirmeleri ve hata düzeltmeleri yapıldı.');
         }
 
-        const capped = capItemsToLimit(fullItems, 450);
-        const short = `Sürüm ${context.version}: ${capped.slice(0, 2).join(' ')}`.slice(0, 450);
+        const capped = capItemsToLimit(fullItems, 480);
+        const short = `Sürüm ${context.version}: ${capped.slice(0, 2).join(' ')}`.slice(0, 480);
         notes['tr'] = {
           short,
           full: capped,
         };
       } else {
         const fullItems: string[] = [];
-        for (const f of features) fullItems.push(`Feature: ${f}`);
-        for (const f of fixes) fullItems.push(`Fix: ${f}`);
-        for (const i of improvements) fullItems.push(`Improvement: ${i}`);
+        for (const f of features) fullItems.push(`• New: ${f}`);
+        for (const f of fixes) fullItems.push(`• Fix: ${f}`);
+        for (const i of improvements) fullItems.push(`• Improvement: ${i}`);
 
         if (fullItems.length === 0) {
-          fullItems.push('General performance enhancements and bug fixes.');
+          fullItems.push('• General performance enhancements and bug fixes.');
         }
 
-        const capped = capItemsToLimit(fullItems, 450);
-        const short = `Release ${context.version}: ${capped.slice(0, 2).join(' ')}`.slice(0, 450);
+        const capped = capItemsToLimit(fullItems, 480);
+        const short = `Release ${context.version}: ${capped.slice(0, 2).join(' ')}`.slice(0, 480);
         notes[lang] = {
           short,
           full: capped,

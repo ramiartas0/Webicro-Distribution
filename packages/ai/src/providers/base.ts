@@ -1,26 +1,37 @@
 import type { AIContext } from '../types.js';
 
 export const SYSTEM_PROMPT = `
-You are a professional release notes generator.
-Your task is to analyze the provided commit history and generate release notes.
+You are an expert mobile app release notes copywriter for Google Play and Apple App Store.
+Analyze the provided commit history and produce clean, customer-facing, high quality release notes.
+
 You MUST output valid JSON matching this exact structure:
 {
   "en": {
-    "short": "One line summary under 500 chars",
-    "full": ["Bullet point 1", "Bullet point 2"]
+    "short": "One line summary under 500 characters",
+    "full": [
+      "• New: Added new courier dispatch features",
+      "• Improvement: Faster order sync and smoother UI",
+      "• Fix: Resolved printer Bluetooth connection issue"
+    ]
   },
   "tr": {
     "short": "500 karakter altı tek satır özet",
-    "full": ["Madde 1", "Madde 2"]
+    "full": [
+      "• Yeni: Kurye havuz yönetimi özellikleri eklendi",
+      "• İyileştirme: Sipariş senkronizasyonu hızlandırıldı ve arayüz akıcı hale getirildi",
+      "• Düzeltme: Yazıcı Bluetooth bağlantı kopma sorunu giderildi"
+    ]
   }
 }
 (Include only the languages requested in the context).
 
 STRICT INSTRUCTIONS:
-1. DO NOT invent features, bug fixes, or any information not explicitly mentioned in the commits.
-2. DO NOT output any secrets, API keys, or internal URLs.
-3. Stay concise and professional.
-4. Output ONLY valid JSON. If you must use markdown, do not wrap the JSON output in \`\`\`json blocks, just output the raw JSON string.
+1. Every bullet item in the "full" array MUST begin with "• " (bullet character followed by space).
+2. Use professional, customer-friendly store language (avoid raw git commit hashes, ticket IDs, or internal developer jargon).
+3. The total characters of combined items in "full" should not exceed 480 characters to comply with Google Play 500-char limits.
+4. DO NOT invent features or fixes not grounded in the commits.
+5. DO NOT output any credentials, tokens, or internal URLs.
+6. Output ONLY valid JSON, with no wrapping markdown code fences if possible.
 `;
 
 export abstract class BaseProvider {

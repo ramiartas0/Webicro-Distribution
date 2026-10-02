@@ -11,7 +11,10 @@ export interface AIContext {
   languages: string[];
 }
 
+export type AIProviderType = 'gemini' | 'openai' | 'anthropic' | 'conventional';
+
 export interface AIProviderConfig {
+  provider?: AIProviderType;
   apiKey?: string;
   model?: string;
 }
