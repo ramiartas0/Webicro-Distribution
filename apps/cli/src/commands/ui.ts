@@ -1540,8 +1540,8 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 7. POST /api/ai/generate - Gerçek Git Commit'lerinden Sürüm Notu Üretimi
-      if (req.method === 'POST' && pathname === '/api/ai/generate') {
+      // 7. POST /api/ai/generate & /api/ai/release-notes - Gerçek Git Commit'lerinden Sürüm Notu Üretimi
+      if (req.method === 'POST' && (pathname === '/api/ai/generate' || pathname === '/api/ai/release-notes')) {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
@@ -1554,10 +1554,16 @@ export const uiCommand = new Command('ui')
             const commits = gitAnalysis.commitsSinceLastTag;
 
             if (commits.length === 0) {
+              const defaultTr = ['Genel performans iyileştirmeleri ve hata düzeltmeleri yapıldı.'];
+              const defaultEn = ['General performance enhancements and bug fixes.'];
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
-                notesTr: '• Genel performans iyileştirmeleri ve hata düzeltmeleri yapıldı.',
-                notesEn: '• General performance enhancements and bug fixes.',
+                notesTr: defaultTr.map(item => `• ${item}`).join('\n'),
+                notesEn: defaultEn.map(item => `• ${item}`).join('\n'),
+                notes: {
+                  tr: { full: defaultTr },
+                  en: { full: defaultEn },
+                },
               }));
               return;
             }
@@ -1577,11 +1583,17 @@ export const uiCommand = new Command('ui')
             const aiController = new AIController(provider, validatorAdapter);
 
             const notes = await aiController.generate(version, commits, ['tr', 'en']);
+            const trItems = notes['tr']?.full || ['Hata düzeltmeleri ve kararlılık iyileştirmeleri yapıldı.'];
+            const enItems = notes['en']?.full || ['Bug fixes and stability improvements.'];
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              notesTr: notes['tr']?.full.map(item => `• ${item}`).join('\n') || '• Hata düzeltmeleri ve kararlılık iyileştirmeleri yapıldı.',
-              notesEn: notes['en']?.full.map(item => `• ${item}`).join('\n') || '• Bug fixes and stability improvements.',
+              notesTr: trItems.map(item => `• ${item}`).join('\n'),
+              notesEn: enItems.map(item => `• ${item}`).join('\n'),
+              notes: {
+                tr: { full: trItems },
+                en: { full: enItems },
+              },
             }));
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });

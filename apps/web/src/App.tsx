@@ -656,19 +656,31 @@ export default function App() {
   const handleGenerateAI = async () => {
     setIsGeneratingAI(true);
     try {
-      const response = await fetch('/api/ai/release-notes', {
+      const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commits, version: nextVersion }),
       });
       if (response.ok) {
-        const data = await response.json() as { notes?: { tr?: { full: string[] }; en?: { full: string[] } } };
-        if (data.notes?.tr?.full) {
+        const data = await response.json() as {
+          notesTr?: string;
+          notesEn?: string;
+          notes?: { tr?: { full: string[] }; en?: { full: string[] } };
+        };
+        if (data.notesTr) {
+          setReleaseNotesTR(data.notesTr);
+        } else if (data.notes?.tr?.full) {
           setReleaseNotesTR(data.notes.tr.full.map((item: string) => `• ${item}`).join('\n'));
         }
-        if (data.notes?.en?.full) {
+
+        if (data.notesEn) {
+          setReleaseNotesEN(data.notesEn);
+        } else if (data.notes?.en?.full) {
           setReleaseNotesEN(data.notes.en.full.map((item: string) => `• ${item}`).join('\n'));
         }
+      } else {
+        const errText = await response.text();
+        console.error('AI notları üretilemedi (HTTP hata):', response.status, errText);
       }
     } catch (err) {
       console.error('AI notları üretilemedi:', err);
