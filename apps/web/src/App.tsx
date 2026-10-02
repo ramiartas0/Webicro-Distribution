@@ -880,72 +880,83 @@ export default function App() {
               <div
                 key={p.id}
                 onClick={() => void handleSwitchProject(p.path)}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
+                className={`group relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer overflow-hidden ${
                   isSelected
-                    ? 'border-2 border-primary bg-primary/5 ring-2 ring-primary/20 shadow-md pl-3.5'
-                    : 'border-sidebar-border bg-sidebar hover:bg-sidebar-accent/50 hover:border-sidebar-border/80'
+                    ? 'border-primary/80 bg-card ring-1 ring-primary/25 shadow-sm'
+                    : 'border-sidebar-border/80 bg-sidebar/50 hover:bg-sidebar-accent/60 hover:border-sidebar-border shadow-xs'
                 }`}
               >
                 {/* AKTİF PROJE SOL VURGU ÇİZGİSİ */}
                 {isSelected && (
-                  <div className="absolute left-0 top-2 bottom-2 w-1 bg-primary rounded-r-full" />
+                  <div className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-primary rounded-r-full" />
                 )}
 
                 {/* PROJE BAŞLIĞI VE İKONU */}
-                <div className="flex items-start gap-2.5 mb-2">
-                  <ProjectAppIcon path={p.path} name={p.name} className="w-9 h-9" />
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <ProjectAppIcon path={p.path} name={p.name} className="w-8 h-8 rounded-lg shadow-xs shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-1 mb-0.5">
-                      <div className="font-semibold text-xs text-foreground truncate" title={p.name}>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="font-semibold text-xs text-foreground tracking-tight truncate" title={p.name}>
                         {p.name}
                       </div>
                       <button
                         type="button"
                         onClick={(e) => void handleRemoveProject(e, p.path, p.name)}
                         title="Projeyi Listeden Kaldır"
-                        className="p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors shrink-0"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-md shrink-0"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="text-[10px] font-mono text-muted-foreground truncate" title={p.package}>
-                        {p.package || 'com.example.app'}
-                      </div>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                        comp?.comparisonStatus === 'UPDATE_READY'
-                          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                          : comp?.comparisonStatus === 'UP_TO_DATE'
-                          ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
-                          : comp?.comparisonStatus === 'NEW_APP'
-                          ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
-                          : 'bg-muted text-muted-foreground border border-border'
-                      }`}>
-                        {comp?.badge || 'Bekliyor'}
-                      </span>
+                    <div className="text-[10px] font-mono text-muted-foreground/80 truncate" title={p.package}>
+                      {p.package || 'com.example.app'}
                     </div>
                   </div>
                 </div>
 
-                {/* YEREL KOD DURUMU */}
-                <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-border/40">
-                  <span className="text-muted-foreground">Yerel Sürüm:</span>
-                  <span className="font-mono font-bold text-foreground">
-                    v{p.version || '1.0.0'} <span className="text-[10px] text-muted-foreground">#{p.buildNumber || 1}</span>
+                {/* YEREL SÜRÜM & MAĞAZA DURUM ROZETİ */}
+                <div className="flex items-center justify-between py-1 px-2 rounded-lg bg-muted/40 border border-border/40 text-[11px] mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Yerel</span>
+                    <span className="font-mono font-semibold text-foreground text-xs">
+                      v{p.version || '1.0.0'}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">#{p.buildNumber || 1}</span>
+                    </span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0 ${
+                    comp?.comparisonStatus === 'UPDATE_READY'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : comp?.comparisonStatus === 'UP_TO_DATE'
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                      : comp?.comparisonStatus === 'NEW_APP'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                      : 'bg-muted text-muted-foreground border border-border/60'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      comp?.comparisonStatus === 'UPDATE_READY'
+                        ? 'bg-emerald-500'
+                        : comp?.comparisonStatus === 'UP_TO_DATE'
+                        ? 'bg-blue-500'
+                        : comp?.comparisonStatus === 'NEW_APP'
+                        ? 'bg-purple-500'
+                        : 'bg-muted-foreground'
+                    }`} />
+                    {comp?.badge || 'Bekliyor'}
                   </span>
                 </div>
 
-                {/* CANLI MAĞAZA KARŞILAŞTIRMA DETAYLARI */}
-                <div className="pt-1.5 space-y-1 text-[10px]">
+                {/* CANLI MAĞAZA KARŞILAŞTIRMA DETAYLARI (2 KOLONLU MİKRO GRID) */}
+                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                   {/* GOOGLE PLAY */}
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <GooglePlayIcon className="w-2.5 h-2.5 shrink-0" /> Play Store:
-                    </span>
-                    <span className="font-mono font-medium">
+                  <div className="p-1.5 rounded-lg bg-background/50 border border-border/40 flex flex-col justify-between">
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mb-0.5">
+                      <GooglePlayIcon className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">Google Play</span>
+                    </div>
+                    <div className="font-mono text-[11px] font-medium truncate">
                       {comp?.googlePlay?.status === 'live' ? (
-                        <span className="text-emerald-500 font-semibold">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                           {comp.googlePlay.version
                             ? (comp.googlePlay.version.startsWith('v') ? comp.googlePlay.version : `v${comp.googlePlay.version}`)
                             : comp.googlePlay.versionCode
@@ -953,23 +964,24 @@ export default function App() {
                               : 'Yayında'}
                         </span>
                       ) : comp?.googlePlay?.status === 'not_found' ? (
-                        <span className="text-muted-foreground">Kayıtlı Değil</span>
+                        <span className="text-muted-foreground/70 text-[10px]">Kayıtlı Değil</span>
                       ) : comp?.googlePlay?.status === 'auth_error' ? (
-                        <span className="text-amber-500">Yetki Bekliyor</span>
+                        <span className="text-amber-500 text-[10px]">Yetki Gerekli</span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <span className="text-muted-foreground/60 text-[10px]">-</span>
                       )}
-                    </span>
+                    </div>
                   </div>
 
                   {/* APPLE APP STORE */}
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <AppStoreConnectIcon className="w-2.5 h-2.5 shrink-0" /> App Store:
-                    </span>
-                    <span className="font-mono font-medium">
+                  <div className="p-1.5 rounded-lg bg-background/50 border border-border/40 flex flex-col justify-between">
+                    <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mb-0.5">
+                      <AppStoreConnectIcon className="w-2.5 h-2.5 shrink-0" />
+                      <span className="truncate">App Store</span>
+                    </div>
+                    <div className="font-mono text-[11px] font-medium truncate">
                       {comp?.appStore?.status === 'live' ? (
-                        <span className="text-sky-400 font-semibold">
+                        <span className="text-sky-600 dark:text-sky-400 font-semibold">
                           {comp.appStore.version
                             ? (comp.appStore.version.startsWith('v') ? comp.appStore.version : `v${comp.appStore.version}`)
                             : comp.appStore.buildNumber
@@ -977,11 +989,11 @@ export default function App() {
                               : 'Yayında'}
                         </span>
                       ) : comp?.appStore?.status === 'not_found' ? (
-                        <span className="text-muted-foreground">Kayıtlı Değil</span>
+                        <span className="text-muted-foreground/70 text-[10px]">Kayıtlı Değil</span>
                       ) : (
-                        <span className="text-muted-foreground">-</span>
+                        <span className="text-muted-foreground/60 text-[10px]">-</span>
                       )}
-                    </span>
+                    </div>
                   </div>
                 </div>
               </div>
