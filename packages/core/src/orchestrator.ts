@@ -359,13 +359,20 @@ export class ReleaseOrchestrator {
             } catch (buildErr: unknown) {
               const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
               emitAndRecord('iOS Build', 'FAILED', undefined, msg);
-              throw buildErr;
+              emitAndRecord('iOS Verify', 'SKIPPED', 'iOS derleme hatası nedeniyle doğrulama atlandı');
+              if (!androidArtifact) {
+                throw buildErr;
+              }
             }
           }
         }
       } else {
         emitAndRecord('iOS Build', 'SKIPPED', 'iOS derlemesi devre dışı');
         emitAndRecord('iOS Verify', 'SKIPPED');
+      }
+
+      if (!androidArtifact && !iosArtifact) {
+        throw new Error('Hiçbir platform (Android veya iOS) başarıyla derlenemedi.');
       }
 
       this.stateMachine.transitionTo('ARTIFACT_READY');

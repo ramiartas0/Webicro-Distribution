@@ -15,6 +15,9 @@ export class IosBuilder {
     const startTime = Date.now();
     const workDir = cwd ?? process.cwd();
 
+    // Xcode 16+ IPHONEOS_DEPLOYMENT_TARGET >= 15.0 uyumlulugu
+    await this.ensureDeploymentTarget(workDir);
+
     if (config.clean) {
       await execAsync('flutter clean', { cwd: workDir });
     }
@@ -59,5 +62,44 @@ export class IosBuilder {
       versionCode: config.buildNumber,
       durationMs,
     };
+  }
+
+  private async ensureDeploymentTarget(workDir: string): Promise<void> {
+    const podfilePath = path.join(workDir, 'ios', 'Podfile');
+    try {
+      let content = await fs.readFile(podfilePath, 'utf8');
+      let modified = false;
+
+      // 1. platform :ios, '15.0' kontrolü
+      if (!/platform\s+:ios,\s*['"]1[5-9]\.0['"]/i.test(content)) {
+        if (/platform\s+:ios/i.test(content)) {
+          content = content.replace(/platform\s+:ios,\s*['"][^'"]+['"]/i, "platform :ios, '15.0'");
+          modified = true;
+        }
+      }
+
+      // 2. post_install hook'unda IPHONEOS_DEPLOYMENT_TARGET kontrolü
+      if (!content.includes("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'")) {
+        if (content.includes('flutter_additional_ios_build_settings(target)')) {
+          content = content.replace(
+            /flutter_additional_ios_build_settings\(target\)/g,
+            "flutter_additional_ios_build_settings(target)\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end"
+          );
+          modified = true;
+        } else if (content.includes('post_install do |installer|')) {
+          content = content.replace(
+            /post_install do \|installer\|/g,
+            "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end"
+          );
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        await fs.writeFile(podfilePath, content, 'utf8');
+      }
+    } catch {
+      // Podfile yoksa veya okunamazsa devam et
+    }
   }
 }
