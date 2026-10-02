@@ -8,3 +8,4 @@ export * from './providers/conventional.js';
 export * from './providers/anthropic.js';
 export * from './factory.js';
 export * from './controller.js';
+export * from './diagnostician.js';

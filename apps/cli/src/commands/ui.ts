@@ -12,7 +12,14 @@ import { VersionResolver } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
 import { DatabaseConnection, ReleaseRepository, AuditLogRepository } from '@webicro/database';
 import { ReleaseOrchestrator } from '@webicro/core';
-import { AIController, createAIProvider, type AIProviderType } from '@webicro/ai';
+import {
+  AIController,
+  createAIProvider,
+  AIDiagnostician,
+  type AIProviderType,
+  type AIDiagnosisResult,
+  type AutoFixActionType,
+} from '@webicro/ai';
 import { ReleaseNotesValidator } from '@webicro/validation';
 import { PubspecVersionUpdater } from '@webicro/flutter';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
@@ -70,6 +77,7 @@ export interface ActivePipelineStatus {
   logs: string[];
   completed: boolean;
   error?: string;
+  diagnosis?: AIDiagnosisResult;
   startedAt: string;
 }
 
@@ -1785,6 +1793,101 @@ export const uiCommand = new Command('ui')
         return;
       }
 
+      // 5.0.3 POST /api/ai/diagnose-error - Canlı Dağıtım Hatası Teşhisi ve Kök Neden Analizi
+      if (req.method === 'POST' && pathname === '/api/ai/diagnose-error') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              errorText?: string;
+              failedStep?: string;
+              recentLogs?: string[];
+              projectPath?: string;
+              projectName?: string;
+            };
+
+            const targetDir = path.resolve(payload.projectPath || activeProjectDir);
+            const creds = getStoreCredentials(targetDir);
+
+            const diagnosis = await AIDiagnostician.diagnose({
+              projectName: payload.projectName,
+              projectPath: targetDir,
+              failedStep: payload.failedStep,
+              errorText: payload.errorText || 'Bilinmeyen hata',
+              recentLogs: payload.recentLogs || [],
+            }, {
+              provider: creds.ai?.provider,
+              apiKey: creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'],
+              model: creds.ai?.geminiModel,
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              diagnosis,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 5.0.4 POST /api/release/autofix - Akıllı Hata Otomatik Düzeltme İşlemi (Örn: AndroidManifest Fotoğraf İzinleri)
+      if (req.method === 'POST' && pathname === '/api/release/autofix') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              action?: AutoFixActionType;
+              projectPath?: string;
+            };
+
+            const targetDir = path.resolve(payload.projectPath || activeProjectDir);
+
+            if (payload.action === 'REMOVE_PHOTO_PERMISSIONS') {
+              const manifestCandidates = [
+                path.join(targetDir, 'android/app/src/main/AndroidManifest.xml'),
+                path.join(targetDir, 'android/app/src/profile/AndroidManifest.xml'),
+                path.join(targetDir, 'android/app/src/debug/AndroidManifest.xml'),
+              ];
+
+              let modifiedCount = 0;
+              for (const mPath of manifestCandidates) {
+                if (fs.existsSync(mPath)) {
+                  let content = fs.readFileSync(mPath, 'utf8');
+                  const orig = content;
+                  const permissionRegex = /<uses-permission[^>]+android:name=["']android\.permission\.(READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_VISUAL_USER_SELECTED|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|MANAGE_EXTERNAL_STORAGE)["'][^>]*\/>\s*/gi;
+                  content = content.replace(permissionRegex, '');
+                  if (content !== orig) {
+                    fs.writeFileSync(mPath, content, 'utf8');
+                    modifiedCount++;
+                  }
+                }
+              }
+
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: true,
+                message: `Gereksiz fotoğraf ve medya izinleri AndroidManifest dosyasından başarıyla temizlendi (${modifiedCount} dosya güncellendi). Google Play artık 'Fotoğraf ve video izinleri' formunu istemeyecektir.`,
+                action: payload.action,
+              }));
+              return;
+            }
+
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Desteklenmeyen otomatik düzeltme eylemi: ${payload.action}` }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
       // 5.1 POST /api/stores/save-google - Google Play Service Account JSON Kaydet ve Doğrula
       if (req.method === 'POST' && pathname === '/api/stores/save-google') {
         let body = '';
@@ -2518,10 +2621,32 @@ export const uiCommand = new Command('ui')
                   currentStatus.stages[currentStatus.currentStageId - 1]!.status = 'failed';
                 }
                 currentStatus.logs.push(`[${new Date().toLocaleTimeString()}] HATA: ${errMsg}`);
+
+                // Yapay Zeka Hata Teşhisini ve Kök Neden Analizini Otomatik Başlat
+                try {
+                  const creds = getStoreCredentials(releaseTargetDir);
+                  const diagnosis = await AIDiagnostician.diagnose({
+                    projectName: options.projectName || meta.name,
+                    projectPath: releaseTargetDir,
+                    version: currentStatus.targetVersion,
+                    failedStep: currentStatus.stages[currentStatus.currentStageId - 1]?.name,
+                    errorText: errMsg,
+                    recentLogs: currentStatus.logs.slice(-15),
+                  }, {
+                    provider: creds.ai?.provider,
+                    apiKey: creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'],
+                    model: creds.ai?.geminiModel,
+                  });
+                  currentStatus.diagnosis = diagnosis;
+                } catch (diagErr) {
+                  console.warn('Otomatik AI teşhis hatası:', diagErr);
+                }
+
                 broadcastEvent({
                   type: 'pipeline_failed',
                   projectPath: releaseTargetDir,
                   error: errMsg,
+                  diagnosis: currentStatus.diagnosis,
                   pipeline: currentStatus,
                 });
               }

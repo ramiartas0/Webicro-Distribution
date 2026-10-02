@@ -28,7 +28,9 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  Cpu
+  Cpu,
+  Bot,
+  Wrench
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 
@@ -56,6 +58,19 @@ interface ReleaseHistoryItem {
   createdAt: string;
 }
 
+export interface AIDiagnosisResult {
+  category: 'STORE_POLICY' | 'STORE_API' | 'APP_CODE' | 'NATIVE_BUILD' | 'SIGNING' | 'ENVIRONMENT' | 'UNKNOWN';
+  categoryTitle: string;
+  source: 'google_play' | 'app_store' | 'flutter_code' | 'native_gradle' | 'environment' | 'unknown';
+  sourceLabel: string;
+  rootCause: string;
+  explanation: string;
+  solutionSteps: string[];
+  autoFixAvailable: boolean;
+  autoFixAction?: 'REMOVE_PHOTO_PERMISSIONS' | 'FLUTTER_CLEAN_RETRY' | 'FIX_SIGNING_CONFIG' | 'NONE';
+  autoFixDescription?: string;
+}
+
 export interface ProjectPipelineState {
   projectPath: string;
   projectName?: string;
@@ -63,6 +78,8 @@ export interface ProjectPipelineState {
   isReleasing: boolean;
   completed: boolean;
   failed: boolean;
+  error?: string;
+  diagnosis?: AIDiagnosisResult;
   currentStageId: number;
   totalStages: number;
   stages: PipelineStep[];
@@ -256,6 +273,9 @@ export default function App() {
   const [isTestingAI, setIsTestingAI] = useState<boolean>(false);
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showAiKey, setShowAiKey] = useState<boolean>(false);
+  const [isDiagnosing, setIsDiagnosing] = useState<boolean>(false);
+  const [isAutoFixing, setIsAutoFixing] = useState<boolean>(false);
+  const [autoFixSuccessMsg, setAutoFixSuccessMsg] = useState<string | null>(null);
 
   // Proje Detayları (Fallback ve uydurma veriler kaldırıldı)
   const [projectName, setProjectName] = useState<string>('');
@@ -720,6 +740,10 @@ export default function App() {
           void fetchProjectDetails();
         } else if (payload.type === 'pipeline_failed' && payload.pipeline) {
           const p = payload.pipeline;
+          const diag = (payload as { diagnosis?: AIDiagnosisResult }).diagnosis || p.diagnosis;
+          if (diag) {
+            p.diagnosis = diag;
+          }
           setProjectPipelines((prev) => ({
             ...prev,
             [p.projectPath]: p,
@@ -732,6 +756,11 @@ export default function App() {
                 : item
             )
           );
+
+          if (!p.diagnosis && (p.error || (payload as { error?: string }).error)) {
+            const errStr = p.error || (payload as { error?: string }).error || '';
+            void fetchDiagnosisForPipeline(p.projectPath, errStr, p.logs);
+          }
         } else if (payload.type === 'pipeline_canceled' && payload.projectPath) {
           const pPath = payload.projectPath;
           setProjectPipelines((prev) => {
@@ -1201,6 +1230,75 @@ export default function App() {
     void navigator.clipboard.writeText(text);
     setIsLogsCopied(true);
     setTimeout(() => setIsLogsCopied(false), 2000);
+  };
+
+  // YAPAY ZEKA HATA TEŞHİSİNİ TETİKLE
+  const fetchDiagnosisForPipeline = useCallback(async (projectPath: string, errorText: string, logs?: string[]) => {
+    setIsDiagnosing(true);
+    try {
+      const res = await fetch('/api/ai/diagnose-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath,
+          errorText,
+          recentLogs: logs?.slice(-15) || [],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { success?: boolean; diagnosis?: AIDiagnosisResult };
+        if (data.diagnosis) {
+          setProjectPipelines((prev) => {
+            const current = prev[projectPath];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [projectPath]: {
+                ...current,
+                diagnosis: data.diagnosis,
+              },
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.error('AI Teşhisi alınamadı:', err);
+    } finally {
+      setIsDiagnosing(false);
+    }
+  }, []);
+
+  // OTOMATİK HATA DÜZELTME (ÖR: ANDROIDMANIFEST MEDYA İZİNLERİNİ TEMİZLE VE YENİDEN BAŞLAT)
+  const handleAutoFix = async (action: string) => {
+    if (!activeProjectPath) return;
+    setIsAutoFixing(true);
+    setAutoFixSuccessMsg(null);
+    try {
+      const res = await fetch('/api/release/autofix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          projectPath: activeProjectPath,
+        }),
+      });
+      const data = await res.json() as { success?: boolean; message?: string; error?: string };
+      if (res.ok && data.success) {
+        setAutoFixSuccessMsg(data.message || 'Sorun başarıyla düzeltildi.');
+        setTimeout(() => {
+          setAutoFixSuccessMsg('Düzeltme tamamlandı. Dağıtım otomatik yeniden başlatılıyor...');
+          setTimeout(() => {
+            void handleStartRelease();
+          }, 800);
+        }, 1200);
+      } else {
+        alert(data.error || 'Otomatik düzeltme uygulanamadı.');
+      }
+    } catch (err) {
+      alert(`Otomatik düzeltme hatası: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsAutoFixing(false);
+    }
   };
 
   // DAĞITIMI BAŞLAT (HER PROJE İÇİN BAĞIMSIZ VE İZOLE ORKESTRASYON)
@@ -2243,6 +2341,120 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          {/* ===================== AI HATA TEŞHİSİ VE KÖK NEDEN ANALİZİ KARTI ===================== */}
+          {(currentPipeline?.diagnosis || ((currentPipeline?.error || currentPipeline?.failed) && !currentPipeline?.isReleasing)) && (
+            <div className="bg-card border-2 border-rose-500/40 dark:border-rose-500/30 rounded-xl p-5 shadow-lg space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                    <Bot className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-foreground">
+                        Yapay Zeka Hata Teşhisi ve Kök Neden Analizi
+                      </h4>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-semibold border border-rose-500/20">
+                        {currentPipeline.diagnosis?.categoryTitle || 'Hata Analiz Edildi'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Hata Kaynağı: <strong className="text-foreground">{currentPipeline.diagnosis?.sourceLabel || 'Boru Hattı Yürütücüsü'}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Hata Analizini Yeniden Tetikleme Butonu */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const errToDiagnose = currentPipeline.error || (currentPipeline.logs.find(l => l.includes('HATA:')) || 'Bilinmeyen hata');
+                    void fetchDiagnosisForPipeline(activeProjectPath, errToDiagnose, currentPipeline.logs);
+                  }}
+                  disabled={isDiagnosing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border cursor-pointer transition-all shrink-0 self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin text-primary' : ''}`} />
+                  <span>{isDiagnosing ? 'Yeniden Analiz Ediliyor...' : 'AI ile Yeniden Teşhis Et'}</span>
+                </button>
+              </div>
+
+              {/* KÖK NEDEN VE AÇIKLAMA */}
+              <div className="space-y-3">
+                {currentPipeline.diagnosis?.rootCause && (
+                  <div className="p-3 rounded-lg bg-secondary/60 border border-border space-y-1">
+                    <span className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
+                      Tespit Edilen Kök Neden:
+                    </span>
+                    <p className="text-xs font-medium text-rose-600 dark:text-rose-400 leading-relaxed">
+                      {currentPipeline.diagnosis.rootCause}
+                    </p>
+                  </div>
+                )}
+
+                {currentPipeline.diagnosis?.explanation && (
+                  <div className="p-3.5 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-1.5">
+                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+                      Detaylı Analiz & "Uygulamadan mı Kaynaklı?" Değerlendirmesi:
+                    </span>
+                    <p className="text-xs text-foreground/90 leading-relaxed">
+                      {currentPipeline.diagnosis.explanation}
+                    </p>
+                  </div>
+                )}
+
+                {/* ÇÖZÜM ADIMLARI */}
+                {currentPipeline.diagnosis?.solutionSteps && currentPipeline.diagnosis.solutionSteps.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-xs font-semibold text-foreground block">
+                      Önerilen Çözüm Yolu ve Adımları:
+                    </span>
+                    <ul className="space-y-1 text-xs text-muted-foreground">
+                      {currentPipeline.diagnosis.solutionSteps.map((step, sIdx) => (
+                        <li key={sIdx} className="flex items-start gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* OTOMATİK DÜZELTME ALANI (Eğer AI düzeltme aksiyonu sunuyorsa) */}
+              {currentPipeline.diagnosis?.autoFixAvailable && (
+                <div className="mt-3 p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-primary/10 to-transparent border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-500" />
+                      <span className="font-bold text-xs text-foreground">
+                        {currentPipeline.diagnosis.autoFixDescription || 'Bu Hata İçin Otomatik Düzeltme Mevcut'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Sistem gereksiz izinleri AndroidManifest.xml dosyasından temizleyecek ve Google Play form zorunluluğunu ortadan kaldıracaktır.
+                    </p>
+                    {autoFixSuccessMsg && (
+                      <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                        ✓ {autoFixSuccessMsg}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleAutoFix(currentPipeline.diagnosis?.autoFixAction || 'REMOVE_PHOTO_PERMISSIONS')}
+                    disabled={isAutoFixing}
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+                  >
+                    <Wrench className={`w-3.5 h-3.5 ${isAutoFixing ? 'animate-spin' : ''}`} />
+                    <span>{isAutoFixing ? 'Düzeltiliyor ve Dağıtılıyor...' : '⚡ Sorunu Otomatik Düzelt ve Yeniden Başlat'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ===================== CANLI KONSOL & LOG AKIŞI ===================== */}
           <section className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-3">
