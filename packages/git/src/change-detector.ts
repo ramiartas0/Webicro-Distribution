@@ -19,7 +19,6 @@ export function detectNativeChanges(changedFiles: string[]): NativeChangeInfo {
   for (const file of changedFiles) {
     const lowerPath = file.toLowerCase();
     let isAndroid = false;
-    let isIos = false;
 
     for (const p of androidPatterns) {
       if (lowerPath.includes(p)) {
@@ -32,7 +31,6 @@ export function detectNativeChanges(changedFiles: string[]): NativeChangeInfo {
     if (!isAndroid) {
       for (const p of iosPatterns) {
         if (lowerPath.includes(p)) {
-          isIos = true;
           iosFiles.push(file);
           break;
         }
