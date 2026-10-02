@@ -197,7 +197,7 @@ export class AppStoreAdapter {
 
     if (isDryRun) {
       return {
-        buildId: 'mock-build-id',
+        buildId: `simulated-${buildNumberString}`,
         version: versionString,
         buildNumber: buildNumberString,
         status: 'DRY_RUN',

@@ -12,7 +12,7 @@ import { VersionResolver } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
 import { DatabaseConnection, ReleaseRepository, AuditLogRepository } from '@webicro/database';
 import { ReleaseOrchestrator } from '@webicro/core';
-import { AIController, MockAIProvider, GeminiProvider } from '@webicro/ai';
+import { AIController, ConventionalReleaseNotesProvider, GeminiProvider } from '@webicro/ai';
 import { ReleaseNotesValidator } from '@webicro/validation';
 import { PubspecVersionUpdater } from '@webicro/flutter';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
@@ -1465,7 +1465,7 @@ export const uiCommand = new Command('ui')
             }
 
             const apiKey = process.env['GEMINI_API_KEY'];
-            const provider = apiKey ? new GeminiProvider({ apiKey }) : new MockAIProvider();
+            const provider = apiKey ? new GeminiProvider({ apiKey }) : new ConventionalReleaseNotesProvider();
             const rawValidator = new ReleaseNotesValidator();
             const validatorAdapter = {
               validate(data: unknown) {
