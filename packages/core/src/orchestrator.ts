@@ -378,39 +378,62 @@ export class ReleaseOrchestrator {
       let googlePlayStatus = 'SKIPPED';
       if (!options.skipAndroid) {
         emitAndRecord('Google Play Upload', 'IN_PROGRESS');
-        const credsPath = path.join(process.cwd(), '.release/credentials.json');
+        const candidateCredPaths = [
+          path.join(targetDir, '.release/credentials.json'),
+          path.join(process.cwd(), '.release/credentials.json'),
+        ];
         let creds: { googlePlay?: { serviceAccountJson?: string; keyPath?: string } } = {};
-        if (fs.existsSync(credsPath)) {
-          try { creds = JSON.parse(fs.readFileSync(credsPath, 'utf8')); } catch {}
+        for (const cPath of candidateCredPaths) {
+          if (fs.existsSync(cPath)) {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8'));
+              if (parsed.googlePlay) {
+                creds = parsed;
+                break;
+              }
+            } catch {}
+          }
         }
+
+        const resolvedPackage = options.packageName || config?.project?.package || 'com.webicro.app';
 
         if (options.dryRun) {
           if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
             try {
               const adapter = new GooglePlayAdapter({
-                packageName: config?.project?.package || 'com.webicro.app',
+                packageName: resolvedPackage,
                 serviceAccountJson: creds.googlePlay.serviceAccountJson,
                 serviceAccountJsonPath: creds.googlePlay.keyPath,
               });
               await adapter.authenticate();
-              emitAndRecord('Google Play Upload', 'SUCCESS', 'Simülasyon Modu: Play Console kimlik bilgileri doğrulandı');
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Play Console (${resolvedPackage}) kimlik bilgileri doğrulandı`);
             } catch {
-              emitAndRecord('Google Play Upload', 'SUCCESS', 'Simülasyon Modu: Google Play yapılandırması hazır');
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) yapılandırması hazır`);
             }
           } else {
-            emitAndRecord('Google Play Upload', 'SUCCESS', 'Simülasyon Modu: Google Play hazır');
+            emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) hazır`);
           }
           googlePlayStatus = 'SIMULATED';
         } else {
           if (androidArtifact && creds.googlePlay) {
             try {
               const adapter = new GooglePlayAdapter({
-                packageName: config?.project?.package || 'com.webicro.app',
+                packageName: resolvedPackage,
                 serviceAccountJson: creds.googlePlay.serviceAccountJson,
                 serviceAccountJsonPath: creds.googlePlay.keyPath,
-                track: 'internal',
+                track: options.googleTrack || 'internal',
+                userFraction: options.rollout ? options.rollout / 100 : undefined,
               });
-              const uploadRes = await adapter.uploadAndRelease(androidArtifact.filePath);
+
+              const playNotes: import('@webicro/google-play').GooglePlayReleaseNotes[] = [];
+              if (options.notesTr) {
+                playNotes.push({ language: 'tr-TR', text: options.notesTr });
+              }
+              if (options.notesEn) {
+                playNotes.push({ language: 'en-US', text: options.notesEn });
+              }
+
+              const uploadRes = await adapter.uploadAndRelease(androidArtifact.filePath, playNotes.length > 0 ? playNotes : undefined);
               storeSubmissionRepo.create({
                 releaseId,
                 store: 'google_play',
@@ -420,7 +443,7 @@ export class ReleaseOrchestrator {
                 error: null,
               });
               googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
-              emitAndRecord('Google Play Upload', 'SUCCESS', `Google Play'e yüklendi: Build #${uploadRes.versionCode}`);
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${uploadRes.track})`);
             } catch (uploadErr: unknown) {
               const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
               emitAndRecord('Google Play Upload', 'FAILED', undefined, msg);

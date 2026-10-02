@@ -1977,16 +1977,35 @@ export const uiCommand = new Command('ui')
             res.end(JSON.stringify({ status: 'started', pipeline: activePipelineStatus }));
 
             try {
+              const skipAndroid = options.skipAndroid !== undefined
+                ? options.skipAndroid
+                : options.targetAndroid !== undefined
+                ? !options.targetAndroid
+                : false;
+
+              const skipIos = options.skipIos !== undefined
+                ? options.skipIos
+                : options.targetIos !== undefined
+                ? !options.targetIos
+                : true;
+
+              const isDryRun = options.dryRun !== undefined ? options.dryRun : false;
+
               const summary = await orchestrator.execute({
-                targetDir: activeProjectDir,
+                targetDir: releaseTargetDir,
+                packageName: meta.package || 'com.webicro.piyyuumanager',
                 bump: options.bump,
-                manualVersion: options.manualVersion,
-                dryRun: options.dryRun !== undefined ? options.dryRun : true,
-                skipAndroid: !options.targetAndroid,
-                skipIos: !options.targetIos,
+                manualVersion: options.manualVersion || options.version,
+                dryRun: isDryRun,
+                skipAndroid,
+                skipIos,
                 skipTests: false,
                 skipAi: false,
                 autoApprove: true,
+                googleTrack: options.googleTrack || 'internal',
+                rollout: options.rollout,
+                notesTr: options.notesTr,
+                notesEn: options.notesEn,
               });
 
               if (activePipelineStatus) {
@@ -1996,6 +2015,15 @@ export const uiCommand = new Command('ui')
                   st.status = 'success';
                 }
                 activePipelineStatus.logs.push(`[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${summary.version})`);
+
+                // DAĞITIM BİTTİĞİNDE MAĞAZA VERİLERİNİ OTOMATİK SENKRONİZE ET
+                try {
+                  const pData = loadProjectsData();
+                  await syncStores(pData);
+                } catch (syncErr) {
+                  console.error('Boru hattı sonrası mağaza senkronizasyonu hatası:', syncErr);
+                }
+
                 broadcastEvent({ type: 'pipeline_completed', summary, pipeline: activePipelineStatus });
               }
             } catch (execErr) {

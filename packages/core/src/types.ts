@@ -9,6 +9,7 @@ export type StepStatus = 'PENDING' | 'RUNNING' | 'IN_PROGRESS' | 'SUCCESS' | 'CO
 export interface OrchestratorOptions {
   configPath?: string;
   targetDir?: string;
+  packageName?: string;
   bump?: 'major' | 'minor' | 'patch';
   manualVersion?: string;
   dryRun?: boolean;
@@ -17,6 +18,10 @@ export interface OrchestratorOptions {
   skipTests?: boolean;
   skipAi?: boolean;
   autoApprove?: boolean;
+  googleTrack?: 'internal' | 'alpha' | 'beta' | 'production';
+  rollout?: number;
+  notesTr?: string;
+  notesEn?: string;
 }
 
 export interface ReleaseStepEvent {

@@ -572,6 +572,10 @@ export default function App() {
                 : item
             )
           );
+
+          // Dağıtım bittiğinde mağaza sürümlerini ve proje detaylarını anında senkronize et
+          void handleSyncStores();
+          void fetchProjectDetails();
         } else if (payload.type === 'pipeline_failed' && payload.pipeline) {
           const p = payload.pipeline;
           setIsReleasing(false);
