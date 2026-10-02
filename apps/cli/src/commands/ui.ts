@@ -40,6 +40,9 @@ export interface StoreComparison {
     version?: string;
     buildNumber?: string;
     message?: string;
+    appName?: string;
+    bundleId?: string;
+    appId?: string;
   };
   comparisonStatus: 'UPDATE_READY' | 'UP_TO_DATE' | 'NEW_APP' | 'UNKNOWN';
   badge: string;
@@ -53,6 +56,8 @@ export interface ProjectEntry {
   hasPubspec: boolean;
   package?: string;
   iosBundleId?: string;
+  appStoreOverrideBundleId?: string;
+  appStoreAppName?: string;
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
@@ -717,15 +722,101 @@ async function fetchGooglePlayWebLive(packageName: string): Promise<GooglePlayWe
 const storeComparisonCache = new Map<string, { data: StoreComparison; timestamp: number }>();
 const STORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 dakika
 
+function normalizeAppStr(str?: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/[-_.\s]/g, '')
+    .replace(/(.)\1+/g, '$1'); // ardışık tekrar eden harfleri tekilleştir (piyyuu -> piyu)
+}
+
+function findBestMatchedAppleApp(
+  params: {
+    projectDir?: string;
+    pkgName: string;
+    iosBundleId?: string;
+    projectName?: string;
+    overrideBundleId?: string;
+  },
+  apps: Array<{ id: string; name: string; bundleId: string; sku?: string }>
+): { id: string; name: string; bundleId: string; sku?: string } | null {
+  if (apps.length === 0) return null;
+
+  // 1. Kullanıcı manuel override seçmişse
+  if (params.overrideBundleId) {
+    const overrideMatch = apps.find(a => a.bundleId.toLowerCase() === params.overrideBundleId?.toLowerCase());
+    if (overrideMatch) return overrideMatch;
+  }
+
+  const targetIos = (params.iosBundleId || '').toLowerCase();
+  const targetPkg = (params.pkgName || '').toLowerCase();
+
+  // 2. Direct match (tam bundleId veya pkg eşleşmesi)
+  const direct = apps.find(a => {
+    const bId = a.bundleId.toLowerCase();
+    return (targetIos && bId === targetIos) || (targetPkg && bId === targetPkg);
+  });
+  if (direct) return direct;
+
+  // 3. Normalized match (piyyuu vs piyuu tek harf toleransı)
+  const normPkg = normalizeAppStr(params.pkgName);
+  const normIos = normalizeAppStr(params.iosBundleId);
+  const normMatch = apps.find(a => {
+    const normA = normalizeAppStr(a.bundleId);
+    return (normPkg && normA === normPkg) || (normIos && normA === normIos);
+  });
+  if (normMatch) return normMatch;
+
+  // 4. Özel anahtar kelime ve semantik eşleştirmeler (caller-id hariç tutulur)
+  const projBaseName = params.projectDir ? path.basename(params.projectDir).toLowerCase() : '';
+  const pAll = [params.projectName, projBaseName, params.pkgName, params.iosBundleId]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (pAll.includes('caller')) {
+    // Caller ID için App Store'da callerid yoksa eşleştirme yapma
+    return null;
+  }
+
+  if (pAll.includes('waiter') || pAll.includes('garson')) {
+    const gMatch = apps.find(a => a.name.toLowerCase().includes('garson') || a.bundleId.toLowerCase().includes('garson'));
+    if (gMatch) return gMatch;
+  }
+  if (pAll.includes('partner') || pAll.includes('pos')) {
+    const pMatch = apps.find(a => a.name.toLowerCase().includes('pos') || a.bundleId.toLowerCase().includes('partnermobile'));
+    if (pMatch) return pMatch;
+  }
+  if (pAll.includes('manager')) {
+    const mMatch = apps.find(a => a.name.toLowerCase().includes('manager') || a.bundleId.toLowerCase().includes('managermobile'));
+    if (mMatch) return mMatch;
+  }
+  if (pAll.includes('kurye') || pAll.includes('courier') || pAll.includes('nexmobile')) {
+    const kMatch = apps.find(a => a.name.toLowerCase().includes('kurye') || a.bundleId.toLowerCase().includes('kurye'));
+    if (kMatch) return kMatch;
+  }
+
+  // 5. Proje adı ve bundle benzerliği ile genel arama
+  const fuzzy = apps.find(a => {
+    const normBundle = a.bundleId.replace(/[-_.]/g, '').toLowerCase();
+    const normName = a.name.replace(/[\s-_]/g, '').toLowerCase();
+    return (projBaseName && normBundle.includes(projBaseName)) || (projBaseName && normName.includes(projBaseName));
+  });
+  if (fuzzy) return fuzzy;
+
+  return null;
+}
+
 /**
  * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
  */
-async function compareProjectWithStores(
+export async function compareProjectWithStores(
   pkgName: string,
   localBuildNumber: number,
   localVersion: string,
   projectDir?: string,
-  forceRefresh = false
+  forceRefresh = false,
+  overrideBundleId?: string
 ): Promise<StoreComparison> {
   if (!pkgName) {
     return {
@@ -737,7 +828,7 @@ async function compareProjectWithStores(
     };
   }
 
-  const cacheKey = `${pkgName}__${localBuildNumber}__${localVersion}__${projectDir || ''}`;
+  const cacheKey = `${pkgName}__${localBuildNumber}__${localVersion}__${projectDir || ''}__${overrideBundleId || ''}`;
   if (!forceRefresh) {
     const cached = storeComparisonCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < STORE_CACHE_TTL_MS) {
@@ -808,12 +899,16 @@ async function compareProjectWithStores(
   }
 
   // 2. APPLE APP STORE KARŞILAŞTIRMASI
-  // iOS için bağımsız bundleId tespiti
-  let appleTargetBundleId = pkgName;
+  let appleTargetBundleId = overrideBundleId || pkgName;
+  let detectedIosBundleId: string | undefined;
+  let detectedProjectName: string | undefined;
+
   if (projectDir) {
     try {
       const pMeta = detectProjectMetadata(projectDir);
-      if (pMeta.iosBundleId) {
+      detectedIosBundleId = pMeta.iosBundleId;
+      detectedProjectName = pMeta.name;
+      if (!overrideBundleId && pMeta.iosBundleId) {
         appleTargetBundleId = pMeta.iosBundleId;
       }
     } catch {
@@ -835,25 +930,22 @@ async function compareProjectWithStores(
 
       connectApps = await adapter.listAllApps().catch(() => []);
 
-      // 1. Tam eşleşme ara
-      const directMatch = connectApps.find(a =>
-        a.bundleId.toLowerCase() === appleTargetBundleId.toLowerCase() ||
-        a.bundleId.toLowerCase() === pkgName.toLowerCase()
+      const matchedApp = findBestMatchedAppleApp(
+        {
+          projectDir,
+          pkgName,
+          iosBundleId: detectedIosBundleId,
+          projectName: detectedProjectName,
+          overrideBundleId,
+        },
+        connectApps
       );
 
-      if (directMatch) {
-        appleTargetBundleId = directMatch.bundleId;
-      } else {
-        // 2. Proje adı ve bundle benzerliği ile eşleştir (örn. partner_mobile -> com.piyyuu.partnerMobile)
-        const projBase = (projectDir ? path.basename(projectDir) : '').replace(/[-_]/g, '').toLowerCase();
-        const fuzzyMatch = connectApps.find(a => {
-          const normBundle = a.bundleId.replace(/[-_.]/g, '').toLowerCase();
-          const normName = a.name.replace(/[\s-_]/g, '').toLowerCase();
-          return (projBase && normBundle.includes(projBase)) || (projBase && normName.includes(projBase));
-        });
-        if (fuzzyMatch) {
-          appleTargetBundleId = fuzzyMatch.bundleId;
-        }
+      if (matchedApp) {
+        appleTargetBundleId = matchedApp.bundleId;
+        comparison.appStore.appName = matchedApp.name;
+        comparison.appStore.bundleId = matchedApp.bundleId;
+        comparison.appStore.appId = matchedApp.id;
       }
 
       // App Store Connect'ten en son build'i sorgula
@@ -868,6 +960,7 @@ async function compareProjectWithStores(
       const latestBuild = await targetAdapter.getLatestBuild().catch(() => null);
       if (latestBuild) {
         comparison.appStore = {
+          ...comparison.appStore,
           status: 'live',
           version: latestBuild.version !== 'unknown' ? latestBuild.version : comparison.appStore.version,
           buildNumber: latestBuild.buildNumber,
@@ -883,6 +976,7 @@ async function compareProjectWithStores(
   const itunesRes = await fetchAppleStoreLive(appleTargetBundleId);
   if (itunesRes.status === 'live') {
     comparison.appStore = {
+      ...comparison.appStore,
       status: 'live',
       version: itunesRes.version,
       message: `${itunesRes.version.startsWith('v') ? itunesRes.version : 'v' + itunesRes.version} yayında`,
@@ -890,6 +984,7 @@ async function compareProjectWithStores(
     };
   } else if (comparison.appStore.status !== 'live' && itunesRes.status === 'not_found') {
     comparison.appStore = {
+      ...comparison.appStore,
       status: 'not_found',
       message: 'App Store\'da henüz yayınlanmamış',
     };
@@ -1152,7 +1247,14 @@ export const uiCommand = new Command('ui')
         // Eğer herhangi bir projede stores verisi yoksa hafifçe karşılaştır
         for (const p of list) {
           if (!p.stores && p.package) {
-            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
+            p.stores = await compareProjectWithStores(
+              p.package,
+              p.buildNumber || 1,
+              p.version || '1.0.0',
+              p.path,
+              false,
+              p.appStoreOverrideBundleId
+            );
           }
         }
         if (!list.some(p => path.resolve(p.path) === path.resolve(activeProjectDir)) && list[0]) {
@@ -1185,7 +1287,14 @@ export const uiCommand = new Command('ui')
         const list = getStoredProjects();
         for (const p of list) {
           if (p.package) {
-            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path, true);
+            p.stores = await compareProjectWithStores(
+              p.package,
+              p.buildNumber || 1,
+              p.version || '1.0.0',
+              p.path,
+              true,
+              p.appStoreOverrideBundleId
+            );
           }
         }
         saveStoredProjects(list);
@@ -1399,13 +1508,17 @@ export const uiCommand = new Command('ui')
               ? path.resolve(payload.projectPath)
               : path.resolve(activeProjectDir);
 
+            const currentList = getStoredProjects();
+            const projItem = currentList.find(p => path.resolve(p.path) === targetDir);
+
             const meta = detectProjectMetadata(targetDir);
             const comparison = await compareProjectWithStores(
               meta.package,
               meta.buildNumber,
               meta.version,
               targetDir,
-              true
+              true,
+              projItem?.appStoreOverrideBundleId
             );
 
             // Mağazadaki en yüksek sürüm ve build numarasını hesapla
@@ -1458,8 +1571,6 @@ export const uiCommand = new Command('ui')
             }
 
             // Projeler listesini güncelle
-            const currentList = getStoredProjects();
-            const projItem = currentList.find(p => path.resolve(p.path) === targetDir);
             if (projItem) {
               projItem.version = targetVersion;
               projItem.buildNumber = targetBuildNumber;
@@ -1468,7 +1579,8 @@ export const uiCommand = new Command('ui')
                 targetBuildNumber,
                 targetVersion,
                 targetDir,
-                true
+                true,
+                projItem.appStoreOverrideBundleId
               );
               saveStoredProjects(currentList);
             }
@@ -1514,6 +1626,62 @@ export const uiCommand = new Command('ui')
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
         }
+        return;
+      }
+
+      // 3.4 POST /api/project/set-apple-mapping - Proje için App Store Connect Uygulamasını Manuel Eşleme
+      if (req.method === 'POST' && pathname === '/api/project/set-apple-mapping') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              projectPath?: string;
+              bundleId?: string; // Boş/undefined ise otomatik eşleştirmeye döner
+              appName?: string;
+            };
+
+            const targetDir = payload.projectPath && fs.existsSync(payload.projectPath)
+              ? path.resolve(payload.projectPath)
+              : path.resolve(activeProjectDir);
+
+            const currentList = getStoredProjects();
+            const projItem = currentList.find(p => path.resolve(p.path) === targetDir);
+            if (!projItem) {
+              res.writeHead(404, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Proje bulunamadı.' }));
+              return;
+            }
+
+            projItem.appStoreOverrideBundleId = payload.bundleId || undefined;
+            projItem.appStoreAppName = payload.appName || undefined;
+
+            // Projeyi anında yeni eşlemeyle yeniden karşılaştır
+            const meta = detectProjectMetadata(targetDir);
+            projItem.stores = await compareProjectWithStores(
+              projItem.package || meta.package,
+              projItem.buildNumber || meta.buildNumber,
+              projItem.version || meta.version,
+              targetDir,
+              true,
+              projItem.appStoreOverrideBundleId
+            );
+
+            saveStoredProjects(currentList);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              project: projItem,
+              message: payload.bundleId
+                ? `Proje başarıyla '${payload.appName || payload.bundleId}' ile eşleştirildi.`
+                : 'Otomatik akıllı eşleştirmeye geri dönüldü.',
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
         return;
       }
 

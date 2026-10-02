@@ -112,6 +112,9 @@ export interface StoreComparison {
     version?: string;
     buildNumber?: string;
     message?: string;
+    appName?: string;
+    bundleId?: string;
+    appId?: string;
   };
   comparisonStatus: 'UPDATE_READY' | 'UP_TO_DATE' | 'NEW_APP' | 'UNKNOWN';
   badge: string;
@@ -125,6 +128,8 @@ export interface ProjectEntry {
   hasPubspec: boolean;
   package?: string;
   iosBundleId?: string;
+  appStoreOverrideBundleId?: string;
+  appStoreAppName?: string;
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
@@ -762,10 +767,10 @@ export default function App() {
     if (showStoreTestModal && activeStoreTab === 'ai' && aiProvider !== 'conventional') {
       void fetchAiModels(aiProvider);
     }
-    if (showStoreTestModal && activeStoreTab === 'apple' && appStoreInfo.connected) {
+    if (appStoreInfo.connected && appleConnectApps.length === 0) {
       void fetchAppleApps();
     }
-  }, [showStoreTestModal, activeStoreTab, aiProvider, appStoreInfo.connected]);
+  }, [showStoreTestModal, activeStoreTab, aiProvider, appStoreInfo.connected, appleConnectApps.length]);
 
   // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
@@ -1147,6 +1152,39 @@ export default function App() {
       console.error('Apple uygulamaları listeleme hatası:', err);
     } finally {
       setIsLoadingAppleApps(false);
+    }
+  };
+
+  // PROJENİN APP STORE UYGULAMASINI MANUEL EŞLE VEYA OTOMATİĞE ÇEVİR
+  const handleSetAppleMapping = async (bundleId: string, appName?: string) => {
+    const target = activePathRef.current || activeProjectPath;
+    if (!target) return;
+    setIsSyncingStoreVersion(true);
+    try {
+      const res = await fetch('/api/project/set-apple-mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: target,
+          bundleId: bundleId === 'auto' ? undefined : bundleId,
+          appName: bundleId === 'auto' ? undefined : appName,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { success: boolean; project?: ProjectEntry; message?: string };
+        if (data.success && data.project) {
+          setProjects((prev) =>
+            prev.map((p) => (p.path === target ? { ...p, ...data.project } : p))
+          );
+          await fetchProjectDetails(target);
+          setSyncStoreSuccessMsg(data.message || 'App Store eşleştirmesi güncellendi.');
+          setTimeout(() => setSyncStoreSuccessMsg(null), 5000);
+        }
+      }
+    } catch (err) {
+      console.error('Apple eşleştirme hatası:', err);
+    } finally {
+      setIsSyncingStoreVersion(false);
     }
   };
 
@@ -1836,6 +1874,8 @@ export default function App() {
     }
   };
 
+  const currentProjEntry = projects.find(p => p.path === activeProjectPath);
+
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans selection:bg-primary selection:text-primary-foreground">
       {/* ===================== SOL SIDEBAR (STORE KARŞILAŞTIRMALI PROJELER) ===================== */}
@@ -2031,13 +2071,20 @@ export default function App() {
                     </div>
                     <div className="font-mono text-[11px] font-medium truncate">
                       {comp?.appStore?.status === 'live' ? (
-                        <span className="text-sky-600 dark:text-sky-400 font-semibold">
-                          {comp.appStore.version
-                            ? (comp.appStore.version.startsWith('v') ? comp.appStore.version : `v${comp.appStore.version}`)
-                            : comp.appStore.buildNumber
-                              ? `#${comp.appStore.buildNumber}`
-                              : 'Yayında'}
-                        </span>
+                        <div>
+                          <span className="text-sky-600 dark:text-sky-400 font-semibold">
+                            {comp.appStore.version
+                              ? (comp.appStore.version.startsWith('v') ? comp.appStore.version : `v${comp.appStore.version}`)
+                              : comp.appStore.buildNumber
+                                ? `#${comp.appStore.buildNumber}`
+                                : 'Yayında'}
+                          </span>
+                          {comp.appStore.appName && (
+                            <div className="text-[9px] text-muted-foreground font-sans truncate" title={comp.appStore.appName}>
+                              {comp.appStore.appName}
+                            </div>
+                          )}
+                        </div>
                       ) : comp?.appStore?.status === 'not_found' ? (
                         <span className="text-muted-foreground/70 text-[10px]">Kayıtlı Değil</span>
                       ) : (
@@ -2347,10 +2394,56 @@ export default function App() {
                       </span>
                     ) : null}
                   </div>
-                  <div className="text-xs font-mono text-muted-foreground">
-                    Key ID: {appStoreInfo.keyId || 'Yapılandırılmadı'}
+                  <div className="flex items-center justify-between text-xs font-mono text-muted-foreground pt-0.5">
+                    <span className="truncate">
+                      {activeComparison?.appStore?.appName ? (
+                        <span className="text-emerald-500 font-sans font-semibold">
+                          ✓ {activeComparison.appStore.appName}
+                        </span>
+                      ) : (
+                        `Key ID: ${appStoreInfo.keyId || 'Yapılandırılmadı'}`
+                      )}
+                    </span>
+                    {activeComparison?.appStore?.bundleId && (
+                      <span className="text-[10px] text-muted-foreground font-mono truncate" title={activeComparison.appStore.bundleId}>
+                        {activeComparison.appStore.bundleId}
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* APP STORE MANUEL UYGULAMA SEÇİCİSİ (DROPDOWN) */}
+                {appStoreInfo.connected && appleConnectApps.length > 0 && (
+                  <div className="pt-2 border-t border-border/50 space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-muted-foreground">App Store Eşleştirmesi:</span>
+                      {currentProjEntry?.appStoreOverrideBundleId ? (
+                        <span className="text-amber-500 font-medium font-mono">Manuel Bağlı</span>
+                      ) : (
+                        <span className="text-emerald-500 font-medium font-mono">Akıllı Otomatik</span>
+                      )}
+                    </div>
+                    <select
+                      value={currentProjEntry?.appStoreOverrideBundleId || 'auto'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const selectedApp = appleConnectApps.find(a => a.bundleId === val);
+                        void handleSetAppleMapping(val, selectedApp?.name);
+                      }}
+                      className="w-full text-xs font-medium py-1 px-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer truncate"
+                    >
+                      <option value="auto">
+                        ✨ Otomatik Akıllı Eşleştirme {activeComparison?.appStore?.appName ? `(${activeComparison.appStore.appName})` : ''}
+                      </option>
+                      {appleConnectApps.map(app => (
+                        <option key={app.id} value={app.bundleId}>
+                          {app.name} ({app.bundleId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
                   {activeComparison?.appStore?.message || 'Durum: Kontrol edildi'}
                 </div>
