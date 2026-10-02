@@ -468,9 +468,16 @@ async function compareProjectWithStores(
       if (res.status === 'found') {
         comparison.googlePlay = {
           status: 'live',
+          version: res.versionName,
           versionCode: res.versionCode,
-          track: 'production',
-          message: res.versionCode ? `v${res.versionCode} yayında` : 'Yayında',
+          track: res.track || 'production',
+          message: res.message || (res.versionName ? `v${res.versionName} (#${res.versionCode}) yayında` : `Build #${res.versionCode} yayında`),
+        };
+        googleFound = true;
+      } else if (res.status === 'not_found') {
+        comparison.googlePlay = {
+          status: 'not_found',
+          message: res.message || 'Play Console hesabında bulunamadı',
         };
         googleFound = true;
       } else if (res.status === 'auth_error') {
@@ -507,7 +514,7 @@ async function compareProjectWithStores(
     comparison.appStore = {
       status: 'live',
       version: itunesRes.version,
-      message: `${itunesRes.version} yayında`,
+      message: `${itunesRes.version.startsWith('v') ? itunesRes.version : 'v' + itunesRes.version} yayında`,
     };
   }
 
@@ -558,18 +565,38 @@ async function compareProjectWithStores(
       else if (cmp === 0) storeIsEqual = true;
     }
 
-    // Google Play build numarası ile karşılaştır
-    if (playLive && comparison.googlePlay.versionCode) {
-      if (comparison.googlePlay.versionCode > localBuildNumber) storeIsHigher = true;
-      else if (comparison.googlePlay.versionCode === localBuildNumber) storeIsEqual = true;
+    // Google Play sürüm ve build numarası ile karşılaştır
+    if (playLive) {
+      if (comparison.googlePlay.version) {
+        const cmp = compareSemver(localVersion, comparison.googlePlay.version);
+        if (cmp < 0) {
+          storeIsHigher = true;
+        } else if (cmp === 0) {
+          if (comparison.googlePlay.versionCode && comparison.googlePlay.versionCode > localBuildNumber) {
+            storeIsHigher = true;
+          } else if (comparison.googlePlay.versionCode && comparison.googlePlay.versionCode === localBuildNumber) {
+            storeIsEqual = true;
+          }
+        }
+      } else if (comparison.googlePlay.versionCode) {
+        if (comparison.googlePlay.versionCode > localBuildNumber) storeIsHigher = true;
+        else if (comparison.googlePlay.versionCode === localBuildNumber) storeIsEqual = true;
+      }
     }
 
     if (storeIsHigher) {
       comparison.comparisonStatus = 'UPDATE_READY';
       comparison.badge = 'Mağaza Daha İleri';
-      const rawVer = comparison.appStore.version || (comparison.googlePlay.versionCode ? `#${comparison.googlePlay.versionCode}` : '');
-      const storeVer = rawVer.startsWith('v') || rawVer.startsWith('#') ? rawVer : `v${rawVer}`;
-      comparison.summary = `Mağazadaki canlı sürüm (${storeVer}), yerel sürümden (v${localVersion} #${localBuildNumber}) daha yüksek!`;
+      const storeParts: string[] = [];
+      if (playLive) {
+        const pVer = comparison.googlePlay.version ? (comparison.googlePlay.version.startsWith('v') ? comparison.googlePlay.version : `v${comparison.googlePlay.version}`) : '';
+        const pCode = comparison.googlePlay.versionCode ? `#${comparison.googlePlay.versionCode}` : '';
+        storeParts.push(`Play Store: ${pVer} ${pCode}`.trim());
+      }
+      if (appleLive && comparison.appStore.version) {
+        storeParts.push(`App Store: ${comparison.appStore.version.startsWith('v') ? comparison.appStore.version : `v${comparison.appStore.version}`}`);
+      }
+      comparison.summary = `Mağazadaki canlı sürüm (${storeParts.join(', ')}), yerel sürümden (v${localVersion} #${localBuildNumber}) daha yüksek!`;
     } else if (storeIsEqual) {
       comparison.comparisonStatus = 'UP_TO_DATE';
       comparison.badge = 'Mağazada Eşit';

@@ -17,3 +17,13 @@ export interface GooglePlayReleaseNotes {
   language: string; // e.g. "en-US", "tr-TR"
   text: string;
 }
+
+export interface GooglePlaySafeTrackResult {
+  status: 'found' | 'not_found' | 'auth_error' | 'error';
+  versionCode?: number;
+  versionName?: string;
+  track?: string;
+  statusRelease?: string;
+  releaseNotes?: GooglePlayReleaseNotes[];
+  message?: string;
+}

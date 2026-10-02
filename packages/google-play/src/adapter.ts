@@ -1,131 +1,178 @@
 import fs from 'node:fs';
-import { androidpublisher_v3, androidpublisher } from '@googleapis/androidpublisher';
-import { GooglePlayConfig, GooglePlayReleaseNotes, GooglePlayUploadResult } from './types.js';
-import { createGoogleAuth } from './auth.js';
+import type { GooglePlayConfig, GooglePlayReleaseNotes, GooglePlayUploadResult, GooglePlaySafeTrackResult } from './types.js';
+import { getGoogleAccessToken } from './auth.js';
 import { GooglePlayError } from '@webicro/shared';
 
 export class GooglePlayAdapter {
-  private publisher: androidpublisher_v3.Androidpublisher;
   private packageName: string;
   private config: GooglePlayConfig;
 
   constructor(config: GooglePlayConfig) {
     this.config = config;
     this.packageName = config.packageName;
-    const authClient = createGoogleAuth(config);
-    this.publisher = androidpublisher({
-      version: 'v3',
-      auth: authClient as androidpublisher_v3.Options['auth'],
-    });
   }
 
   public async authenticate(): Promise<void> {
     try {
-      await this.publisher.reviews.list({ packageName: this.packageName, maxResults: 1 });
+      await getGoogleAccessToken(this.config);
     } catch (error: unknown) {
       this.handleError(error, 'authenticate');
     }
   }
 
   public async getLatestVersionCode(): Promise<number | null> {
-    let editId = '';
-    try {
-      const edit = await this.publisher.edits.insert({
-        packageName: this.packageName,
-      });
-      editId = edit.data.id ?? '';
-      
-      const tracks = await this.publisher.edits.tracks.list({
-        editId,
-        packageName: this.packageName,
-      });
-
-      let latestVersionCode = 0;
-      if (tracks.data.tracks) {
-        for (const track of tracks.data.tracks) {
-          const releases = track.releases ?? [];
-          for (const release of releases) {
-            const versionCodes = release.versionCodes ?? [];
-            for (const vCodeStr of versionCodes) {
-              const vCode = parseInt(vCodeStr, 10);
-              if (!isNaN(vCode) && vCode > latestVersionCode) {
-                latestVersionCode = vCode;
-              }
-            }
-          }
-        }
-      }
-
-      await this.publisher.edits.delete({ editId, packageName: this.packageName });
-      return latestVersionCode === 0 ? null : latestVersionCode;
-    } catch (error: unknown) {
-      if (editId) {
-         await this.publisher.edits.delete({ editId, packageName: this.packageName }).catch(() => {});
-      }
-      this.handleError(error, 'getLatestVersionCode');
+    const res = await this.getSafeLatestVersionCode();
+    if (res.status === 'found' && res.versionCode && res.versionCode > 0) {
+      return res.versionCode;
     }
+    return null;
   }
 
-  public async getSafeLatestVersionCode(): Promise<{
-    status: 'found' | 'not_found' | 'auth_error' | 'error';
-    versionCode?: number;
-    message?: string;
-  }> {
+  public async getSafeLatestVersionCode(): Promise<GooglePlaySafeTrackResult> {
     let editId = '';
+    let token = '';
     try {
-      const edit = await this.publisher.edits.insert({
-        packageName: this.packageName,
-      });
-      editId = edit.data.id ?? '';
+      token = await getGoogleAccessToken(this.config);
+    } catch (authErr: unknown) {
+      const msg = authErr instanceof Error ? authErr.message : String(authErr);
+      return { status: 'auth_error', message: msg };
+    }
 
-      const tracks = await this.publisher.edits.tracks.list({
-        editId,
-        packageName: this.packageName,
+    try {
+      const editRes = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!editRes.ok) {
+        const errText = await editRes.text();
+        if (editRes.status === 404 || errText.toLowerCase().includes('not found') || errText.toLowerCase().includes('package not found')) {
+          return { status: 'not_found', message: 'Paket Play Console hesabında bulunamadı' };
+        }
+        if (editRes.status === 401 || editRes.status === 403 || errText.toLowerCase().includes('permission') || errText.toLowerCase().includes('unauthorized')) {
+          return { status: 'auth_error', message: 'Erişim yetkisi yetersiz veya paket bu hesaba atanmamış' };
+        }
+        return { status: 'error', message: `Play Console API hatası (${editRes.status}): ${errText}` };
+      }
+
+      const editData = (await editRes.json()) as { id?: string };
+      editId = editData.id ?? '';
+
+      const tracksRes = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/tracks`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       let latestVersionCode = 0;
-      if (tracks.data.tracks) {
-        for (const track of tracks.data.tracks) {
-          const releases = track.releases ?? [];
-          for (const release of releases) {
-            const versionCodes = release.versionCodes ?? [];
-            for (const vCodeStr of versionCodes) {
+      let versionName = '';
+      let bestTrack = '';
+      let statusRelease = '';
+      let releaseNotes: GooglePlayReleaseNotes[] = [];
+
+      if (tracksRes.ok) {
+        interface ReleaseItem {
+          name?: string;
+          versionCodes?: string[];
+          status?: string;
+          releaseNotes?: Array<{ language?: string; text?: string }>;
+        }
+        interface TrackItem {
+          track?: string;
+          releases?: ReleaseItem[];
+        }
+        const tracksData = (await tracksRes.json()) as { tracks?: TrackItem[] };
+        const tracks = tracksData.tracks ?? [];
+
+        // Track öncelik sırası: production > beta > alpha > internal
+        const trackPriority: Record<string, number> = {
+          production: 4,
+          beta: 3,
+          alpha: 2,
+          internal: 1,
+        };
+
+        for (const track of tracks) {
+          const tName = track.track ?? '';
+          for (const release of track.releases ?? []) {
+            for (const vCodeStr of release.versionCodes ?? []) {
               const vCode = parseInt(vCodeStr, 10);
-              if (!isNaN(vCode) && vCode > latestVersionCode) {
-                latestVersionCode = vCode;
+              if (!isNaN(vCode)) {
+                const currentPri = trackPriority[tName] ?? 0;
+                const bestPri = trackPriority[bestTrack] ?? 0;
+
+                if (vCode > latestVersionCode || (vCode === latestVersionCode && currentPri > bestPri)) {
+                  latestVersionCode = vCode;
+                  bestTrack = tName;
+                  statusRelease = release.status ?? '';
+                  // release.name örn: "15 (1.0.11)" -> "1.0.11"
+                  if (release.name) {
+                    const match = release.name.match(/\((.*?)\)/);
+                    versionName = match ? match[1] : release.name;
+                  }
+                  if (release.releaseNotes) {
+                    releaseNotes = release.releaseNotes.map(n => ({
+                      language: n.language ?? 'tr-TR',
+                      text: n.text ?? '',
+                    }));
+                  }
+                }
               }
             }
           }
         }
       }
 
-      await this.publisher.edits.delete({ editId, packageName: this.packageName });
-      if (latestVersionCode > 0) {
-        return { status: 'found', versionCode: latestVersionCode };
+      // Edit'i temizle
+      if (editId) {
+        await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
       }
+
+      if (latestVersionCode > 0) {
+        return {
+          status: 'found',
+          versionCode: latestVersionCode,
+          versionName: versionName || undefined,
+          track: bestTrack || undefined,
+          statusRelease: statusRelease || undefined,
+          releaseNotes: releaseNotes.length > 0 ? releaseNotes : undefined,
+          message: `v${versionName || latestVersionCode} (#${latestVersionCode}) ${bestTrack} yayında`,
+        };
+      }
+
       return { status: 'found', versionCode: 0, message: 'Henüz sürüm yayınlanmamış' };
     } catch (err: unknown) {
-      if (editId) {
-        await this.publisher.edits.delete({ editId, packageName: this.packageName }).catch(() => {});
+      if (editId && token) {
+        await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
       }
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('404') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('package not found')) {
-        return { status: 'not_found', message: 'Paket Play Console hesabında bulunamadı' };
-      }
-      if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('unauthorized')) {
-        return { status: 'auth_error', message: 'Erişim yetkisi yetersiz veya hesap eklenmemiş' };
-      }
       return { status: 'error', message: msg };
     }
   }
 
   public async createEdit(): Promise<string> {
     try {
-      const res = await this.publisher.edits.insert({
-        packageName: this.packageName,
+      const token = await getGoogleAccessToken(this.config);
+      const res = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
-      if (!res.data.id) throw new Error('Edit ID alınamadı');
-      return res.data.id;
+      if (!res.ok) {
+        throw new Error(`Edit oluşturulamadı (HTTP ${res.status}): ${await res.text()}`);
+      }
+      const data = (await res.json()) as { id?: string };
+      if (!data.id) throw new Error('Edit ID alınamadı');
+      return data.id;
     } catch (error: unknown) {
       this.handleError(error, 'createEdit');
     }
@@ -133,18 +180,26 @@ export class GooglePlayAdapter {
 
   public async uploadBundle(editId: string, aabPath: string): Promise<number> {
     try {
-      const res = await this.publisher.edits.bundles.upload({
-        editId,
-        packageName: this.packageName,
-        media: {
-          mimeType: 'application/octet-stream',
-          body: fs.createReadStream(aabPath),
+      const token = await getGoogleAccessToken(this.config);
+      const fileBuffer = fs.readFileSync(aabPath);
+      const res = await fetch(`https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/bundles?uploadType=media`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/octet-stream',
         },
+        body: fileBuffer,
       });
-      if (res.data.versionCode === undefined || res.data.versionCode === null) {
+
+      if (!res.ok) {
+        throw new Error(`Bundle yüklenemedi (HTTP ${res.status}): ${await res.text()}`);
+      }
+
+      const data = (await res.json()) as { versionCode?: number };
+      if (data.versionCode === undefined || data.versionCode === null) {
         throw new Error('Yükleme sonrasında version code alınamadı');
       }
-      return res.data.versionCode;
+      return data.versionCode;
     } catch (error: unknown) {
       this.handleError(error, 'uploadBundle');
     }
@@ -152,6 +207,7 @@ export class GooglePlayAdapter {
 
   public async assignTrack(editId: string, versionCode: number, notes?: GooglePlayReleaseNotes[]): Promise<void> {
     try {
+      const token = await getGoogleAccessToken(this.config);
       const trackName = this.config.track ?? 'internal';
       const fraction = this.config.userFraction ?? 1.0;
       
@@ -165,32 +221,64 @@ export class GooglePlayAdapter {
         text: note.text,
       })) ?? [];
 
-      await this.publisher.edits.tracks.update({
-        editId,
-        packageName: this.packageName,
+      const body = {
         track: trackName,
-        requestBody: {
-          releases: [
-            {
-              versionCodes: [versionCode.toString()],
-              status,
-              userFraction: status === 'inProgress' ? fraction : undefined,
-              releaseNotes,
-            }
-          ]
-        }
+        releases: [
+          {
+            versionCodes: [versionCode.toString()],
+            status,
+            userFraction: status === 'inProgress' ? fraction : undefined,
+            releaseNotes,
+          },
+        ],
+      };
+
+      const res = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/tracks/${trackName}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
       });
+
+      if (!res.ok) {
+        throw new Error(`Track atanamadı (HTTP ${res.status}): ${await res.text()}`);
+      }
     } catch (error: unknown) {
       this.handleError(error, 'assignTrack');
     }
   }
 
+  public async validate(editId: string): Promise<void> {
+    try {
+      const token = await getGoogleAccessToken(this.config);
+      const res = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}:validate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`Edit doğrulanamadı (HTTP ${res.status}): ${await res.text()}`);
+      }
+    } catch (error: unknown) {
+      this.handleError(error, 'validate');
+    }
+  }
+
   public async commit(editId: string): Promise<void> {
     try {
-      await this.publisher.edits.commit({
-        editId,
-        packageName: this.packageName,
+      const token = await getGoogleAccessToken(this.config);
+      const res = await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}:commit`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
+      if (!res.ok) {
+        throw new Error(`Edit commit edilemedi (HTTP ${res.status}): ${await res.text()}`);
+      }
     } catch (error: unknown) {
       this.handleError(error, 'commit');
     }
@@ -204,16 +292,19 @@ export class GooglePlayAdapter {
       await this.assignTrack(editId, versionCode, notes);
 
       if (isDryRun) {
-        await this.publisher.edits.validate({
-          editId,
-          packageName: this.packageName,
-        });
+        await this.validate(editId);
       } else {
         await this.commit(editId);
       }
     } catch (error: unknown) {
-      await this.publisher.edits.delete({ editId, packageName: this.packageName }).catch(() => {});
-      throw error; // Rethrow to avoid silent failures
+      const token = await getGoogleAccessToken(this.config).catch(() => '');
+      if (token) {
+        await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+      throw error;
     }
 
     const trackName = this.config.track ?? 'internal';

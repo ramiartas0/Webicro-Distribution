@@ -65,6 +65,7 @@ interface AuditLogItem {
 export interface StoreComparison {
   googlePlay: {
     status: 'live' | 'not_found' | 'auth_error' | 'not_configured';
+    version?: string;
     versionCode?: number;
     track?: string;
     message?: string;
@@ -866,7 +867,13 @@ export default function App() {
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.googlePlay?.status === 'live' ? (
-                        <span className="text-emerald-500 font-semibold">{comp.googlePlay.versionCode ? `v${comp.googlePlay.versionCode}` : 'Yayında'}</span>
+                        <span className="text-emerald-500 font-semibold">
+                          {comp.googlePlay.version
+                            ? (comp.googlePlay.version.startsWith('v') ? comp.googlePlay.version : `v${comp.googlePlay.version}`)
+                            : comp.googlePlay.versionCode
+                              ? `#${comp.googlePlay.versionCode}`
+                              : 'Yayında'}
+                        </span>
                       ) : comp?.googlePlay?.status === 'not_found' ? (
                         <span className="text-muted-foreground">Kayıtlı Değil</span>
                       ) : comp?.googlePlay?.status === 'auth_error' ? (
@@ -884,7 +891,13 @@ export default function App() {
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.appStore?.status === 'live' ? (
-                        <span className="text-sky-400 font-semibold">{comp.appStore.version || (comp.appStore.buildNumber ? `v${comp.appStore.buildNumber}` : 'Yayında')}</span>
+                        <span className="text-sky-400 font-semibold">
+                          {comp.appStore.version
+                            ? (comp.appStore.version.startsWith('v') ? comp.appStore.version : `v${comp.appStore.version}`)
+                            : comp.appStore.buildNumber
+                              ? `#${comp.appStore.buildNumber}`
+                              : 'Yayında'}
+                        </span>
                       ) : comp?.appStore?.status === 'not_found' ? (
                         <span className="text-muted-foreground">Kayıtlı Değil</span>
                       ) : (
@@ -1049,9 +1062,15 @@ export default function App() {
                   </span>
                 </div>
                 <div className="pt-1">
-                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                  <div className="text-2xl font-extrabold font-mono text-foreground flex items-baseline gap-2">
                     {activeComparison?.googlePlay?.status === 'live' ? (
-                      `v${activeComparison.googlePlay.versionCode}`
+                      activeComparison.googlePlay.version ? (
+                        <span>{activeComparison.googlePlay.version.startsWith('v') ? activeComparison.googlePlay.version : `v${activeComparison.googlePlay.version}`}</span>
+                      ) : activeComparison.googlePlay.versionCode ? (
+                        <span>#{activeComparison.googlePlay.versionCode}</span>
+                      ) : (
+                        <span>Yayında</span>
+                      )
                     ) : activeComparison?.googlePlay?.status === 'not_found' ? (
                       <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
                     ) : activeComparison?.googlePlay?.status === 'auth_error' ? (
@@ -1061,9 +1080,14 @@ export default function App() {
                     ) : (
                       <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                     )}
+                    {activeComparison?.googlePlay?.versionCode ? (
+                      <span className="text-xs font-normal text-muted-foreground font-mono">
+                        (Build #{activeComparison.googlePlay.versionCode})
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-xs font-mono text-muted-foreground truncate" title={googlePlayInfo.serviceAccount}>
-                    Hesap: {googlePlayInfo.serviceAccount.split('@')[0]}
+                    Hesap: {googlePlayInfo.serviceAccount ? googlePlayInfo.serviceAccount.split('@')[0] : 'play-store-deployer'}
                   </div>
                 </div>
                 <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
@@ -1084,9 +1108,15 @@ export default function App() {
                   </span>
                 </div>
                 <div className="pt-1">
-                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                  <div className="text-2xl font-extrabold font-mono text-foreground flex items-baseline gap-2">
                     {activeComparison?.appStore?.status === 'live' ? (
-                      `v${activeComparison.appStore.buildNumber}`
+                      activeComparison.appStore.version ? (
+                        <span>{activeComparison.appStore.version.startsWith('v') ? activeComparison.appStore.version : `v${activeComparison.appStore.version}`}</span>
+                      ) : activeComparison.appStore.buildNumber ? (
+                        <span>#{activeComparison.appStore.buildNumber}</span>
+                      ) : (
+                        <span>Yayında</span>
+                      )
                     ) : activeComparison?.appStore?.status === 'not_found' ? (
                       <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
                     ) : appStoreInfo.connected ? (
@@ -1094,6 +1124,11 @@ export default function App() {
                     ) : (
                       <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                     )}
+                    {activeComparison?.appStore?.buildNumber ? (
+                      <span className="text-xs font-normal text-muted-foreground font-mono">
+                        (Build #{activeComparison.appStore.buildNumber})
+                      </span>
+                    ) : null}
                   </div>
                   <div className="text-xs font-mono text-muted-foreground">
                     Key ID: {appStoreInfo.keyId || 'Yapılandırılmadı'}
