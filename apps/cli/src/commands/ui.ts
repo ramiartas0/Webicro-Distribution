@@ -1414,6 +1414,7 @@ export const uiCommand = new Command('ui')
               branch: gitAnalysis.currentBranch || 'main',
               isClean: gitAnalysis.isClean,
               hasPubspec: Boolean(pubspecInfo),
+              configuredTrack: releaseConfig?.android?.track || undefined,
             },
             commits: gitAnalysis.commitsSinceLastTag,
             comparison: await compareProjectWithStores(

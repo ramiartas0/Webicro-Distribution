@@ -108,6 +108,40 @@ interface StoreTestResult {
   details?: Record<string, unknown>;
 }
 
+export type GoogleTrack = 'internal' | 'alpha' | 'beta' | 'production';
+
+export function isValidGoogleTrack(val: unknown): val is GoogleTrack {
+  return val === 'internal' || val === 'alpha' || val === 'beta' || val === 'production';
+}
+
+export function resolveGoogleTrack(
+  storeTrack?: string,
+  projectPath?: string,
+  configuredTrack?: string
+): GoogleTrack {
+  // 1. Google Play Console'da yayında olan aktif kanal
+  if (isValidGoogleTrack(storeTrack)) {
+    return storeTrack;
+  }
+  // 2. Bu proje için kullanıcının son seçtiği kanal (localStorage)
+  if (projectPath) {
+    try {
+      const saved = localStorage.getItem(`webicro_track_${projectPath}`);
+      if (isValidGoogleTrack(saved)) {
+        return saved;
+      }
+    } catch {
+      // localStorage erişim hatası
+    }
+  }
+  // 3. Projenin config dosyasındaki kanal
+  if (isValidGoogleTrack(configuredTrack)) {
+    return configuredTrack;
+  }
+  // 4. Varsayılan güvenli kanal
+  return 'internal';
+}
+
 function getGoogleTrackLabel(track: 'internal' | 'alpha' | 'beta' | 'production'): string {
   switch (track) {
     case 'internal':
@@ -419,6 +453,8 @@ export default function App() {
           setCurrentVersion(initialProj.version || '');
           setCurrentBuildNumber(initialProj.buildNumber || 0);
           setActiveComparison(initialProj.stores || null);
+          const initialTrack = resolveGoogleTrack(initialProj.stores?.googlePlay?.track, initialProj.path);
+          setGoogleTrack(initialTrack);
         }
 
         if (currentActive) {
@@ -453,6 +489,7 @@ export default function App() {
           branch: string;
           isClean: boolean;
           hasPubspec: boolean;
+          configuredTrack?: string;
         };
         commits?: CommitItem[];
         comparison?: StoreComparison;
@@ -487,6 +524,12 @@ export default function App() {
 
       if (data.comparison) {
         setActiveComparison(data.comparison);
+        const resolvedTrack = resolveGoogleTrack(
+          data.comparison.googlePlay?.track,
+          pathToFetch,
+          data.project?.configuredTrack
+        );
+        setGoogleTrack(resolvedTrack);
       }
 
       if (data.stores) {
@@ -705,6 +748,8 @@ export default function App() {
       setCurrentVersion(targetProj.version || '');
       setCurrentBuildNumber(targetProj.buildNumber || 0);
       setActiveComparison(targetProj.stores || null);
+      const autoTrack = resolveGoogleTrack(targetProj.stores?.googlePlay?.track, targetProj.path);
+      setGoogleTrack(autoTrack);
     }
 
     // 3. Eski projenin commit'lerini ve sürüm notlarını anında sıfırla (veriler ASLA karışmasın)
@@ -1674,12 +1719,35 @@ export default function App() {
                     {targetAndroid && (
                       <div className="space-y-2 pt-1 border-t border-border/60">
                         <div>
-                          <label className="text-[11px] text-muted-foreground block mb-1">
-                            Yayın Kanalı (Track):
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] text-muted-foreground">
+                              Yayın Kanalı (Track):
+                            </label>
+                            {activeComparison?.googlePlay?.track && isValidGoogleTrack(activeComparison.googlePlay.track) ? (
+                              <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Yayındaki Kanal: {getGoogleTrackLabel(activeComparison.googlePlay.track)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">
+                                Otomatik Seçili
+                              </span>
+                            )}
+                          </div>
                           <select
                             value={googleTrack}
-                            onChange={(e) => setGoogleTrack(e.target.value as 'internal' | 'alpha' | 'beta' | 'production')}
+                            onChange={(e) => {
+                              const newTrack = e.target.value as 'internal' | 'alpha' | 'beta' | 'production';
+                              setGoogleTrack(newTrack);
+                              const currentPath = activePathRef.current || activeProjectPath;
+                              if (currentPath) {
+                                try {
+                                  localStorage.setItem(`webicro_track_${currentPath}`, newTrack);
+                                } catch {
+                                  // ignore
+                                }
+                              }
+                            }}
                             className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border bg-background text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                           >
                             <option value="internal">Dahili test</option>
