@@ -1776,10 +1776,11 @@ export const uiCommand = new Command('ui')
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
           try {
-            const payload = JSON.parse(body || '{}') as { version?: string };
+            const payload = JSON.parse(body || '{}') as { version?: string; projectPath?: string };
             const version = payload.version || '1.0.0';
+            const targetDir = payload.projectPath || activeProjectDir;
             
-            const gitAnalyzer = new GitAnalyzer(activeProjectDir);
+            const gitAnalyzer = new GitAnalyzer(targetDir);
             const gitAnalysis = await gitAnalyzer.analyze();
             const commits = gitAnalysis.commitsSinceLastTag;
 
@@ -1889,27 +1890,44 @@ export const uiCommand = new Command('ui')
         req.on('end', async () => {
           try {
             const options = JSON.parse(body || '{}') as {
+              projectPath?: string;
+              projectName?: string;
+              version?: string;
+              buildNumber?: number;
               bump?: 'patch' | 'minor' | 'major';
               manualVersion?: string;
               dryRun?: boolean;
               targetAndroid?: boolean;
               targetIos?: boolean;
+              notesTr?: string;
+              notesEn?: string;
             };
 
-            const meta = detectProjectMetadata(activeProjectDir);
+            const trNotes = options.notesTr?.trim();
+            const enNotes = options.notesEn?.trim();
+            if (!trNotes || !enNotes) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                error: 'Sürüm notları (Türkçe ve İngilizce) oluşturulmadan dağıtım başlatılamaz. Lütfen önce AI ile sürüm notlarını oluşturun.'
+              }));
+              return;
+            }
+
+            const releaseTargetDir = options.projectPath || activeProjectDir;
+            const meta = detectProjectMetadata(releaseTargetDir);
             const stages = createDefaultStages();
             stages[0]!.status = 'running';
 
             activePipelineStatus = {
               isReleasing: true,
-              projectPath: activeProjectDir,
-              projectName: meta.name || path.basename(activeProjectDir),
-              targetVersion: options.manualVersion || meta.version,
+              projectPath: releaseTargetDir,
+              projectName: options.projectName || meta.name || path.basename(releaseTargetDir),
+              targetVersion: options.version || options.manualVersion || meta.version,
               currentStageId: 1,
               stages,
               logs: [
                 `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
-                `[${new Date().toLocaleTimeString()}] Proje: ${meta.name} (${activeProjectDir})`,
+                `[${new Date().toLocaleTimeString()}] Proje: ${options.projectName || meta.name} (${releaseTargetDir})`,
               ],
               completed: false,
               startedAt: new Date().toISOString(),

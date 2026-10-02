@@ -203,9 +203,9 @@ export default function App() {
   const [rolloutPercentage, setRolloutPercentage] = useState<number>(100);
   const [isDryRun, setIsDryRun] = useState<boolean>(false);
 
-  // AI Sürüm Notları
-  const [releaseNotesTR, setReleaseNotesTR] = useState<string>('• Hata düzeltmeleri ve kararlılık iyileştirmeleri yapıldı.');
-  const [releaseNotesEN, setReleaseNotesEN] = useState<string>('• Bug fixes and stability improvements.');
+  // AI Sürüm Notları (Varsayılan olarak boş başlar, AI veya manuel doldurulur)
+  const [releaseNotesTR, setReleaseNotesTR] = useState<string>('');
+  const [releaseNotesEN, setReleaseNotesEN] = useState<string>('');
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
   const [copiedLang, setCopiedLang] = useState<'tr' | 'en' | null>(null);
 
@@ -634,8 +634,10 @@ export default function App() {
       setActiveComparison(targetProj.stores || null);
     }
 
-    // 3. Eski projenin commit'lerini ve detaylarını anında sıfırla (veriler ASLA karışmasın)
+    // 3. Eski projenin commit'lerini ve sürüm notlarını anında sıfırla (veriler ASLA karışmasın)
     setCommits([]);
+    setReleaseNotesTR('');
+    setReleaseNotesEN('');
 
     // 4. Arka plandan taze detayları ve kimlik bilgilerini çek
     await fetchProjectDetails(targetPath);
@@ -852,7 +854,7 @@ export default function App() {
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commits, version: nextVersion }),
+        body: JSON.stringify({ commits, version: nextVersion, projectPath: activeProjectPath }),
       });
       if (response.ok) {
         const data = await response.json() as {
@@ -892,6 +894,10 @@ export default function App() {
   // DAĞITIMI BAŞLAT (ORCHESTRATOR)
   const handleStartRelease = async () => {
     if (isReleasing) return;
+    if (!releaseNotesTR.trim() || !releaseNotesEN.trim()) {
+      alert('Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları zorunludur. Lütfen önce "Commitlerden Üret" butonuna tıklayarak AI ile notları oluşturun.');
+      return;
+    }
 
     setIsReleasing(true);
     setReleaseCompleted(false);
@@ -1599,9 +1605,13 @@ export default function App() {
                   <button
                     onClick={() => void handleGenerateAI()}
                     disabled={isGeneratingAI || commits.length === 0}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-50"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                      (!releaseNotesTR.trim() || !releaseNotesEN.trim()) && commits.length > 0
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:opacity-90 ring-2 ring-primary/30'
+                        : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border'
+                    }`}
                   >
-                    <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin text-primary' : ''}`} />
+                    <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
                     <span>{isGeneratingAI ? 'Yapay Zeka Yazıyor...' : 'Commitlerden Üret'}</span>
                   </button>
                 </div>
@@ -1613,7 +1623,8 @@ export default function App() {
                       <span className="font-medium text-foreground">Türkçe (Google Play / App Store TR)</span>
                       <button
                         onClick={() => handleCopyNotes('tr')}
-                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        disabled={!releaseNotesTR.trim()}
+                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {copiedLang === 'tr' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                         <span>Kopyala</span>
@@ -1623,7 +1634,8 @@ export default function App() {
                       rows={5}
                       value={releaseNotesTR}
                       onChange={(e) => setReleaseNotesTR(e.target.value)}
-                      className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed"
+                      placeholder="Sürüm notu henüz oluşturulmadı. 'Commitlerden Üret' butonuna tıklayarak AI ile oluşturun veya buraya manuel girin..."
+                      className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed placeholder:text-muted-foreground/60"
                     />
                   </div>
 
@@ -1633,7 +1645,8 @@ export default function App() {
                       <span className="font-medium text-foreground">İngilizce (Global Store)</span>
                       <button
                         onClick={() => handleCopyNotes('en')}
-                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                        disabled={!releaseNotesEN.trim()}
+                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {copiedLang === 'en' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                         <span>Kopyala</span>
@@ -1643,7 +1656,8 @@ export default function App() {
                       rows={5}
                       value={releaseNotesEN}
                       onChange={(e) => setReleaseNotesEN(e.target.value)}
-                      className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed"
+                      placeholder="Release notes not generated yet. Click 'Generate from Commits' to create with AI or enter manually..."
+                      className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed placeholder:text-muted-foreground/60"
                     />
                   </div>
                 </div>
@@ -1679,13 +1693,37 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* SÜRÜM NOTU GÜVENLİK KİLİDİ UYARISI */}
+                {(!releaseNotesTR.trim() || !releaseNotesEN.trim()) && (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                    <div className="space-y-0.5">
+                      <span className="font-semibold block">Dağıtım Güvenlik Kilidi Aktif</span>
+                      <span className="text-[11px] leading-relaxed block text-muted-foreground">
+                        Dağıtımın başlayabilmesi için hem Türkçe hem İngilizce sürüm notları zorunludur. Lütfen soldaki &quot;Commitlerden Üret&quot; butonuna tıklayarak AI ile notları oluşturun.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <button
                   onClick={() => void handleStartRelease()}
-                  disabled={isReleasing}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-primary text-primary-foreground font-bold text-sm shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={isReleasing || !releaseNotesTR.trim() || !releaseNotesEN.trim()}
+                  className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-sm shadow transition-all cursor-pointer ${
+                    !releaseNotesTR.trim() || !releaseNotesEN.trim()
+                      ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
+                      : 'bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+                  }`}
+                  title={!releaseNotesTR.trim() || !releaseNotesEN.trim() ? 'Dağıtımı başlatmak için sürüm notları gereklidir' : 'Sürüm Dağıtımını Başlat'}
                 >
                   <Rocket className={`w-4 h-4 ${isReleasing ? 'animate-bounce' : ''}`} />
-                  <span>{isReleasing ? 'Dağıtım Yürütülüyor...' : 'Sürüm Dağıtımını Başlat'}</span>
+                  <span>
+                    {isReleasing
+                      ? 'Dağıtım Yürütülüyor...'
+                      : !releaseNotesTR.trim() || !releaseNotesEN.trim()
+                      ? 'Sürüm Notları Gerekli (AI ile Üretin)'
+                      : 'Sürüm Dağıtımını Başlat'}
+                  </span>
                 </button>
 
                 {releaseCompleted && (
