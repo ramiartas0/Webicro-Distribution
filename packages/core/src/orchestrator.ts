@@ -443,7 +443,14 @@ export class ReleaseOrchestrator {
                 error: null,
               });
               googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
-              emitAndRecord('Google Play Upload', 'SUCCESS', `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${uploadRes.track})`);
+              const trackDisplayNames: Record<string, string> = {
+                internal: 'Dahili test',
+                alpha: 'Kapalı test',
+                beta: 'Açık test',
+                production: 'Üretim',
+              };
+              const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`);
             } catch (uploadErr: unknown) {
               const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
               emitAndRecord('Google Play Upload', 'FAILED', undefined, msg);

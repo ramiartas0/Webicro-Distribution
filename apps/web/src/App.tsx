@@ -105,6 +105,21 @@ interface StoreTestResult {
   details?: Record<string, unknown>;
 }
 
+function getGoogleTrackLabel(track: 'internal' | 'alpha' | 'beta' | 'production'): string {
+  switch (track) {
+    case 'internal':
+      return 'Dahili test';
+    case 'alpha':
+      return 'Kapalı test';
+    case 'beta':
+      return 'Açık test';
+    case 'production':
+      return 'Üretim';
+    default:
+      return track;
+  }
+}
+
 export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -1525,10 +1540,10 @@ export default function App() {
                             onChange={(e) => setGoogleTrack(e.target.value as 'internal' | 'alpha' | 'beta' | 'production')}
                             className="w-full text-xs px-2.5 py-1.5 rounded-md border border-border bg-background text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
                           >
-                            <option value="internal">Dahili Test (Internal - En Hızlı)</option>
-                            <option value="alpha">Kapalı Test (Alpha)</option>
-                            <option value="beta">Açık Test (Beta)</option>
-                            <option value="production">Canlı Yayın (Production)</option>
+                            <option value="internal">Dahili test</option>
+                            <option value="alpha">Kapalı test</option>
+                            <option value="beta">Açık test</option>
+                            <option value="production">Üretim</option>
                           </select>
                         </div>
 
@@ -1693,7 +1708,7 @@ export default function App() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Kanal:</span>
-                    <span className="font-semibold uppercase text-xs">{googleTrack}</span>
+                    <span className="font-semibold text-xs text-foreground">{getGoogleTrackLabel(googleTrack)}</span>
                   </div>
                 </div>
 
