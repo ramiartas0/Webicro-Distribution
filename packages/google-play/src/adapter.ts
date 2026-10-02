@@ -323,7 +323,12 @@ export class GooglePlayAdapter {
   }
 
   private handleError(error: unknown, operation: string): never {
-    const message = error instanceof Error ? error.message : String(error);
+    let message = error instanceof Error ? error.message : String(error);
+
+    if (message.includes('photo and video permissions')) {
+      message = `${message}\n\n[ÇÖZÜM REHBERİ]: Google Play Politikası uyarınca uygulamanız bir galeri yöneticisi değilse READ_MEDIA_IMAGES veya READ_EXTERNAL_STORAGE izni içeremez. Lütfen AndroidManifest.xml dosyasından bu izinleri kaldırın veya Google Play Console -> Uygulama İçeriği -> 'Fotoğraf ve video izinleri' formunu doldurun.`;
+    }
+
     throw new GooglePlayError(`Google Play API hatası (${operation}): ${message}`, { cause: error });
   }
 }
