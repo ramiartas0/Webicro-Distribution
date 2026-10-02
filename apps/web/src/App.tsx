@@ -32,7 +32,8 @@ import {
   Bot,
   Wrench,
   Search,
-  FileText
+  FileText,
+  Zap,
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 
@@ -454,43 +455,43 @@ export default function App() {
         return {
           label: 'Başarıyla Dağıtıldı',
           sublabel: 'Canlı Yayında',
-          className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
       case 'FAILED':
         return {
           label: 'Dağıtım Başarısız',
           sublabel: 'Hata Alındı',
-          className: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+          className: 'bg-destructive/10 text-destructive border-destructive/20',
         };
       case 'BUILDING':
         return {
           label: 'Derleme Aşamasında',
           sublabel: 'AAB / IPA Paketleniyor',
-          className: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
       case 'UPLOADING':
         return {
           label: 'Mağazaya Yükleniyor',
           sublabel: 'API Gönderimi',
-          className: 'bg-sky-500/10 text-sky-500 border-sky-500/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
       case 'ARTIFACT_READY':
         return {
           label: 'Paket Hazır',
           sublabel: 'Doğrulandı',
-          className: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
       case 'SUBMITTED':
         return {
           label: 'İncelemeye Sunuldu',
           sublabel: 'Mağaza Onayı Bekleniyor',
-          className: 'bg-teal-500/10 text-teal-500 border-teal-500/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
       default:
         return {
           label: 'Hazırlık / Analiz',
           sublabel: status,
-          className: 'bg-primary/10 text-primary border-primary/20',
+          className: 'bg-secondary text-secondary-foreground border-border',
         };
     }
   }, []);
@@ -501,31 +502,31 @@ export default function App() {
         return {
           title: 'Dağıtım Başlatıldı',
           desc: 'Sürüm orkestrasyon zinciri ve ortam denetimleri devreye alındı.',
-          color: 'text-primary',
+          color: 'text-foreground',
         };
       case 'RELEASE_COMPLETED':
         return {
           title: 'Dağıtım Tamamlandı',
           desc: 'Tüm derleme ve mağaza yükleme adımları başarıyla tamamlandı.',
-          color: 'text-emerald-500',
+          color: 'text-foreground',
         };
       case 'RELEASE_FAILED':
         return {
           title: 'Dağıtım Hatası',
           desc: 'Derleme veya mağaza API aktarımında bir sorun tespit edildi.',
-          color: 'text-rose-500',
+          color: 'text-destructive',
         };
       case 'STORE_SUBMITTED':
         return {
           title: 'Mağazaya İletildi',
           desc: 'Uygulama paketi ilgili mağazanın test veya üretim kanalına teslim edildi.',
-          color: 'text-sky-500',
+          color: 'text-foreground',
         };
       case 'ROLLBACK':
         return {
           title: 'Geri Alma İşlemi',
           desc: 'Sürüm durumu önceki kararlı sürüme geri çekildi.',
-          color: 'text-amber-500',
+          color: 'text-foreground',
         };
       default:
         return {
@@ -539,13 +540,13 @@ export default function App() {
   const getAuditResultBadge = useCallback((result: string) => {
     switch (result) {
       case 'SUCCESS':
-        return { label: 'Başarılı', className: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
+        return { label: 'Başarılı', className: 'text-foreground bg-secondary border-border' };
       case 'FAILURE':
-        return { label: 'Hata', className: 'text-rose-500 bg-rose-500/10 border-rose-500/20' };
+        return { label: 'Hata', className: 'text-destructive bg-destructive/10 border-destructive/20' };
       case 'SKIPPED':
         return { label: 'Atlandı', className: 'text-muted-foreground bg-muted border-border' };
       case 'WARNING':
-        return { label: 'Uyarı', className: 'text-amber-500 bg-amber-500/10 border-amber-500/20' };
+        return { label: 'Uyarı', className: 'text-foreground bg-secondary border-border' };
       default:
         return { label: result, className: 'text-muted-foreground bg-muted border-border' };
     }
@@ -595,7 +596,7 @@ export default function App() {
           userFriendly = 'Platform Hatası: Hem Android hem iOS derlemesi atlanmış veya derlenemedi.';
         }
         return (
-          <div className="mt-1.5 p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 space-y-1">
+          <div className="mt-1.5 p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs text-destructive space-y-1">
             <div className="font-semibold flex items-center gap-1.5">
               <AlertCircle className="w-3.5 h-3.5 shrink-0" />
               <span>Hata Nedeni:</span>
@@ -609,7 +610,7 @@ export default function App() {
         return (
           <div className="mt-1.5 p-2 rounded-md bg-secondary/50 border border-border text-[11px] space-y-0.5 font-mono text-muted-foreground">
             {parsed.project ? <div>Proje: <strong className="text-foreground">{String(parsed.project)}</strong></div> : null}
-            {parsed.version ? <div>Sürüm: <strong className="text-emerald-500">v{String(parsed.version)} #{String(parsed.build || '')}</strong></div> : null}
+            {parsed.version ? <div>Sürüm: <strong className="text-foreground font-semibold">v{String(parsed.version)} #{String(parsed.build || '')}</strong></div> : null}
             {parsed.googlePlayStatus ? <div>Google Play Durumu: <span className="text-foreground">{String(parsed.googlePlayStatus)}</span></div> : null}
             {parsed.appStoreStatus ? <div>App Store Durumu: <span className="text-foreground">{String(parsed.appStoreStatus)}</span></div> : null}
           </div>
@@ -618,7 +619,7 @@ export default function App() {
     } catch {
       if (rawDetails.includes('Google Play API Hatası') || rawDetails.includes('Hata')) {
         return (
-          <div className="mt-1.5 p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400">
+          <div className="mt-1.5 p-2.5 rounded-md bg-destructive/10 border border-destructive/20 text-xs text-destructive">
             <p className="text-[11px] leading-relaxed">{rawDetails}</p>
           </div>
         );
@@ -1966,7 +1967,7 @@ export default function App() {
               <div>
                 <h1 className="font-bold text-sm tracking-tight">Webicro Distribution</h1>
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>
                   Store Karşılaştırma İstasyonu
                 </span>
               </div>
@@ -1988,7 +1989,7 @@ export default function App() {
               className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
               title="Sistemdeki ve çalışma dizinindeki tüm Flutter projelerini otomatik tara"
             >
-              <Compass className={`w-3 h-3 ${isDiscovering ? 'animate-spin text-primary' : 'text-primary'}`} />
+              <Compass className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin text-primary' : 'text-primary'}`} />
               <span className="truncate">{isDiscovering ? 'Aranıyor...' : 'Projeleri Tara'}</span>
             </button>
 
@@ -1998,16 +1999,16 @@ export default function App() {
               className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
               title="Google Play ve App Store API'lerini sorgula ve sürümleri karşılaştır"
             >
-              <RefreshCw className={`w-3 h-3 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
               <span className="truncate">{isSyncingStores ? 'Taranıyor...' : 'Mağazalar'}</span>
             </button>
 
             <button
               onClick={() => setShowScanModal(true)}
-              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 transition-all shadow-sm cursor-pointer"
+              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 transition-all shadow-xs cursor-pointer"
               title="Özel Klasör Tara veya Proje Ekle"
             >
-              <FolderPlus className="w-3 h-3" />
+              <FolderPlus className="w-3.5 h-3.5" />
               <span>Dizin Tara</span>
             </button>
           </div>
@@ -2016,10 +2017,10 @@ export default function App() {
         {/* PROJELER LİSTESİ BAŞLIĞI */}
         <div className="px-3 pt-3 pb-1 flex items-center justify-between text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
           <span className="flex items-center gap-1.5">
-            <Layers className="w-3 h-3 text-primary" />
+            <Layers className="w-3.5 h-3.5 text-primary" />
             Projeler ({projects.length})
           </span>
-          <span className="text-[10px] lowercase text-emerald-500 font-mono">store live</span>
+          <span className="text-[10px] lowercase text-foreground font-mono font-medium">store live</span>
         </div>
 
         {/* PROJE KARTLARI (STORE KARŞILAŞTIRMALI) */}
@@ -2062,7 +2063,7 @@ export default function App() {
                         type="button"
                         onClick={(e) => void handleRemoveProject(e, p.path, p.name)}
                         title="Projeyi Listeden Kaldır"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded-md shrink-0"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md shrink-0"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -2084,29 +2085,13 @@ export default function App() {
                     </span>
                   </div>
                   {isReleasingThis ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shrink-0 bg-primary/15 text-primary border border-primary/30 animate-pulse">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 bg-primary text-primary-foreground animate-pulse">
                       <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                       <span>Dağıtılıyor ({currentStage}/{totalStageCount})</span>
                     </span>
                   ) : (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0 ${
-                      comp?.comparisonStatus === 'UPDATE_READY'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                        : comp?.comparisonStatus === 'UP_TO_DATE'
-                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                        : comp?.comparisonStatus === 'NEW_APP'
-                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                        : 'bg-muted text-muted-foreground border border-border/60'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        comp?.comparisonStatus === 'UPDATE_READY'
-                          ? 'bg-emerald-500'
-                          : comp?.comparisonStatus === 'UP_TO_DATE'
-                          ? 'bg-blue-500'
-                          : comp?.comparisonStatus === 'NEW_APP'
-                          ? 'bg-purple-500'
-                          : 'bg-muted-foreground'
-                      }`} />
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0 bg-secondary text-secondary-foreground border border-border">
+                      <span className="w-1.5 h-1.5 rounded-full bg-foreground/60" />
                       {comp?.badge || 'Bekliyor'}
                     </span>
                   )}
@@ -2122,7 +2107,7 @@ export default function App() {
                     </div>
                     <div className="font-mono text-[11px] font-medium truncate">
                       {comp?.googlePlay?.status === 'live' ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <span className="text-foreground font-semibold">
                           {comp.googlePlay.version
                             ? (comp.googlePlay.version.startsWith('v') ? comp.googlePlay.version : `v${comp.googlePlay.version}`)
                             : comp.googlePlay.versionCode
@@ -2132,7 +2117,7 @@ export default function App() {
                       ) : comp?.googlePlay?.status === 'not_found' ? (
                         <span className="text-muted-foreground/70 text-[10px]">Kayıtlı Değil</span>
                       ) : comp?.googlePlay?.status === 'auth_error' ? (
-                        <span className="text-amber-500 text-[10px]">Yetki Gerekli</span>
+                        <span className="text-muted-foreground text-[10px]">Yetki Gerekli</span>
                       ) : (
                         <span className="text-muted-foreground/60 text-[10px]">-</span>
                       )}
@@ -2148,7 +2133,7 @@ export default function App() {
                     <div className="font-mono text-[11px] font-medium truncate">
                       {comp?.appStore?.status === 'live' ? (
                         <div>
-                          <span className="text-sky-600 dark:text-sky-400 font-semibold">
+                          <span className="text-foreground font-semibold">
                             {comp.appStore.version
                               ? (comp.appStore.version.startsWith('v') ? comp.appStore.version : `v${comp.appStore.version}`)
                               : comp.appStore.buildNumber
@@ -2233,30 +2218,30 @@ export default function App() {
                   </span>
                 )}
                 {hasPubspec && (
-                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
                     Flutter
                   </span>
                 )}
                 {gitRemote.connected && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-500 border-emerald-500/20 flex items-center gap-1" title={gitRemote.remoteUrl || 'GitHub'}>
-                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground flex items-center gap-1" title={gitRemote.remoteUrl || 'GitHub'}>
+                    <CheckCircle2 className="w-2.5 h-2.5 text-foreground" />
                     <span>Git &amp; GitHub Bağlı</span>
                   </span>
                 )}
                 <div className="relative group">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-default flex items-center gap-1 ${
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border cursor-default flex items-center gap-1 ${
                     isGitClean
-                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                      : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                      ? 'bg-secondary text-secondary-foreground'
+                      : 'bg-muted text-foreground'
                   }`}>
                     {isGitClean ? (
                       <>
-                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        <Check className="w-2.5 h-2.5 text-foreground" />
                         <span>Git Temiz</span>
                       </>
                     ) : (
                       <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-foreground/60" />
                         <span>{uncommittedFiles.length > 0 ? `${uncommittedFiles.length} Değişiklik Var` : 'Değişiklikler Var'}</span>
                       </>
                     )}
@@ -2270,8 +2255,8 @@ export default function App() {
                       </div>
                       <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-[10px] text-muted-foreground">
                         {uncommittedFiles.map((file, idx) => (
-                          <div key={idx} className="flex items-center gap-1.5 truncate text-foreground hover:text-amber-500">
-                            <span className="text-amber-500 font-bold">•</span>
+                          <div key={idx} className="flex items-center gap-1.5 truncate text-foreground hover:text-foreground/80">
+                            <span className="text-foreground/60 font-bold">•</span>
                             <span className="truncate" title={file}>{file}</span>
                           </div>
                         ))}
@@ -2286,7 +2271,7 @@ export default function App() {
                     type="button"
                     onClick={() => void handleGitCommitPush()}
                     disabled={isGitPushing}
-                    className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-50"
                     title="Bu projenin bekleyen değişikliklerini Git'e commit edip doğrudan GitHub'a push et"
                   >
                     {isGitPushing ? (
@@ -2296,7 +2281,7 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <GitCommit className="w-2.5 h-2.5" />
+                        <GitCommit className="w-2.5 h-2.5 text-foreground" />
                         <span>Git'e Kaydet &amp; Push Et</span>
                       </>
                     )}
@@ -2308,7 +2293,7 @@ export default function App() {
                   <>
                     <span className="truncate">{activeProjectPath}</span>
                     <span>•</span>
-                    <span>branch: <span className="text-emerald-500 font-bold">{gitBranch || 'main'}</span></span>
+                    <span>branch: <span className="text-foreground font-bold font-mono">{gitBranch || 'main'}</span></span>
                     {gitRemote.webUrl && (
                       <>
                         <span>•</span>
@@ -2338,8 +2323,8 @@ export default function App() {
                 )}
               </p>
               {gitPushSuccessMsg && (
-                <div className="mt-1 text-[11px] font-medium text-emerald-500 flex items-center gap-1 animate-in fade-in">
-                  <CheckCircle2 className="w-3 h-3" />
+                <div className="mt-1 text-[11px] font-medium text-foreground flex items-center gap-1 animate-in fade-in">
+                  <CheckCircle2 className="w-3 h-3 text-foreground" />
                   <span>{gitPushSuccessMsg}</span>
                 </div>
               )}
@@ -2470,17 +2455,7 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
-                        activeComparison?.badge === 'Mağaza Daha İleri'
-                          ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                          : activeComparison?.comparisonStatus === 'UPDATE_READY'
-                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                          : activeComparison?.comparisonStatus === 'UP_TO_DATE'
-                          ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                          : activeComparison?.comparisonStatus === 'NEW_APP'
-                          ? 'bg-purple-500/10 text-purple-500 border-purple-500/20'
-                          : 'bg-muted text-muted-foreground border-border'
-                      }`}>
+                      <span className="text-xs px-2.5 py-1 rounded-full font-semibold border border-border bg-secondary text-secondary-foreground">
                         {activeComparison?.badge || 'Durum Belirleniyor'}
                       </span>
                     </div>
@@ -2495,7 +2470,7 @@ export default function App() {
                           <span className="font-semibold text-foreground flex items-center gap-1.5">
                             <Code2 className="w-3.5 h-3.5 text-primary" /> Yerel Kod (Local)
                           </span>
-                          <span className="font-mono text-emerald-500">{gitBranch || 'main'}</span>
+                          <span className="font-mono text-foreground font-semibold">{gitBranch || 'main'}</span>
                         </div>
                         <div className="pt-1">
                           <div className="text-2xl font-extrabold font-mono text-foreground">
@@ -2528,8 +2503,8 @@ export default function App() {
                           <span className="font-semibold text-foreground flex items-center gap-1.5">
                             <GooglePlayIcon className="w-4 h-4" /> Google Play Console
                           </span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                            googlePlayInfo.connected ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-secondary'
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                            googlePlayInfo.connected ? 'text-foreground bg-secondary border-border' : 'text-muted-foreground bg-secondary border-transparent'
                           }`}>
                             {googlePlayInfo.connected ? 'API Bağlı' : 'Bağlı Değil'}
                           </span>
@@ -2547,9 +2522,9 @@ export default function App() {
                             ) : activeComparison?.googlePlay?.status === 'not_found' ? (
                               <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
                             ) : activeComparison?.googlePlay?.status === 'auth_error' ? (
-                              <span className="text-rose-500 text-lg">Yetki Gerekli</span>
+                              <span className="text-destructive text-lg font-bold">Yetki Gerekli</span>
                             ) : googlePlayInfo.connected ? (
-                              <span className="text-emerald-500 text-lg">Bağlantı Hazır</span>
+                              <span className="text-foreground text-lg font-bold">Bağlantı Hazır</span>
                             ) : (
                               <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                             )}
@@ -2577,8 +2552,8 @@ export default function App() {
                           <span className="font-semibold text-foreground flex items-center gap-1.5">
                             <AppStoreConnectIcon className="w-4 h-4 shrink-0" /> App Store Connect
                           </span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                            appStoreInfo.connected ? 'text-sky-400 bg-sky-500/10' : 'text-muted-foreground bg-secondary'
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                            appStoreInfo.connected ? 'text-foreground bg-secondary border-border' : 'text-muted-foreground bg-secondary border-transparent'
                           }`}>
                             {appStoreInfo.connected ? 'API Bağlı' : 'Yapılandırılmadı'}
                           </span>
@@ -2596,7 +2571,7 @@ export default function App() {
                             ) : activeComparison?.appStore?.status === 'not_found' ? (
                               <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
                             ) : appStoreInfo.connected ? (
-                              <span className="text-sky-400 text-lg">Bağlantı Hazır</span>
+                              <span className="text-foreground text-lg font-bold">Bağlantı Hazır</span>
                             ) : (
                               <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                             )}
@@ -2609,8 +2584,9 @@ export default function App() {
                           <div className="flex items-center justify-between text-xs font-mono text-muted-foreground pt-0.5">
                             <span className="truncate">
                               {activeComparison?.appStore?.appName ? (
-                                <span className="text-emerald-500 font-sans font-semibold">
-                                  ✓ {activeComparison.appStore.appName}
+                                <span className="text-foreground font-sans font-semibold inline-flex items-center gap-1">
+                                  <Check className="w-3.5 h-3.5 text-foreground" />
+                                  <span>{activeComparison.appStore.appName}</span>
                                 </span>
                               ) : (
                                 `Key ID: ${appStoreInfo.keyId || 'Yapılandırılmadı'}`
@@ -2646,15 +2622,15 @@ export default function App() {
                           type="button"
                           onClick={() => void handleSyncStoreVersion('smart')}
                           disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
                           title="Düşük olan sürümü büyük olan sürüme yükselterek mağazalarla eşitler"
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : `⚡ Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`}</span>
+                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : `Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`}</span>
                         </button>
                       ) : areAllInSync ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-semibold text-xs">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-semibold text-xs">
+                          <CheckCircle2 className="w-4 h-4 text-foreground" />
                           <span>Sürümler Eşit (v{highestVersion} #{highestBuildNumber})</span>
                         </div>
                       ) : null}
@@ -2666,8 +2642,8 @@ export default function App() {
 
             {/* EŞİTLEME BAŞARI BİLDİRİMİ */}
             {syncStoreSuccessMsg && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-2 animate-in fade-in duration-200">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+              <div className="p-3 rounded-lg bg-secondary border border-border text-xs text-foreground flex items-center gap-2 animate-in fade-in duration-200">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-foreground" />
                 <span className="font-semibold">{syncStoreSuccessMsg}</span>
               </div>
             )}
@@ -2723,7 +2699,7 @@ export default function App() {
                   <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <span className="text-muted-foreground">Hedeflenecek Yeni Sürüm:</span>{' '}
-                    <span className="font-mono font-bold text-emerald-500">{nextVersion}+{nextBuildNumber}</span>
+                    <span className="font-mono font-bold text-foreground">{nextVersion}+{nextBuildNumber}</span>
                   </div>
                 </div>
               </div>
@@ -2739,12 +2715,15 @@ export default function App() {
                     Hedef Dağıtım Kanalları & Platform
                   </h4>
 
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border bg-secondary/80 text-foreground">
-                    {targetAndroid && targetIos
-                      ? '⚡ Tam Dağıtım (Android + iOS)'
-                      : targetAndroid
-                      ? '⚡ Hızlı: Sadece Android (~1.5 dk)'
-                      : '⚡ Hızlı: Sadece iOS (~2.5 dk)'}
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground inline-flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-foreground" />
+                    <span>
+                      {targetAndroid && targetIos
+                        ? 'Tam Dağıtım (Android + iOS)'
+                        : targetAndroid
+                        ? 'Hızlı: Sadece Android (~1.5 dk)'
+                        : 'Hızlı: Sadece iOS (~2.5 dk)'}
+                    </span>
                   </span>
                 </div>
 
@@ -2755,13 +2734,13 @@ export default function App() {
                     onClick={() => applyPlatformMode('android')}
                     className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       platformMode === 'android'
-                        ? 'bg-background text-emerald-500 shadow-sm border border-emerald-500/40 ring-1 ring-emerald-500/20'
+                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <GooglePlayIcon className="w-4 h-4 shrink-0" />
                     <span>Sadece Android</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
                       AAB (~1.5 dk)
                     </span>
                   </button>
@@ -2771,13 +2750,13 @@ export default function App() {
                     onClick={() => applyPlatformMode('ios')}
                     className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       platformMode === 'ios'
-                        ? 'bg-background text-sky-400 shadow-sm border border-sky-400/40 ring-1 ring-sky-400/20'
+                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
                     <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
                     <span>Sadece iOS</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
                       IPA (~2.5 dk)
                     </span>
                   </button>
@@ -2787,7 +2766,7 @@ export default function App() {
                     onClick={() => applyPlatformMode('all')}
                     className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       platformMode === 'all'
-                        ? 'bg-background text-foreground shadow-sm border border-primary/50 ring-1 ring-primary/20'
+                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
                         : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                     }`}
                   >
@@ -2796,7 +2775,7 @@ export default function App() {
                       <AppStoreConnectIcon className="w-3.5 h-3.5" />
                     </span>
                     <span>Tüm Platformlar</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
                       İkisi Birden
                     </span>
                   </button>
@@ -2806,9 +2785,9 @@ export default function App() {
                 {gitNativeChanges && (gitNativeChanges.androidChanged || gitNativeChanges.iosChanged) && (
                   <div className="space-y-2">
                     {gitNativeChanges.androidChanged && !gitNativeChanges.iosChanged && (
-                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs flex flex-wrap items-center justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+                      <div className="p-3 rounded-lg bg-secondary/60 border border-border text-xs flex flex-wrap items-center justify-between gap-3 text-foreground">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 shrink-0 text-emerald-500 animate-pulse" />
+                          <Sparkles className="w-4 h-4 shrink-0 text-foreground" />
                           <span>
                             <strong>Akıllı Git Tespiti:</strong> Son commit'lerde yalnızca Android dosyaları değişmiş ({gitNativeChanges.androidFiles.length} dosya). Dağıtımı hızlandırmak için iOS atlanabilir.
                           </span>
@@ -2817,18 +2796,19 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => applyPlatformMode('android')}
-                            className="px-2.5 py-1 rounded bg-emerald-500 text-white font-medium text-[11px] shrink-0 hover:bg-emerald-600 transition-colors cursor-pointer shadow-xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-medium text-[11px] shrink-0 hover:bg-primary/90 transition-colors cursor-pointer shadow-xs"
                           >
-                            ⚡ Sadece Android Moduna Geç
+                            <Zap className="w-3 h-3" />
+                            <span>Sadece Android Moduna Geç</span>
                           </button>
                         )}
                       </div>
                     )}
 
                     {gitNativeChanges.iosChanged && !gitNativeChanges.androidChanged && (
-                      <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs flex flex-wrap items-center justify-between gap-3 text-sky-600 dark:text-sky-400">
+                      <div className="p-3 rounded-lg bg-secondary/60 border border-border text-xs flex flex-wrap items-center justify-between gap-3 text-foreground">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 shrink-0 text-sky-400 animate-pulse" />
+                          <Sparkles className="w-4 h-4 shrink-0 text-foreground" />
                           <span>
                             <strong>Akıllı Git Tespiti:</strong> Son commit'lerde yalnızca iOS dosyaları değişmiş ({gitNativeChanges.iosFiles.length} dosya). Dağıtımı hızlandırmak için Android atlanabilir.
                           </span>
@@ -2837,9 +2817,10 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() => applyPlatformMode('ios')}
-                            className="px-2.5 py-1 rounded bg-sky-500 text-white font-medium text-[11px] shrink-0 hover:bg-sky-600 transition-colors cursor-pointer shadow-xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary text-primary-foreground font-medium text-[11px] shrink-0 hover:bg-primary/90 transition-colors cursor-pointer shadow-xs"
                           >
-                            ⚡ Sadece iOS Moduna Geç
+                            <Zap className="w-3 h-3" />
+                            <span>Sadece iOS Moduna Geç</span>
                           </button>
                         )}
                       </div>
@@ -2851,7 +2832,7 @@ export default function App() {
                   {/* GOOGLE PLAY AYARLARI */}
                   <div className={`p-3.5 rounded-lg border transition-all ${
                     targetAndroid
-                      ? 'border-emerald-500/30 bg-background shadow-xs'
+                      ? 'border-border bg-card shadow-xs'
                       : 'border-border/60 bg-muted/30 opacity-60'
                   } space-y-3`}>
                     <div className="flex items-center justify-between">
@@ -2870,13 +2851,13 @@ export default function App() {
                             else if (isChecked && !targetIos) setPlatformMode('android');
                             else if (!isChecked && targetIos) setPlatformMode('ios');
                           }}
-                          className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                          className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                         />
                         <GooglePlayIcon className="w-4 h-4 shrink-0" />
                         <span>Google Play Dağıtımı</span>
                       </label>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                        targetAndroid ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        targetAndroid ? 'bg-secondary text-secondary-foreground border-border' : 'bg-muted text-muted-foreground border-transparent'
                       }`}>
                         {targetAndroid ? 'AAB Derlenecek' : 'Atlandı'}
                       </span>
@@ -2890,8 +2871,8 @@ export default function App() {
                               Yayın Kanalı (Track):
                             </label>
                             {activeComparison?.googlePlay?.track && isValidGoogleTrack(activeComparison.googlePlay.track) ? (
-                              <span className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span className="text-[10px] text-foreground font-medium flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>
                                 Yayındaki Kanal: {getGoogleTrackLabel(activeComparison.googlePlay.track)}
                               </span>
                             ) : (
@@ -2929,7 +2910,7 @@ export default function App() {
                   {/* APPLE APP STORE AYARLARI */}
                   <div className={`p-3.5 rounded-lg border transition-all ${
                     targetIos
-                      ? 'border-sky-500/30 bg-background shadow-xs'
+                      ? 'border-border bg-card shadow-xs'
                       : 'border-border/60 bg-muted/30 opacity-60'
                   } space-y-3`}>
                     <div className="flex items-center justify-between">
@@ -2948,13 +2929,13 @@ export default function App() {
                             else if (isChecked && !targetAndroid) setPlatformMode('ios');
                             else if (!isChecked && targetAndroid) setPlatformMode('android');
                           }}
-                          className="rounded text-sky-400 focus:ring-sky-400 w-4 h-4 cursor-pointer"
+                          className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                         />
                         <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
                         <span>Apple App Store Dağıtımı</span>
                       </label>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                        targetIos ? 'bg-sky-400/10 text-sky-400' : 'bg-muted text-muted-foreground'
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        targetIos ? 'bg-secondary text-secondary-foreground border-border' : 'bg-muted text-muted-foreground border-transparent'
                       }`}>
                         {targetIos ? 'IPA Derlenecek' : 'Atlandı'}
                       </span>
@@ -3045,7 +3026,7 @@ export default function App() {
                         disabled={!releaseNotesTR.trim()}
                         className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {copiedLang === 'tr' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copiedLang === 'tr' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
                         <span>Kopyala</span>
                       </button>
                     </div>
@@ -3058,7 +3039,7 @@ export default function App() {
                     />
                     <div className="flex items-center justify-between text-[11px] px-1">
                       <span className="text-muted-foreground">Google Play Sınırı (Maks 500):</span>
-                      <span className={`font-mono font-medium ${releaseNotesTR.length > 500 ? 'text-rose-500 font-bold' : releaseNotesTR.length > 450 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                      <span className={`font-mono font-medium ${releaseNotesTR.length > 500 ? 'text-destructive font-bold' : releaseNotesTR.length > 450 ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
                         {releaseNotesTR.length} / 500
                       </span>
                     </div>
@@ -3073,7 +3054,7 @@ export default function App() {
                         disabled={!releaseNotesEN.trim()}
                         className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        {copiedLang === 'en' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        {copiedLang === 'en' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
                         <span>Kopyala</span>
                       </button>
                     </div>
@@ -3086,7 +3067,7 @@ export default function App() {
                     />
                     <div className="flex items-center justify-between text-[11px] px-1">
                       <span className="text-muted-foreground">Google Play Sınırı (Maks 500):</span>
-                      <span className={`font-mono font-medium ${releaseNotesEN.length > 500 ? 'text-rose-500 font-bold' : releaseNotesEN.length > 450 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                      <span className={`font-mono font-medium ${releaseNotesEN.length > 500 ? 'text-destructive font-bold' : releaseNotesEN.length > 450 ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
                         {releaseNotesEN.length} / 500
                       </span>
                     </div>
@@ -3116,17 +3097,11 @@ export default function App() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Hedef Sürüm:</span>
-                    <span className="font-mono font-bold text-emerald-500">{nextVersion}+{nextBuildNumber}</span>
+                    <span className="font-mono font-bold text-foreground">{nextVersion}+{nextBuildNumber}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Hedef Platform:</span>
-                    <span className={`font-semibold text-[11px] font-mono px-2 py-0.5 rounded border ${
-                      targetAndroid && targetIos
-                        ? 'bg-primary/10 text-primary border-primary/20'
-                        : targetAndroid
-                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                        : 'bg-sky-400/10 text-sky-400 border-sky-400/20'
-                    }`}>
+                    <span className="font-semibold text-[11px] font-mono px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground">
                       {targetAndroid && targetIos
                         ? 'Android + iOS'
                         : targetAndroid
@@ -3194,7 +3169,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => void handleCancelRelease()}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all cursor-pointer"
+                      className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 border border-destructive/20 transition-all cursor-pointer"
                       title="Bu projenin takılan veya yürütülen dağıtım sürecini sıfırla/iptal et"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -3204,8 +3179,8 @@ export default function App() {
                 </div>
 
                 {isCurrentCompleted && (
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs text-center font-medium flex items-center justify-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <div className="p-3 rounded-lg bg-secondary border border-border text-foreground text-xs text-center font-medium flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-foreground" />
                     <span>Sürüm {currentDistributedVersion || currentVersion} başarıyla dağıtıldı!</span>
                   </div>
                 )}
@@ -3229,13 +3204,13 @@ export default function App() {
                       key={step.id}
                       className={`flex items-center justify-between p-2 rounded-md text-xs border transition-all ${
                         step.status === 'running'
-                          ? 'bg-primary/10 border-primary text-primary font-semibold'
+                          ? 'bg-secondary border-border text-foreground font-semibold'
                           : step.status === 'success'
-                          ? 'bg-emerald-500/5 border-emerald-500/20 text-muted-foreground'
+                          ? 'bg-secondary/40 border-border text-muted-foreground'
                           : step.status === 'skipped'
                           ? 'bg-muted/40 border-border/40 text-muted-foreground/60'
                           : step.status === 'failed'
-                          ? 'bg-rose-500/10 border-rose-500 text-rose-500 font-semibold'
+                          ? 'bg-destructive/10 border-destructive/30 text-destructive font-semibold'
                           : 'bg-background border-border text-muted-foreground'
                       }`}
                     >
@@ -3257,10 +3232,10 @@ export default function App() {
 
                       <div className="shrink-0 pl-1">
                         {step.status === 'running' && (
-                          <RefreshCw className="w-3.5 h-3.5 text-primary animate-spin" />
+                          <RefreshCw className="w-3.5 h-3.5 text-foreground animate-spin" />
                         )}
                         {step.status === 'success' && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <Check className="w-3.5 h-3.5 text-foreground" />
                         )}
                         {step.status === 'skipped' && (
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
@@ -3268,7 +3243,7 @@ export default function App() {
                           </span>
                         )}
                         {step.status === 'failed' && (
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+                          <AlertCircle className="w-3.5 h-3.5 text-destructive" />
                         )}
                         {step.status === 'pending' && (
                           <Clock className="w-3.5 h-3.5 text-muted-foreground/40" />
@@ -3283,18 +3258,18 @@ export default function App() {
 
           {/* ===================== AI HATA TEŞHİSİ VE KÖK NEDEN ANALİZİ KARTI ===================== */}
           {(currentPipeline?.diagnosis || ((currentPipeline?.error || currentPipeline?.failed) && !currentPipeline?.isReleasing)) && (
-            <div className="bg-card border-2 border-rose-500/40 dark:border-rose-500/30 rounded-xl p-5 shadow-lg space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="bg-card border border-destructive/30 rounded-xl p-5 shadow-xs space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20">
-                    <Bot className="w-5 h-5 animate-pulse" />
+                  <div className="p-2 rounded-lg bg-destructive/10 text-destructive border border-destructive/20">
+                    <Bot className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-sm text-foreground">
                         Yapay Zeka Hata Teşhisi ve Kök Neden Analizi
                       </h4>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-semibold border border-rose-500/20">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-semibold border border-border">
                         {currentPipeline.diagnosis?.categoryTitle || 'Hata Analiz Edildi'}
                       </span>
                     </div>
@@ -3312,9 +3287,9 @@ export default function App() {
                     void fetchDiagnosisForPipeline(activeProjectPath, errToDiagnose, currentPipeline.logs);
                   }}
                   disabled={isDiagnosing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border cursor-pointer transition-all shrink-0 self-start sm:self-auto"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-secondary hover:bg-secondary/80 text-foreground border border-border cursor-pointer transition-all shrink-0 self-start sm:self-auto shadow-xs"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin text-primary' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDiagnosing ? 'animate-spin' : ''}`} />
                   <span>{isDiagnosing ? 'Yeniden Analiz Ediliyor...' : 'AI ile Yeniden Teşhis Et'}</span>
                 </button>
               </div>
@@ -3326,16 +3301,16 @@ export default function App() {
                     <span className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
                       Tespit Edilen Kök Neden:
                     </span>
-                    <p className="text-xs font-medium text-rose-600 dark:text-rose-400 leading-relaxed">
+                    <p className="text-xs font-medium text-destructive leading-relaxed">
                       {currentPipeline.diagnosis.rootCause}
                     </p>
                   </div>
                 )}
 
                 {currentPipeline.diagnosis?.explanation && (
-                  <div className="p-3.5 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-1.5">
-                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
-                      Detaylı Analiz & "Uygulamadan mı Kaynaklı?" Değerlendirmesi:
+                  <div className="p-3.5 rounded-lg bg-secondary/40 border border-border space-y-1.5">
+                    <span className="text-[11px] font-bold text-foreground uppercase tracking-wider block">
+                      Detaylı Analiz &amp; &quot;Uygulamadan mı Kaynaklı?&quot; Değerlendirmesi:
                     </span>
                     <p className="text-xs text-foreground/90 leading-relaxed">
                       {currentPipeline.diagnosis.explanation}
@@ -3352,7 +3327,7 @@ export default function App() {
                     <ul className="space-y-1 text-xs text-muted-foreground">
                       {currentPipeline.diagnosis.solutionSteps.map((step, sIdx) => (
                         <li key={sIdx} className="flex items-start gap-2">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                          <Check className="w-3.5 h-3.5 text-foreground shrink-0 mt-0.5" />
                           <span>{step}</span>
                         </li>
                       ))}
@@ -3363,10 +3338,10 @@ export default function App() {
 
               {/* OTOMATİK DÜZELTME ALANI (Eğer AI düzeltme aksiyonu sunuyorsa) */}
               {currentPipeline.diagnosis?.autoFixAvailable && (
-                <div className="mt-3 p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-primary/10 to-transparent border border-emerald-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="mt-3 p-4 rounded-xl bg-secondary border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-500" />
+                      <Sparkles className="w-4 h-4 text-foreground" />
                       <span className="font-bold text-xs text-foreground">
                         {currentPipeline.diagnosis.autoFixDescription || 'Bu Hata İçin Otomatik Düzeltme Mevcut'}
                       </span>
@@ -3375,8 +3350,9 @@ export default function App() {
                       Sistem gereksiz izinleri AndroidManifest.xml dosyasından temizleyecek ve Google Play form zorunluluğunu ortadan kaldıracaktır.
                     </p>
                     {autoFixSuccessMsg && (
-                      <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
-                        ✓ {autoFixSuccessMsg}
+                      <p className="text-xs font-semibold text-foreground mt-1 flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-foreground" />
+                        <span>{autoFixSuccessMsg}</span>
                       </p>
                     )}
                   </div>
@@ -3385,10 +3361,10 @@ export default function App() {
                     type="button"
                     onClick={() => void handleAutoFix(currentPipeline.diagnosis?.autoFixAction || 'REMOVE_PHOTO_PERMISSIONS')}
                     disabled={isAutoFixing}
-                    className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
+                    className="w-full sm:w-auto px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
                   >
                     <Wrench className={`w-3.5 h-3.5 ${isAutoFixing ? 'animate-spin' : ''}`} />
-                    <span>{isAutoFixing ? 'Düzeltiliyor ve Dağıtılıyor...' : '⚡ Sorunu Otomatik Düzelt ve Yeniden Başlat'}</span>
+                    <span>{isAutoFixing ? 'Düzeltiliyor ve Dağıtılıyor...' : 'Sorunu Otomatik Düzelt ve Yeniden Başlat'}</span>
                   </button>
                 </div>
               )}
@@ -3417,8 +3393,8 @@ export default function App() {
               >
                 {isLogsCopied ? (
                   <>
-                    <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-emerald-500 font-semibold">Kopyalandı!</span>
+                    <Check className="w-3.5 h-3.5 text-foreground" />
+                    <span className="text-foreground font-semibold">Kopyalandı!</span>
                   </>
                 ) : (
                   <>
@@ -3457,7 +3433,7 @@ export default function App() {
                 <div>
                   <h2 className="text-base font-bold text-foreground flex items-center gap-2">
                     <span>Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-semibold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border font-semibold">
                       SQLite Canlı Kayıtlar
                     </span>
                   </h2>
@@ -3493,32 +3469,32 @@ export default function App() {
                 <div className="text-[11px] text-muted-foreground">Kayıtlı sürüm paketi</div>
               </div>
 
-              <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                   <span>Başarılı Dağıtımlar</span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  <CheckCircle2 className="w-4 h-4 text-foreground" />
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                <div className="text-2xl font-extrabold font-mono text-foreground">
                   {historyReleases.filter(r => r.status === 'RELEASED').length}
                 </div>
-                <div className="text-[11px] text-emerald-600/70 dark:text-emerald-400/70">Mağazalara teslim edildi</div>
+                <div className="text-[11px] text-muted-foreground">Mağazalara teslim edildi</div>
               </div>
 
-              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-rose-600 dark:text-rose-400 flex items-center justify-between">
+              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                   <span>Hata Alan Dağıtımlar</span>
-                  <AlertCircle className="w-4 h-4 text-rose-500" />
+                  <AlertCircle className="w-4 h-4 text-destructive" />
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
+                <div className="text-2xl font-extrabold font-mono text-foreground">
                   {historyReleases.filter(r => r.status === 'FAILED').length}
                 </div>
-                <div className="text-[11px] text-rose-600/70 dark:text-rose-400/70">Düzeltme ve yeniden deneme</div>
+                <div className="text-[11px] text-muted-foreground">Düzeltme ve yeniden deneme</div>
               </div>
 
               <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
                 <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
                   <span>Denetim Kayıtları</span>
-                  <FileText className="w-4 h-4 text-sky-500" />
+                  <FileText className="w-4 h-4 text-foreground" />
                 </div>
                 <div className="text-2xl font-extrabold font-mono text-foreground">
                   {auditLogs.length}
@@ -3582,7 +3558,7 @@ export default function App() {
                     onClick={() => setHistoryStatusFilter('success')}
                     className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
                       historyStatusFilter === 'success'
-                        ? 'bg-background text-emerald-500 shadow-2xs'
+                        ? 'bg-background text-foreground shadow-2xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -3593,7 +3569,7 @@ export default function App() {
                     onClick={() => setHistoryStatusFilter('failed')}
                     className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
                       historyStatusFilter === 'failed'
-                        ? 'bg-background text-rose-500 shadow-2xs'
+                        ? 'bg-background text-foreground shadow-2xs'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
@@ -3960,40 +3936,40 @@ export default function App() {
                 onClick={() => setActiveStoreTab('google')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
                   activeStoreTab === 'google'
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                    ? 'bg-secondary text-foreground border-border shadow-xs'
                     : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
                 }`}
               >
                 <GooglePlayIcon className="w-4 h-4 shrink-0" />
                 <span>Google Play Console API</span>
-                {googlePlayInfo.connected && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
+                {googlePlayInfo.connected && <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>}
               </button>
 
               <button
                 onClick={() => setActiveStoreTab('apple')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
                   activeStoreTab === 'apple'
-                    ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                    ? 'bg-secondary text-foreground border-border shadow-xs'
                     : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
                 }`}
               >
                 <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
                 <span>Apple App Store Connect API</span>
-                {appStoreInfo.connected && <span className="w-2 h-2 rounded-full bg-sky-400"></span>}
+                {appStoreInfo.connected && <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>}
               </button>
 
               <button
                 onClick={() => setActiveStoreTab('ai')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
                   activeStoreTab === 'ai'
-                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+                    ? 'bg-secondary text-foreground border-border shadow-xs'
                     : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
                 }`}
               >
-                <Sparkles className="w-4 h-4 shrink-0 text-purple-400" />
+                <Sparkles className="w-4 h-4 shrink-0 text-foreground" />
                 <span>Yapay Zeka (AI) Motoru</span>
                 {(aiConfiguredInfo.geminiConfigured || aiConfiguredInfo.openaiConfigured || aiConfiguredInfo.anthropicConfigured) && (
-                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>
                 )}
               </button>
             </div>
@@ -4010,7 +3986,7 @@ export default function App() {
                   </div>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                     googlePlayInfo.connected
-                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      ? 'bg-secondary text-foreground border-border'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
                     {googlePlayInfo.connected ? 'Bağlantı Hazır' : 'Bekliyor'}
@@ -4048,17 +4024,17 @@ export default function App() {
                 {googleTestResult.tested && (
                   <div className={`p-3 rounded-lg text-xs border ${
                     googleTestResult.success
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                      ? 'bg-secondary border-border text-foreground'
+                      : 'bg-destructive/10 border-destructive/20 text-destructive'
                   }`}>
                     {googleTestResult.success ? (
                       <div className="flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <Check className="w-3.5 h-3.5 shrink-0 text-foreground" />
                         <span>{googleTestResult.message || 'Google Play Service Account başarıyla bağlandı ve kaydedildi!'}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <X className="w-3.5 h-3.5 shrink-0" />
+                        <X className="w-3.5 h-3.5 shrink-0 text-destructive" />
                         <span>{googleTestResult.error || 'Doğrulama başarısız oldu.'}</span>
                       </div>
                     )}
@@ -4079,7 +4055,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={isSavingGoogle || (!googleJsonInput.trim() && !googlePathInput.trim())}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
                   >
                     <Save className={`w-3.5 h-3.5 ${isSavingGoogle ? 'animate-spin' : ''}`} />
                     <span>{isSavingGoogle ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
@@ -4100,7 +4076,7 @@ export default function App() {
                   </div>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                     appStoreInfo.connected
-                      ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                      ? 'bg-secondary text-foreground border-border'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
                     {appStoreInfo.connected ? 'Bağlantı Hazır' : 'Yapılandırılmadı'}
@@ -4154,17 +4130,17 @@ export default function App() {
                 {appleTestResult.tested && (
                   <div className={`p-3 rounded-lg text-xs border ${
                     appleTestResult.success
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                      ? 'bg-secondary border-border text-foreground'
+                      : 'bg-destructive/10 border-destructive/20 text-destructive'
                   }`}>
                     {appleTestResult.success ? (
                       <div className="flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <Check className="w-3.5 h-3.5 shrink-0 text-foreground" />
                         <span>{appleTestResult.message || 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!'}</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <X className="w-3.5 h-3.5 shrink-0" />
+                        <X className="w-3.5 h-3.5 shrink-0 text-destructive" />
                         <span>{appleTestResult.error || 'Doğrulama başarısız oldu.'}</span>
                       </div>
                     )}
@@ -4185,7 +4161,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={isSavingApple || !appleKeyIdInput.trim() || !appleIssuerIdInput.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
                   >
                     <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
                     <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
@@ -4199,7 +4175,7 @@ export default function App() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-foreground">App Store Hesabındaki Kayıtlı Uygulamalar:</span>
                         {appleConnectApps.length > 0 && (
-                          <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.5 rounded font-medium">
+                          <span className="text-[10px] font-mono bg-secondary text-foreground border border-border px-1.5 py-0.5 rounded font-medium">
                             {appleConnectApps.length} Uygulama Bulundu
                           </span>
                         )}
@@ -4230,15 +4206,15 @@ export default function App() {
                               key={app.id}
                               className={`p-2.5 rounded-md border text-xs flex items-center justify-between transition-colors ${
                                 isMatchedWithCurrent
-                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : 'border-border bg-background/80 hover:bg-secondary/40 text-foreground'
+                                  ? 'border-border bg-secondary/50 text-foreground'
+                                  : 'border-border bg-background hover:bg-secondary/40 text-foreground'
                               }`}
                             >
                               <div className="space-y-0.5 min-w-0 pr-2">
                                 <div className="font-semibold flex items-center gap-1.5 truncate">
                                   <span>{app.name}</span>
                                   {isMatchedWithCurrent && (
-                                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono">
+                                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-secondary text-foreground border border-border font-mono">
                                       Aktif Proje İle Eşleşti
                                     </span>
                                   )}
@@ -4290,7 +4266,7 @@ export default function App() {
                   >
                     <div className="font-bold text-xs flex items-center justify-between">
                       <span>Google Gemini</span>
-                      {aiConfiguredInfo.geminiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                      {aiConfiguredInfo.geminiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>}
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">Flash & Pro</div>
                   </button>
@@ -4306,7 +4282,7 @@ export default function App() {
                   >
                     <div className="font-bold text-xs flex items-center justify-between">
                       <span>OpenAI</span>
-                      {aiConfiguredInfo.openaiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                      {aiConfiguredInfo.openaiConfigured && <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>}
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">GPT-4o & Mini</div>
                   </button>
@@ -4322,7 +4298,7 @@ export default function App() {
                   >
                     <div className="font-bold text-xs flex items-center justify-between">
                       <span>Anthropic</span>
-                      {aiConfiguredInfo.anthropicConfigured && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>}
+                      {aiConfiguredInfo.anthropicConfigured && <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>}
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">Claude 3.5 Sonnet</div>
                   </button>
@@ -4338,7 +4314,7 @@ export default function App() {
                   >
                     <div className="font-bold text-xs flex items-center justify-between">
                       <span>Konvansiyonel</span>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-500 font-mono">Çevrimdışı</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-secondary text-foreground border border-border font-mono">Çevrimdışı</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">API Anahtarsız</div>
                   </button>
@@ -4351,7 +4327,7 @@ export default function App() {
                       <div className="flex items-center justify-between text-xs">
                         <label className="font-semibold text-foreground">Google Gemini API Anahtarı:</label>
                         {aiConfiguredInfo.geminiConfigured && (
-                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.geminiMaskedKey}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">Kayıtlı: {aiConfiguredInfo.geminiMaskedKey}</span>
                         )}
                       </div>
                       <div className="relative">
@@ -4417,7 +4393,7 @@ export default function App() {
                       <div className="flex items-center justify-between text-xs">
                         <label className="font-semibold text-foreground">OpenAI API Anahtarı:</label>
                         {aiConfiguredInfo.openaiConfigured && (
-                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.openaiMaskedKey}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">Kayıtlı: {aiConfiguredInfo.openaiMaskedKey}</span>
                         )}
                       </div>
                       <div className="relative">
@@ -4480,7 +4456,7 @@ export default function App() {
                       <div className="flex items-center justify-between text-xs">
                         <label className="font-semibold text-foreground">Anthropic Claude API Anahtarı:</label>
                         {aiConfiguredInfo.anthropicConfigured && (
-                          <span className="text-[10px] font-mono text-emerald-500">Kayıtlı: {aiConfiguredInfo.anthropicMaskedKey}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">Kayıtlı: {aiConfiguredInfo.anthropicMaskedKey}</span>
                         )}
                       </div>
                       <div className="relative">
@@ -4528,7 +4504,7 @@ export default function App() {
                 {aiProvider === 'conventional' && (
                   <div className="p-3.5 rounded-lg border border-border bg-background space-y-2 text-xs">
                     <div className="flex items-center gap-2 text-foreground font-semibold">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      <CheckCircle2 className="w-4 h-4 text-foreground" />
                       <span>Çevrimdışı ve Sıfır Yapılandırma</span>
                     </div>
                     <p className="text-muted-foreground leading-relaxed text-[11px]">
@@ -4541,11 +4517,11 @@ export default function App() {
                 {aiTestResult && (
                   <div className={`p-3 rounded-lg text-xs border ${
                     aiTestResult.success
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                      ? 'bg-secondary border-border text-foreground'
+                      : 'bg-destructive/10 border-destructive/20 text-destructive'
                   }`}>
                     <div className="flex items-center gap-1.5">
-                      {aiTestResult.success ? <Check className="w-3.5 h-3.5 shrink-0" /> : <X className="w-3.5 h-3.5 shrink-0" />}
+                      {aiTestResult.success ? <Check className="w-3.5 h-3.5 shrink-0 text-foreground" /> : <X className="w-3.5 h-3.5 shrink-0 text-destructive" />}
                       <span>{aiTestResult.message}</span>
                     </div>
                   </div>
