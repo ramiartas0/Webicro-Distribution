@@ -1503,7 +1503,10 @@ export const uiCommand = new Command('ui')
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
           try {
-            const payload = JSON.parse(body || '{}') as { projectPath?: string };
+            const payload = JSON.parse(body || '{}') as {
+              projectPath?: string;
+              source?: 'smart' | 'google_play' | 'app_store';
+            };
             const targetDir = payload.projectPath && fs.existsSync(payload.projectPath)
               ? path.resolve(payload.projectPath)
               : path.resolve(activeProjectDir);
@@ -1521,37 +1524,80 @@ export const uiCommand = new Command('ui')
               projItem?.appStoreOverrideBundleId
             );
 
-            // Mağazadaki en yüksek sürüm ve build numarasını hesapla
+            const syncSource = payload.source || 'smart';
             let targetVersion = meta.version;
             let targetBuildNumber = meta.buildNumber;
+            let sourceLabel = 'En Yüksek Mağaza Sürümü (Akıllı)';
 
-            // Google Play kontrolü
-            if (comparison.googlePlay.status === 'live') {
-              if (comparison.googlePlay.version) {
-                const cmp = compareSemver(targetVersion, comparison.googlePlay.version);
-                if (cmp < 0) {
-                  targetVersion = comparison.googlePlay.version.replace(/^v/, '');
-                }
+            if (syncSource === 'google_play') {
+              sourceLabel = 'Google Play';
+              if (comparison.googlePlay.status !== 'live') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  error: 'Google Play Console üzerinde henüz yayında olan bir sürüm tespit edilemedi.',
+                }));
+                return;
               }
-              if (comparison.googlePlay.versionCode && comparison.googlePlay.versionCode > targetBuildNumber) {
+              if (comparison.googlePlay.version) {
+                targetVersion = comparison.googlePlay.version.replace(/^v/, '');
+              }
+              if (comparison.googlePlay.versionCode) {
                 targetBuildNumber = comparison.googlePlay.versionCode;
               }
-            }
-
-            // Apple App Store kontrolü
-            if (comparison.appStore.status === 'live') {
+            } else if (syncSource === 'app_store') {
+              sourceLabel = 'Apple App Store';
+              if (comparison.appStore.status !== 'live') {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  error: 'Apple App Store Connect üzerinde henüz yayında olan bir sürüm tespit edilemedi.',
+                }));
+                return;
+              }
               if (comparison.appStore.version) {
                 const cleanAppVer = comparison.appStore.version.replace(/^v/, '');
-                const semverAppVer = cleanAppVer.split('.').length === 2 ? `${cleanAppVer}.0` : cleanAppVer;
-                const cmp = compareSemver(targetVersion, semverAppVer);
-                if (cmp < 0) {
-                  targetVersion = semverAppVer;
-                }
+                targetVersion = cleanAppVer.split('.').length === 2 ? `${cleanAppVer}.0` : cleanAppVer;
               }
               if (comparison.appStore.buildNumber) {
                 const parsedB = parseInt(comparison.appStore.buildNumber, 10);
-                if (!isNaN(parsedB) && parsedB > targetBuildNumber) {
+                if (!isNaN(parsedB)) {
                   targetBuildNumber = parsedB;
+                }
+              }
+            } else {
+              // 'smart' - Her iki mağaza arasındaki en yüksek sürüm ve build numarasını al
+              sourceLabel = 'Akıllı Eşitleme (En Yüksek Mağaza)';
+
+              // Google Play kontrolü
+              if (comparison.googlePlay.status === 'live') {
+                if (comparison.googlePlay.version) {
+                  const cleanGp = comparison.googlePlay.version.replace(/^v/, '');
+                  const cmp = compareSemver(targetVersion, cleanGp);
+                  if (cmp < 0) {
+                    targetVersion = cleanGp;
+                  }
+                }
+                if (comparison.googlePlay.versionCode && comparison.googlePlay.versionCode > targetBuildNumber) {
+                  targetBuildNumber = comparison.googlePlay.versionCode;
+                }
+              }
+
+              // Apple App Store kontrolü
+              if (comparison.appStore.status === 'live') {
+                if (comparison.appStore.version) {
+                  const cleanAppVer = comparison.appStore.version.replace(/^v/, '');
+                  const semverAppVer = cleanAppVer.split('.').length === 2 ? `${cleanAppVer}.0` : cleanAppVer;
+                  const cmp = compareSemver(targetVersion, semverAppVer);
+                  if (cmp < 0) {
+                    targetVersion = semverAppVer;
+                  }
+                }
+                if (comparison.appStore.buildNumber) {
+                  const parsedB = parseInt(comparison.appStore.buildNumber, 10);
+                  if (!isNaN(parsedB) && parsedB > targetBuildNumber) {
+                    targetBuildNumber = parsedB;
+                  }
                 }
               }
             }
@@ -1591,7 +1637,10 @@ export const uiCommand = new Command('ui')
               version: targetVersion,
               buildNumber: targetBuildNumber,
               formatted,
-              message: `pubspec.yaml başarıyla v${formatted} olarak eşitlendi.`,
+              sourceLabel,
+              project: projItem,
+              stores: projItem?.stores,
+              message: `pubspec.yaml sürümü ${sourceLabel} doğrultusunda v${formatted} olarak eşitlendi.`,
             }));
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
