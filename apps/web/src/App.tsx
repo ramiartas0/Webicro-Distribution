@@ -207,14 +207,14 @@ export default function App() {
   // Yapay Zeka (AI) Motoru State'leri
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | 'anthropic' | 'conventional'>('gemini');
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState<string>('');
-  const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-3.5-flash');
+  const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-3.1-flash-lite');
   const [openaiApiKeyInput, setOpenaiApiKeyInput] = useState<string>('');
   const [openaiModelInput, setOpenaiModelInput] = useState<string>('gpt-4o-mini');
   const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState<string>('');
   const [anthropicModelInput, setAnthropicModelInput] = useState<string>('claude-3-5-sonnet-20241022');
   const [geminiModelList, setGeminiModelList] = useState<AIModelOption[]>([
-    { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Önerilen & Hızlı)', recommended: true },
-    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Hızlı & Kararlı)', recommended: true },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Ultra Hızlı & Önerilen)', recommended: true },
+    { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Dengeli & Hızlı)', recommended: true },
     { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Yeni Nesil)' },
     { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
@@ -1014,6 +1014,7 @@ export default function App() {
   const handleGenerateAI = async (selectedProvider?: 'gemini' | 'openai' | 'anthropic' | 'conventional') => {
     setIsGeneratingAI(true);
     const targetProvider = selectedProvider || aiProvider;
+    const selectedModel = targetProvider === 'gemini' ? geminiModelInput : targetProvider === 'openai' ? openaiModelInput : anthropicModelInput;
     try {
       const response = await fetch('/api/ai/generate', {
         method: 'POST',
@@ -1023,6 +1024,7 @@ export default function App() {
           version: nextVersion,
           projectPath: activeProjectPath,
           provider: targetProvider,
+          model: selectedModel,
         }),
       });
       if (response.ok) {
@@ -1082,8 +1084,8 @@ export default function App() {
         if (data.models && data.models.length > 0) {
           if (provider === 'gemini') {
             setGeminiModelList(data.models);
-            if (!geminiModelInput || geminiModelInput === 'gemini-1.5-flash' || !data.models.some(m => m.id === geminiModelInput)) {
-              setGeminiModelInput(data.defaultModel || data.models[0]?.id || 'gemini-2.5-flash');
+            if (!geminiModelInput || geminiModelInput === 'gemini-1.5-flash' || geminiModelInput === 'gemini-2.5-flash' || !data.models.some(m => m.id === geminiModelInput)) {
+              setGeminiModelInput(data.defaultModel || data.models[0]?.id || 'gemini-3.1-flash-lite');
             }
           } else if (provider === 'openai') {
             setOpenaiModelList(data.models);

@@ -14,16 +14,16 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
       throw new Error('Gemini API key is required');
     }
     this.ai = new GoogleGenerativeAI(config.apiKey);
-    this.modelName = config.model ?? 'gemini-3.5-flash';
+    this.modelName = config.model ?? 'gemini-3.1-flash-lite';
     if (this.modelName.startsWith('gemini-1.5') || this.modelName === 'gemini-2.5-flash') {
-      this.modelName = 'gemini-3.5-flash';
+      this.modelName = 'gemini-3.1-flash-lite';
     }
   }
 
   public async generateReleaseNotes(context: AIContext): Promise<ReleaseNotesMap> {
     const prompt = this.buildPrompt(context);
 
-    const candidateModels = [this.modelName, 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    const candidateModels = [this.modelName, 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
     const uniqueCandidates = Array.from(new Set(candidateModels));
 
     let lastError: unknown;
@@ -34,6 +34,8 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
           systemInstruction: SYSTEM_PROMPT,
           generationConfig: {
             responseMimeType: 'application/json',
+            maxOutputTokens: 600,
+            temperature: 0.1,
           }
         });
         const result = await model.generateContent(prompt);

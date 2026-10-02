@@ -594,6 +594,21 @@ export function formatBulletNotes(items: string[]): string {
     .join('\n');
 }
 
+interface CachedReleaseNotes {
+  key: string;
+  timestamp: number;
+  data: {
+    provider: string;
+    notesTr: string;
+    notesEn: string;
+    notes: {
+      tr: { full: string[] };
+      en: { full: string[] };
+    };
+  };
+}
+const releaseNotesCache = new Map<string, CachedReleaseNotes>();
+
 function cleanSemver(v: string): number[] {
   const cleaned = v.replace(/^[^\d]*/i, '').trim();
   const parts = cleaned.split(/[.+]/).map(p => {
@@ -1650,7 +1665,7 @@ export const uiCommand = new Command('ui')
             let defaultModel = '';
 
             if (providerType === 'gemini') {
-              defaultModel = 'gemini-3.5-flash';
+              defaultModel = 'gemini-3.1-flash-lite';
               if (key) {
                 try {
                   const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
@@ -1668,15 +1683,25 @@ export const uiCommand = new Command('ui')
                       .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
                       .map(m => {
                         const cleanId = (m.name || '').replace(/^models\//, '');
+                        let displayName = m.displayName ? `${m.displayName} (${cleanId})` : cleanId;
+                        if (cleanId === 'gemini-3.1-flash-lite') {
+                          displayName = `Gemini 3.1 Flash Lite (Ultra Hızlı & Önerilen)`;
+                        } else if (cleanId === 'gemini-3.5-flash') {
+                          displayName = `Gemini 3.5 Flash (Dengeli & Hızlı)`;
+                        }
                         return {
                           id: cleanId,
-                          name: m.displayName ? `${m.displayName} (${cleanId})` : cleanId,
-                          recommended: cleanId === 'gemini-3.5-flash' || cleanId === 'gemini-3.1-flash-lite' || cleanId === 'gemini-3.8-flash',
+                          name: displayName,
+                          recommended: cleanId === 'gemini-3.1-flash-lite' || cleanId === 'gemini-3.5-flash' || cleanId === 'gemini-3.8-flash',
                         };
                       });
                     if (fetched.length > 0) {
-                      // Önerilen modelleri en başa al
-                      fetched.sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
+                      // Ultra hızlı gemini-3.1-flash-lite en başa, sonra diğer önerilenler
+                      fetched.sort((a, b) => {
+                        if (a.id === 'gemini-3.1-flash-lite') return -1;
+                        if (b.id === 'gemini-3.1-flash-lite') return 1;
+                        return (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0);
+                      });
                       models = fetched;
                     }
                   }
@@ -1687,8 +1712,8 @@ export const uiCommand = new Command('ui')
 
               if (models.length === 0) {
                 models = [
-                  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Önerilen & Hızlı)', recommended: true },
-                  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Hızlı & Kararlı)', recommended: true },
+                  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Ultra Hızlı & Önerilen)', recommended: true },
+                  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Dengeli & Hızlı)', recommended: true },
                   { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Yeni Nesil)' },
                   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
                   { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
@@ -2141,7 +2166,7 @@ export const uiCommand = new Command('ui')
             if (!apiKey) {
               if (requestedProvider === 'gemini') {
                 apiKey = creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'];
-                model = model || creds.ai?.geminiModel || 'gemini-2.5-flash';
+                model = model || creds.ai?.geminiModel || 'gemini-3.1-flash-lite';
               } else if (requestedProvider === 'openai') {
                 apiKey = creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY'];
                 model = model || creds.ai?.openaiModel || 'gpt-4o-mini';
@@ -2149,6 +2174,16 @@ export const uiCommand = new Command('ui')
                 apiKey = creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY'];
                 model = model || creds.ai?.anthropicModel || 'claude-3-5-sonnet-20241022';
               }
+            }
+
+            // Hızlı Önbellek (Fast Cache) Kontrolü
+            const latestCommitHash = commits[0]?.hash || 'none';
+            const cacheKey = `${targetDir}:${version}:${latestCommitHash}:${requestedProvider}:${model || 'default'}`;
+            const cached = releaseNotesCache.get(cacheKey);
+            if (cached && (Date.now() - cached.timestamp < 15 * 60 * 1000) && !(payload as { forceRefresh?: boolean }).forceRefresh) {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ ...cached.data, cached: true }));
+              return;
             }
 
             let provider = createAIProvider({
@@ -2186,8 +2221,7 @@ export const uiCommand = new Command('ui')
             const formattedTr = formatBulletNotes(trItems);
             const formattedEn = formatBulletNotes(enItems);
 
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
+            const responseData = {
               provider: provider.name,
               notesTr: formattedTr,
               notesEn: formattedEn,
@@ -2195,7 +2229,16 @@ export const uiCommand = new Command('ui')
                 tr: { full: trItems },
                 en: { full: enItems },
               },
-            }));
+            };
+
+            releaseNotesCache.set(cacheKey, {
+              key: cacheKey,
+              timestamp: Date.now(),
+              data: responseData,
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(responseData));
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));

@@ -36,12 +36,16 @@ STRICT INSTRUCTIONS:
 
 export abstract class BaseProvider {
   protected buildPrompt(context: AIContext): string {
+    const commitLines = context.commits
+      .map((c) => `- [${c.type}${c.scope ? `(${c.scope})` : ''}] ${c.message}`)
+      .join('\n');
+
     return `
 Version: ${context.version}
 Target Languages: ${context.languages.join(', ')}
 
-Commits:
-${JSON.stringify(context.commits, null, 2)}
+Recent Changes:
+${commitLines}
     `.trim();
   }
 
