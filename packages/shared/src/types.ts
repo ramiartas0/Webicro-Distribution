@@ -39,4 +39,6 @@ export type ErrorCode =
   | 'TIMEOUT_ERROR'
   | 'RATE_LIMIT_ERROR'
   | 'CONFLICT_ERROR'
-  | 'AUTH_ERROR';
+  | 'AUTH_ERROR'
+  | 'ORCHESTRATOR_ERROR'
+  | 'STATE_MACHINE_ERROR';
