@@ -36,6 +36,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
+import { Tooltip } from './components/ui/tooltip.js';
+import { useToast } from './context/ToastContext.js';
 
 interface CommitItem {
   hash: string;
@@ -217,6 +219,7 @@ export interface AIModelOption {
 }
 
 export default function App() {
+  const { toast } = useToast();
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('webicro_theme');
@@ -1154,9 +1157,13 @@ export default function App() {
           setProjects(data.projects);
         }
         await fetchProjectDetails();
+        toast.success('Canlı mağaza sürümleri başarıyla senkronize edildi.');
+      } else {
+        toast.error('Mağaza senkronizasyonu tamamlanamadı.');
       }
     } catch (err) {
       console.error('Mağaza senkronizasyonu hatası:', err);
+      toast.error('Mağaza senkronizasyonu sırasında bağlantı hatası oluştu.');
     } finally {
       setIsSyncingStores(false);
     }
@@ -1177,19 +1184,22 @@ export default function App() {
       if (res.ok) {
         const data = await res.json() as { success: boolean; formatted?: string; version?: string; buildNumber?: number; message?: string; error?: string };
         if (data.success && data.formatted) {
-          setSyncStoreSuccessMsg(data.message || `pubspec.yaml başarıyla v${data.formatted} olarak eşitlendi.`);
+          const successMsg = data.message || `pubspec.yaml başarıyla v${data.formatted} olarak eşitlendi.`;
+          setSyncStoreSuccessMsg(successMsg);
+          toast.success(successMsg, 'Sürüm Eşitlendi');
           await fetchProjectDetails(target);
           await handleSyncStores();
           setTimeout(() => setSyncStoreSuccessMsg(null), 6000);
         } else if (data.error) {
-          alert(`Eşitleme Uyarısı: ${data.error}`);
+          toast.warning(data.error, 'Eşitleme Uyarısı');
         }
       } else {
         const errData = await res.json().catch(() => ({})) as { error?: string };
-        alert(`Eşitleme Hatası: ${errData.error || 'İşlem tamamlanamadı.'}`);
+        toast.error(errData.error || 'İşlem tamamlanamadı.', 'Eşitleme Hatası');
       }
     } catch (err) {
       console.error('Sürüm eşitleme hatası:', err);
+      toast.error('Sürüm eşitleme sırasında bir hata oluştu.');
     } finally {
       setIsSyncingStoreVersion(false);
     }
@@ -1247,7 +1257,9 @@ export default function App() {
         };
       };
       if (data.success) {
-        setGitPushSuccessMsg(data.message || 'Git commit ve push başarıyla tamamlandı!');
+        const msg = data.message || 'Git commit ve push başarıyla tamamlandı!';
+        setGitPushSuccessMsg(msg);
+        toast.success(msg, 'Git ve GitHub Senkronize Edildi');
         if (data.git) {
           setIsGitClean(data.git.isClean);
           setUncommittedFiles(data.git.uncommittedFiles || []);
@@ -1255,10 +1267,10 @@ export default function App() {
         await fetchProjectDetails(activeProjectPath);
         setTimeout(() => setGitPushSuccessMsg(null), 6000);
       } else {
-        alert(data.error || 'Git işlemi başarısız oldu.');
+        toast.error(data.error || 'Git işlemi başarısız oldu.', 'Git Hatası');
       }
     } catch (err: unknown) {
-      alert(`Git hatası: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(err instanceof Error ? err.message : String(err), 'Git Bağlantı Hatası');
     } finally {
       setIsGitPushing(false);
     }
@@ -1331,12 +1343,13 @@ export default function App() {
         setNewProjectPath('');
         setNewProjectName('');
         await loadProjectsAndActive();
+        toast.success('Yeni Flutter projesi başarıyla eklendi.', 'Proje Eklendi');
       } else {
         const data = await res.json() as { error?: string };
-        alert(`Hata: ${data.error || 'Proje eklenemedi.'}`);
+        toast.error(data.error || 'Proje eklenemedi.', 'Proje Eklenemedi');
       }
     } catch (err) {
-      alert(`Bağlantı hatası: ${String(err)}`);
+      toast.error(err instanceof Error ? err.message : String(err), 'Bağlantı Hatası');
     } finally {
       setIsAddingProject(false);
     }
@@ -1361,9 +1374,11 @@ export default function App() {
           setActiveProjectPath(data.activePath);
         }
         await fetchProjectDetails();
+        toast.info(`"${projectName}" projesi listeden kaldırıldı.`, 'Proje Kaldırıldı');
       }
     } catch (err) {
       console.error('Proje kaldırma hatası:', err);
+      toast.error('Proje kaldırılırken bir hata oluştu.');
     }
   };
 
@@ -1413,12 +1428,14 @@ export default function App() {
       };
 
       if (res.ok && data.success) {
+        const successMsg = data.message || 'Google Play API anahtarı başarıyla kaydedildi ve doğrulandı.';
         setGoogleTestResult({
           testing: false,
           tested: true,
           success: true,
-          message: data.message || 'Google Play API anahtarı başarıyla kaydedildi ve doğrulandı.',
+          message: successMsg,
         });
+        toast.success(successMsg, 'Google Play API');
         setGooglePlayInfo((prev) => ({
           ...prev,
           connected: true,
@@ -1427,20 +1444,24 @@ export default function App() {
         }));
         await loadProjectsAndActive();
       } else {
+        const errorMsg = data.error || 'Google Play API kaydetme ve test başarısız oldu.';
         setGoogleTestResult({
           testing: false,
           tested: true,
           success: false,
-          error: data.error || 'Google Play API kaydetme ve test başarısız oldu.',
+          error: errorMsg,
         });
+        toast.error(errorMsg, 'Google Play Hatası');
       }
     } catch (err) {
+      const errorMsg = `Sunucu bağlantı hatası: ${String(err)}`;
       setGoogleTestResult({
         testing: false,
         tested: true,
         success: false,
-        error: `Sunucu bağlantı hatası: ${String(err)}`,
+        error: errorMsg,
       });
+      toast.error(errorMsg, 'Bağlantı Hatası');
     } finally {
       setIsSavingGoogle(false);
     }
@@ -1472,12 +1493,14 @@ export default function App() {
       };
 
       if (res.ok && data.success) {
+        const successMsg = data.details || data.message || 'Apple App Store Connect API anahtarı başarıyla kaydedildi.';
         setAppleTestResult({
           testing: false,
           tested: true,
           success: true,
-          message: data.details || data.message || 'Apple App Store Connect API anahtarı başarıyla kaydedildi.',
+          message: successMsg,
         });
+        toast.success(successMsg, 'App Store Connect API');
         setAppStoreInfo((prev) => ({
           ...prev,
           connected: true,
@@ -1487,20 +1510,24 @@ export default function App() {
         await loadProjectsAndActive();
         void fetchAppleApps();
       } else {
+        const errorMsg = data.error || 'Apple API kaydetme ve doğrulama başarısız oldu.';
         setAppleTestResult({
           testing: false,
           tested: true,
           success: false,
-          error: data.error || 'Apple API kaydetme ve doğrulama başarısız oldu.',
+          error: errorMsg,
         });
+        toast.error(errorMsg, 'App Store Hatası');
       }
     } catch (err) {
+      const errorMsg = `Sunucu bağlantı hatası: ${String(err)}`;
       setAppleTestResult({
         testing: false,
         tested: true,
         success: false,
-        error: `Sunucu bağlantı hatası: ${String(err)}`,
+        error: errorMsg,
       });
+      toast.error(errorMsg, 'Bağlantı Hatası');
     } finally {
       setIsSavingApple(false);
     }
@@ -1624,13 +1651,19 @@ export default function App() {
       });
       const data = await res.json() as { success?: boolean; message?: string; error?: string };
       if (res.ok && data.success) {
-        setAiTestResult({ success: true, message: data.message || 'Yapay Zeka ayarları başarıyla kaydedildi.' });
+        const msg = data.message || 'Yapay Zeka ayarları başarıyla kaydedildi.';
+        setAiTestResult({ success: true, message: msg });
+        toast.success(msg, 'AI Ayarları');
         await loadStoreCredentials();
       } else {
-        setAiTestResult({ success: false, message: data.error || 'Ayarlar kaydedilemedi.' });
+        const err = data.error || 'Ayarlar kaydedilemedi.';
+        setAiTestResult({ success: false, message: err });
+        toast.error(err, 'AI Hata');
       }
     } catch (err) {
-      setAiTestResult({ success: false, message: err instanceof Error ? err.message : String(err) });
+      const errStr = err instanceof Error ? err.message : String(err);
+      setAiTestResult({ success: false, message: errStr });
+      toast.error(errStr, 'AI Bağlantı Hatası');
     } finally {
       setIsSavingAI(false);
     }
@@ -1664,21 +1697,27 @@ export default function App() {
       });
       const data = await res.json() as { success?: boolean; message?: string; error?: string };
       if (res.ok && data.success) {
+        const msg = data.message || 'Yapay zeka bağlantısı başarılı ve çalışıyor!';
         setAiTestResult({
           success: true,
-          message: data.message || 'Yapay zeka bağlantısı başarılı!',
+          message: msg,
         });
+        toast.success(msg, 'AI Test');
       } else {
+        const err = data.error || 'Bağlantı testi başarısız oldu.';
         setAiTestResult({
           success: false,
-          message: data.error || 'Bağlantı testi başarısız oldu.',
+          message: err,
         });
+        toast.error(err, 'AI Test');
       }
     } catch (err) {
+      const errStr = err instanceof Error ? err.message : String(err);
       setAiTestResult({
         success: false,
-        message: err instanceof Error ? err.message : String(err),
+        message: errStr,
       });
+      toast.error(errStr, 'AI Test Hatası');
     } finally {
       setIsTestingAI(false);
     }
@@ -1688,6 +1727,7 @@ export default function App() {
     const text = lang === 'tr' ? releaseNotesTR : releaseNotesEN;
     void navigator.clipboard.writeText(text);
     setCopiedLang(lang);
+    toast.success(`${lang === 'tr' ? 'Türkçe' : 'İngilizce'} sürüm notları panoya kopyalandı.`, 'Kopyalandı');
     setTimeout(() => setCopiedLang(null), 2000);
   };
 
@@ -1696,6 +1736,7 @@ export default function App() {
     const text = currentLogs.join('\n');
     void navigator.clipboard.writeText(text);
     setIsLogsCopied(true);
+    toast.success('Dağıtım logları panoya kopyalandı.', 'Kopyalandı');
     setTimeout(() => setIsLogsCopied(false), 2000);
   };
 
@@ -1751,7 +1792,9 @@ export default function App() {
       });
       const data = await res.json() as { success?: boolean; message?: string; error?: string };
       if (res.ok && data.success) {
-        setAutoFixSuccessMsg(data.message || 'Sorun başarıyla düzeltildi.');
+        const msg = data.message || 'Sorun başarıyla düzeltildi.';
+        setAutoFixSuccessMsg(msg);
+        toast.success(msg, 'Otomatik Düzeltme');
         setTimeout(() => {
           setAutoFixSuccessMsg('Düzeltme tamamlandı. Dağıtım otomatik yeniden başlatılıyor...');
           setTimeout(() => {
@@ -1759,10 +1802,10 @@ export default function App() {
           }, 800);
         }, 1200);
       } else {
-        alert(data.error || 'Otomatik düzeltme uygulanamadı.');
+        toast.error(data.error || 'Otomatik düzeltme uygulanamadı.', 'Onarım Hatası');
       }
     } catch (err) {
-      alert(`Otomatik düzeltme hatası: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(err instanceof Error ? err.message : String(err), 'Onarım Bağlantı Hatası');
     } finally {
       setIsAutoFixing(false);
     }
@@ -1772,17 +1815,19 @@ export default function App() {
   const handleStartRelease = async () => {
     if (isCurrentProjectReleasing) return;
     if (!releaseNotesTR.trim() || !releaseNotesEN.trim()) {
-      alert('Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları zorunludur. Lütfen önce "Commitlerden Üret" butonuna tıklayarak AI ile notları oluşturun.');
+      toast.warning('Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları zorunludur. Lütfen önce "Commitlerden Üret" butonuna tıklayarak AI ile notları oluşturun.', 'Sürüm Notları Zorunlu');
       return;
     }
 
     if (!targetAndroid && !targetIos) {
-      alert('Lütfen dağıtılacak en az bir platform seçin (Android veya iOS).');
+      toast.warning('Lütfen dağıtılacak en az bir platform seçin (Android veya iOS).', 'Platform Seçimi');
       return;
     }
 
     const targetPath = activeProjectPath;
     if (!targetPath) return;
+
+    toast.info(`"${projectName}" için ${nextVersion}+${nextBuildNumber} sürüm dağıtımı başlatıldı.`, 'Dağıtım Başlatıldı');
 
     const initialPipelineSteps = initialStages.map((s, idx) => {
       if (!targetAndroid && s.id === 4) {
@@ -1947,9 +1992,13 @@ export default function App() {
               : item
           )
         );
+        toast.warning(`"${projectName || 'Proje'}" için dağıtım süreci iptal edildi.`, 'Dağıtım İptal Edildi');
+      } else {
+        toast.error('Dağıtım süreci iptal edilemedi.');
       }
     } catch (err) {
       console.error('Boru hattı iptal hatası:', err);
+      toast.error('İptal işlemi sırasında bağlantı hatası oluştu.');
     }
   };
 
@@ -1972,45 +2021,54 @@ export default function App() {
                 </span>
               </div>
             </div>
-            <button
-              onClick={() => setIsDark(!isDark)}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-sidebar-border text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-              title="Tema Değiştir"
-            >
-              {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
+            <Tooltip content={isDark ? "Açık temaya geç" : "Koyu temaya geç"} position="bottom">
+              <button
+                onClick={() => {
+                  const nextTheme = !isDark;
+                  setIsDark(nextTheme);
+                  toast.info(nextTheme ? 'Koyu tema aktif edildi.' : 'Açık tema aktif edildi.', 'Tema Değiştirildi');
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-sidebar-border text-muted-foreground hover:text-foreground transition-all cursor-pointer"
+                aria-label="Tema Değiştir"
+              >
+                {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              </button>
+            </Tooltip>
           </div>
 
           {/* EYLEMLER: PROJELERİ TARA & MAĞAZALARI TARA & MANUEL EKLE */}
           <div className="grid grid-cols-3 gap-1.5">
-            <button
-              onClick={() => void handleAutoDiscover()}
-              disabled={isDiscovering}
-              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
-              title="Sistemdeki ve çalışma dizinindeki tüm Flutter projelerini otomatik tara"
-            >
-              <Compass className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin text-primary' : 'text-primary'}`} />
-              <span className="truncate">{isDiscovering ? 'Aranıyor...' : 'Projeleri Tara'}</span>
-            </button>
+            <Tooltip content="Sistemdeki Flutter projelerini otomatik tara" position="bottom">
+              <button
+                onClick={() => void handleAutoDiscover()}
+                disabled={isDiscovering}
+                className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
+              >
+                <Compass className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin text-primary' : 'text-primary'}`} />
+                <span className="truncate">{isDiscovering ? 'Aranıyor...' : 'Projeleri Tara'}</span>
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => void handleSyncStores()}
-              disabled={isSyncingStores}
-              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
-              title="Google Play ve App Store API'lerini sorgula ve sürümleri karşılaştır"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
-              <span className="truncate">{isSyncingStores ? 'Taranıyor...' : 'Mağazalar'}</span>
-            </button>
+            <Tooltip content="Google Play ve App Store sürümlerini karşılaştır" position="bottom">
+              <button
+                onClick={() => void handleSyncStores()}
+                disabled={isSyncingStores}
+                className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
+                <span className="truncate">{isSyncingStores ? 'Taranıyor...' : 'Mağazalar'}</span>
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => setShowScanModal(true)}
-              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 transition-all shadow-xs cursor-pointer"
-              title="Özel Klasör Tara veya Proje Ekle"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>Dizin Tara</span>
-            </button>
+            <Tooltip content="Özel bir klasör seç veya proje ekle" position="bottom">
+              <button
+                onClick={() => setShowScanModal(true)}
+                className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 transition-all shadow-xs cursor-pointer"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                <span>Dizin Tara</span>
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -2161,45 +2219,51 @@ export default function App() {
 
         {/* ALT KISIM: SİSTEM DOĞRULAMA & WIKI & GEÇMİŞ */}
         <div className="p-3 border-t border-sidebar-border bg-sidebar-accent/20 space-y-1">
-          <button
-            onClick={() => setShowStoreTestModal(true)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all cursor-pointer border border-transparent hover:border-border"
-          >
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              <span>Mağaza API & Bağlantı Yönetimi</span>
-            </div>
-            <ChevronRight className="w-3 h-3 opacity-60" />
-          </button>
+          <Tooltip content="Google Play ve App Store API anahtarlarını test et ve doğrula" position="right">
+            <button
+              onClick={() => setShowStoreTestModal(true)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all cursor-pointer border border-transparent hover:border-border"
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                <span>Mağaza API & Bağlantı Yönetimi</span>
+              </div>
+              <ChevronRight className="w-3 h-3 opacity-60" />
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => {
-              setActiveMainTab('history');
-              void loadHistory('all');
-            }}
-            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer border ${
-              activeMainTab === 'history'
-                ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground border-transparent hover:border-border'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <History className={`w-3.5 h-3.5 ${activeMainTab === 'history' ? 'text-primary-foreground' : 'text-primary'}`} />
-              <span>Sürüm Geçmişi & Denetim</span>
-            </div>
-            <ChevronRight className="w-3 h-3 opacity-60" />
-          </button>
+          <Tooltip content="SQLite veritabanı dağıtım kayıtlarını ve denetim loglarını listele" position="right">
+            <button
+              onClick={() => {
+                setActiveMainTab('history');
+                void loadHistory('all');
+              }}
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer border ${
+                activeMainTab === 'history'
+                  ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                  : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground border-transparent hover:border-border'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <History className={`w-3.5 h-3.5 ${activeMainTab === 'history' ? 'text-primary-foreground' : 'text-primary'}`} />
+                <span>Sürüm Geçmişi & Denetim</span>
+              </div>
+              <ChevronRight className="w-3 h-3 opacity-60" />
+            </button>
+          </Tooltip>
 
-          <button
-            onClick={() => setShowWikiModal(true)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all cursor-pointer border border-transparent hover:border-border"
-          >
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-3.5 h-3.5 text-primary" />
-              <span>Entegrasyon Wiki & Rehber</span>
-            </div>
-            <ChevronRight className="w-3 h-3 opacity-60" />
-          </button>
+          <Tooltip content="Dağıtım adımları, mağaza kuralları ve dokümantasyon rehberi" position="right">
+            <button
+              onClick={() => setShowWikiModal(true)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all cursor-pointer border border-transparent hover:border-border"
+            >
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-3.5 h-3.5 text-primary" />
+                <span>Entegrasyon Wiki & Rehber</span>
+              </div>
+              <ChevronRight className="w-3 h-3 opacity-60" />
+            </button>
+          </Tooltip>
         </div>
       </aside>
 
@@ -2223,29 +2287,33 @@ export default function App() {
                   </span>
                 )}
                 {gitRemote.connected && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground flex items-center gap-1" title={gitRemote.remoteUrl || 'GitHub'}>
-                    <CheckCircle2 className="w-2.5 h-2.5 text-foreground" />
-                    <span>Git &amp; GitHub Bağlı</span>
-                  </span>
+                  <Tooltip content={`Bağlı Uzak Adres: ${gitRemote.remoteUrl || 'GitHub'}`} position="bottom">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground flex items-center gap-1 cursor-help">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-foreground" />
+                      <span>Git &amp; GitHub Bağlı</span>
+                    </span>
+                  </Tooltip>
                 )}
                 <div className="relative group">
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border cursor-default flex items-center gap-1 ${
-                    isGitClean
-                      ? 'bg-secondary text-secondary-foreground'
-                      : 'bg-muted text-foreground'
-                  }`}>
-                    {isGitClean ? (
-                      <>
-                        <Check className="w-2.5 h-2.5 text-foreground" />
-                        <span>Git Temiz</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-foreground/60" />
-                        <span>{uncommittedFiles.length > 0 ? `${uncommittedFiles.length} Değişiklik Var` : 'Değişiklikler Var'}</span>
-                      </>
-                    )}
-                  </span>
+                  <Tooltip content={isGitClean ? "Git çalışma dizini temiz ve güncel" : `${uncommittedFiles.length} adet kaydedilmemiş değişiklik var`} position="bottom">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border cursor-default flex items-center gap-1 ${
+                      isGitClean
+                        ? 'bg-secondary text-secondary-foreground'
+                        : 'bg-muted text-foreground'
+                    }`}>
+                      {isGitClean ? (
+                        <>
+                          <Check className="w-2.5 h-2.5 text-foreground" />
+                          <span>Git Temiz</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full bg-foreground/60" />
+                          <span>{uncommittedFiles.length > 0 ? `${uncommittedFiles.length} Değişiklik Var` : 'Değişiklikler Var'}</span>
+                        </>
+                      )}
+                    </span>
+                  </Tooltip>
 
                   {/* Değişen Dosyaların Tooltip/Popover Listesi */}
                   {!isGitClean && uncommittedFiles.length > 0 && (
@@ -2267,25 +2335,26 @@ export default function App() {
 
                 {/* TEK TIKLA GİT'E KAYDET & PUSH ET BUTONU */}
                 {!isGitClean && uncommittedFiles.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => void handleGitCommitPush()}
-                    disabled={isGitPushing}
-                    className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-50"
-                    title="Bu projenin bekleyen değişikliklerini Git'e commit edip doğrudan GitHub'a push et"
-                  >
-                    {isGitPushing ? (
-                      <>
-                        <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                        <span>Gönderiliyor...</span>
-                      </>
-                    ) : (
-                      <>
-                        <GitCommit className="w-2.5 h-2.5 text-foreground" />
-                        <span>Git'e Kaydet &amp; Push Et</span>
-                      </>
-                    )}
-                  </button>
+                  <Tooltip content="Değişen dosyaları commit edip doğrudan GitHub'a push eder" position="bottom">
+                    <button
+                      type="button"
+                      onClick={() => void handleGitCommitPush()}
+                      disabled={isGitPushing}
+                      className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                    >
+                      {isGitPushing ? (
+                        <>
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                          <span>Gönderiliyor...</span>
+                        </>
+                      ) : (
+                        <>
+                          <GitCommit className="w-2.5 h-2.5 text-foreground" />
+                          <span>Git'e Kaydet &amp; Push Et</span>
+                        </>
+                      )}
+                    </button>
+                  </Tooltip>
                 )}
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl flex items-center gap-1.5">
@@ -2333,58 +2402,66 @@ export default function App() {
 
           {/* ORTA BÖLÜM: ANA SEKME DEĞİŞTİRİCİ (Dashboard vs Sürüm Geçmişi) */}
           <div className="flex items-center p-1 bg-secondary/80 rounded-xl border border-border shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setActiveMainTab('dashboard')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeMainTab === 'dashboard'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Rocket className="w-3.5 h-3.5 text-primary" />
-              <span>Dağıtım Merkezi</span>
-            </button>
+            <Tooltip content="Dağıtım kontrol merkezine geç" position="bottom">
+              <button
+                type="button"
+                onClick={() => setActiveMainTab('dashboard')}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeMainTab === 'dashboard'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Rocket className="w-3.5 h-3.5 text-primary" />
+                <span>Dağıtım Merkezi</span>
+              </button>
+            </Tooltip>
 
-            <button
-              type="button"
-              onClick={() => {
-                setActiveMainTab('history');
-                void loadHistory('all');
-              }}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                activeMainTab === 'history'
-                  ? 'bg-background text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <History className="w-3.5 h-3.5 text-primary" />
-              <span>Sürüm Geçmişi & SQLite Günlüğü</span>
-              {historyReleases.length > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-mono font-bold">
-                  {historyReleases.length}
-                </span>
-              )}
-            </button>
+            <Tooltip content="SQLite veritabanındaki sürüm ve denetim kayıtları" position="bottom">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveMainTab('history');
+                  void loadHistory('all');
+                }}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  activeMainTab === 'history'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <History className="w-3.5 h-3.5 text-primary" />
+                <span>Sürüm Geçmişi & SQLite Günlüğü</span>
+                {historyReleases.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-mono font-bold">
+                    {historyReleases.length}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowStoreTestModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer"
-            >
-              <Key className="w-3.5 h-3.5 text-primary" />
-              <span>API Kimliklerini Yapılandır</span>
-            </button>
+            <Tooltip content="Google Play, App Store ve AI kimliklerini yapılandır" position="bottom">
+              <button
+                onClick={() => setShowStoreTestModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer"
+              >
+                <Key className="w-3.5 h-3.5 text-primary" />
+                <span>API Kimliklerini Yapılandır</span>
+              </button>
+            </Tooltip>
 
-            <button
-              onClick={() => void handleSyncStores()}
-              disabled={isSyncingStores}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer disabled:opacity-60"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
-              <span>{isSyncingStores ? 'Taranıyor...' : 'Mağaza Senkronizasyonu'}</span>
-            </button>
+            <Tooltip content="Canlı mağaza sürümlerini API üzerinden senkronize et" position="bottom">
+              <button
+                onClick={() => void handleSyncStores()}
+                disabled={isSyncingStores}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
+                <span>{isSyncingStores ? 'Taranıyor...' : 'Mağaza Senkronizasyonu'}</span>
+              </button>
+            </Tooltip>
           </div>
         </header>
 
@@ -2618,21 +2695,24 @@ export default function App() {
 
                     <div className="flex items-center shrink-0">
                       {canSyncToHigher ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleSyncStoreVersion('smart')}
-                          disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                          title="Düşük olan sürümü büyük olan sürüme yükselterek mağazalarla eşitler"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : `Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`}</span>
-                        </button>
+                        <Tooltip content="Düşük olan yerel sürümü canlı mağaza sürümüne otomatik eşitler" position="top">
+                          <button
+                            type="button"
+                            onClick={() => void handleSyncStoreVersion('smart')}
+                            disabled={isSyncingStoreVersion}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
+                            <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : `Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`}</span>
+                          </button>
+                        </Tooltip>
                       ) : areAllInSync ? (
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-semibold text-xs">
-                          <CheckCircle2 className="w-4 h-4 text-foreground" />
-                          <span>Sürümler Eşit (v{highestVersion} #{highestBuildNumber})</span>
-                        </div>
+                        <Tooltip content="Yerel pubspec.yaml ile canlı mağaza sürümleri birebir uyumlu" position="top">
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-semibold text-xs cursor-default">
+                            <CheckCircle2 className="w-4 h-4 text-foreground" />
+                            <span>Sürümler Eşit (v{highestVersion} #{highestBuildNumber})</span>
+                          </div>
+                        </Tooltip>
                       ) : null}
                     </div>
                   </div>
@@ -2661,19 +2741,30 @@ export default function App() {
                 </h4>
 
                 <div className="grid grid-cols-4 gap-2">
-                  {(['patch', 'minor', 'major', 'custom'] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setBumpType(type)}
-                      className={`px-3 py-2 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer border ${
-                        bumpType === type
-                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                          : 'bg-background text-muted-foreground border-border hover:bg-secondary hover:text-foreground'
-                      }`}
-                    >
-                      {type === 'custom' ? 'Özel Sürüm' : type}
-                    </button>
-                  ))}
+                  {(['patch', 'minor', 'major', 'custom'] as const).map((type) => {
+                    const tipText =
+                      type === 'patch'
+                        ? 'Hata düzeltmeleri için sürümü artırır'
+                        : type === 'minor'
+                        ? 'Geriye dönük uyumlu yeni özellikler için sürümü artırır'
+                        : type === 'major'
+                        ? 'Kırıcı ve büyük mimari değişiklikler için sürümü artırır'
+                        : 'Hedef sürüm numarasını kendiniz belirleyin';
+                    return (
+                      <Tooltip key={type} content={tipText} position="top">
+                        <button
+                          onClick={() => setBumpType(type)}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer border ${
+                            bumpType === type
+                              ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                              : 'bg-background text-muted-foreground border-border hover:bg-secondary hover:text-foreground'
+                          }`}
+                        >
+                          {type === 'custom' ? 'Özel Sürüm' : type}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
                 </div>
 
                 {bumpType === 'custom' && (
@@ -2729,56 +2820,62 @@ export default function App() {
 
                 {/* HIZLI PLATFORM SEÇİCİ (SEGMENTED CONTROL) */}
                 <div className="p-1.5 bg-secondary/60 rounded-xl border border-border flex flex-col sm:flex-row items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => applyPlatformMode('android')}
-                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      platformMode === 'android'
-                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <GooglePlayIcon className="w-4 h-4 shrink-0" />
-                    <span>Sadece Android</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
-                      AAB (~1.5 dk)
-                    </span>
-                  </button>
+                  <Tooltip content="Google Play için AAB derlemesi ve yayınlama" position="top" className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => applyPlatformMode('android')}
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        platformMode === 'android'
+                          ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <GooglePlayIcon className="w-4 h-4 shrink-0" />
+                      <span>Sadece Android</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
+                        AAB (~1.5 dk)
+                      </span>
+                    </button>
+                  </Tooltip>
 
-                  <button
-                    type="button"
-                    onClick={() => applyPlatformMode('ios')}
-                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      platformMode === 'ios'
-                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
-                    <span>Sadece iOS</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
-                      IPA (~2.5 dk)
-                    </span>
-                  </button>
+                  <Tooltip content="App Store Connect için IPA derlemesi ve TestFlight dağıtımı" position="top" className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => applyPlatformMode('ios')}
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        platformMode === 'ios'
+                          ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
+                      <span>Sadece iOS</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
+                        IPA (~2.5 dk)
+                      </span>
+                    </button>
+                  </Tooltip>
 
-                  <button
-                    type="button"
-                    onClick={() => applyPlatformMode('all')}
-                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                      platformMode === 'all'
-                        ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }`}
-                  >
-                    <span className="flex items-center -space-x-1">
-                      <GooglePlayIcon className="w-3.5 h-3.5" />
-                      <AppStoreConnectIcon className="w-3.5 h-3.5" />
-                    </span>
-                    <span>Tüm Platformlar</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
-                      İkisi Birden
-                    </span>
-                  </button>
+                  <Tooltip content="Android (AAB) ve iOS (IPA) eş zamanlı tam dağıtım" position="top" className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => applyPlatformMode('all')}
+                      className={`w-full py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        platformMode === 'all'
+                          ? 'bg-background text-foreground shadow-xs border border-border ring-1 ring-border'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }`}
+                    >
+                      <span className="flex items-center -space-x-1">
+                        <GooglePlayIcon className="w-3.5 h-3.5" />
+                        <AppStoreConnectIcon className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Tüm Platformlar</span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
+                        İkisi Birden
+                      </span>
+                    </button>
+                  </Tooltip>
                 </div>
 
                 {/* AKILLI DEĞİŞİKLİK TESPİTİ (SMART GIT CHANGE DETECTION BANNER) */}
@@ -2843,7 +2940,7 @@ export default function App() {
                           onChange={(e) => {
                             const isChecked = e.target.checked;
                             if (!isChecked && !targetIos) {
-                              alert('En az bir platform (Android veya iOS) seçili olmalıdır.');
+                              toast.warning('En az bir platform (Android veya iOS) seçili olmalıdır.', 'Platform Seçimi');
                               return;
                             }
                             setTargetAndroid(isChecked);
@@ -2921,7 +3018,7 @@ export default function App() {
                           onChange={(e) => {
                             const isChecked = e.target.checked;
                             if (!isChecked && !targetAndroid) {
-                              alert('En az bir platform (Android veya iOS) seçili olmalıdır.');
+                              toast.warning('En az bir platform (Android veya iOS) seçili olmalıdır.', 'Platform Seçimi');
                               return;
                             }
                             setTargetIos(isChecked);
@@ -2989,30 +3086,33 @@ export default function App() {
                       </select>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveStoreTab('ai');
-                        setShowStoreTestModal(true);
-                      }}
-                      className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors cursor-pointer"
-                      title="API Anahtarlarını ve Modelleri Yönet"
-                    >
-                      API Ayarları
-                    </button>
+                    <Tooltip content="Yapay zeka modelleri ve API anahtarlarını yönet" position="top">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveStoreTab('ai');
+                          setShowStoreTestModal(true);
+                        }}
+                        className="px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded-lg hover:bg-secondary transition-colors cursor-pointer"
+                      >
+                        API Ayarları
+                      </button>
+                    </Tooltip>
 
-                    <button
-                      onClick={() => void handleGenerateAI()}
-                      disabled={isGeneratingAI || commits.length === 0}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
-                        (!releaseNotesTR.trim() || !releaseNotesEN.trim()) && commits.length > 0
-                          ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:opacity-90 ring-2 ring-primary/30'
-                          : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border'
-                      }`}
-                    >
-                      <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
-                      <span>{isGeneratingAI ? 'Yapay Zeka Yazıyor...' : 'Commitlerden Üret'}</span>
-                    </button>
+                    <Tooltip content="Git geçmişindeki commitleri analiz ederek çift dilli sürüm notu üretir" position="top">
+                      <button
+                        onClick={() => void handleGenerateAI()}
+                        disabled={isGeneratingAI || commits.length === 0}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                          (!releaseNotesTR.trim() || !releaseNotesEN.trim()) && commits.length > 0
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm hover:opacity-90 ring-2 ring-primary/30'
+                            : 'bg-secondary text-secondary-foreground hover:bg-secondary/80 border-border'
+                        }`}
+                      >
+                        <Sparkles className={`w-3.5 h-3.5 ${isGeneratingAI ? 'animate-spin' : ''}`} />
+                        <span>{isGeneratingAI ? 'Yapay Zeka Yazıyor...' : 'Commitlerden Üret'}</span>
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
 
@@ -3021,14 +3121,16 @@ export default function App() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">Türkçe (Google Play / App Store TR)</span>
-                      <button
-                        onClick={() => handleCopyNotes('tr')}
-                        disabled={!releaseNotesTR.trim()}
-                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {copiedLang === 'tr' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
-                        <span>Kopyala</span>
-                      </button>
+                      <Tooltip content="Türkçe sürüm notunu panoya kopyala" position="top">
+                        <button
+                          onClick={() => handleCopyNotes('tr')}
+                          disabled={!releaseNotesTR.trim()}
+                          className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {copiedLang === 'tr' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
+                          <span>Kopyala</span>
+                        </button>
+                      </Tooltip>
                     </div>
                     <textarea
                       rows={6}
@@ -3049,14 +3151,16 @@ export default function App() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">İngilizce (Global Store)</span>
-                      <button
-                        onClick={() => handleCopyNotes('en')}
-                        disabled={!releaseNotesEN.trim()}
-                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        {copiedLang === 'en' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
-                        <span>Kopyala</span>
-                      </button>
+                      <Tooltip content="İngilizce sürüm notunu panoya kopyala" position="top">
+                        <button
+                          onClick={() => handleCopyNotes('en')}
+                          disabled={!releaseNotesEN.trim()}
+                          className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {copiedLang === 'en' ? <Check className="w-3 h-3 text-foreground" /> : <Copy className="w-3 h-3" />}
+                          <span>Kopyala</span>
+                        </button>
+                      </Tooltip>
                     </div>
                     <textarea
                       rows={6}
@@ -3138,43 +3242,57 @@ export default function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <button
-                    onClick={() => void handleStartRelease()}
-                    disabled={isCurrentProjectReleasing || !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)}
-                    className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-sm shadow transition-all cursor-pointer ${
-                      !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)
-                        ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
-                        : 'bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
-                    }`}
-                    title={!releaseNotesTR.trim() || !releaseNotesEN.trim() ? 'Dağıtımı başlatmak için sürüm notları gereklidir' : 'Sürüm Dağıtımını Başlat'}
-                  >
-                    <Rocket className={`w-4 h-4 ${isCurrentProjectReleasing ? 'animate-bounce' : ''}`} />
-                    <span>
-                      {isCurrentProjectReleasing
-                        ? `Dağıtım Yürütülüyor (${currentActiveStep}/6)...`
-                        : !releaseNotesTR.trim() || !releaseNotesEN.trim()
-                        ? 'Sürüm Notları Gerekli (AI ile Üretin)'
+                  <Tooltip
+                    content={
+                      !releaseNotesTR.trim() || !releaseNotesEN.trim()
+                        ? 'Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları gereklidir'
                         : !targetAndroid && !targetIos
-                        ? 'Platform Seçilmedi'
-                        : targetAndroid && !targetIos
-                        ? 'Hızlı Başlat (Sadece Android)'
-                        : !targetAndroid && targetIos
-                        ? 'Hızlı Başlat (Sadece iOS)'
-                        : 'Sürüm Dağıtımını Başlat'}
-                    </span>
-                  </button>
+                        ? 'Lütfen en az bir platform seçin (Android veya iOS)'
+                        : isCurrentProjectReleasing
+                        ? 'Dağıtım süreci yürütülüyor...'
+                        : 'Yapılandırılan ayarlarla 6 aşamalı dağıtım sürecini başlatır'
+                    }
+                    position="top"
+                    className="w-full"
+                  >
+                    <button
+                      onClick={() => void handleStartRelease()}
+                      disabled={isCurrentProjectReleasing || !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)}
+                      className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-sm shadow transition-all cursor-pointer ${
+                        !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)
+                          ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
+                          : 'bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      <Rocket className={`w-4 h-4 ${isCurrentProjectReleasing ? 'animate-bounce' : ''}`} />
+                      <span>
+                        {isCurrentProjectReleasing
+                          ? `Dağıtım Yürütülüyor (${currentActiveStep}/6)...`
+                          : !releaseNotesTR.trim() || !releaseNotesEN.trim()
+                          ? 'Sürüm Notları Gerekli (AI ile Üretin)'
+                          : !targetAndroid && !targetIos
+                          ? 'Platform Seçilmedi'
+                          : targetAndroid && !targetIos
+                          ? 'Hızlı Başlat (Sadece Android)'
+                          : !targetAndroid && targetIos
+                          ? 'Hızlı Başlat (Sadece iOS)'
+                          : 'Sürüm Dağıtımını Başlat'}
+                      </span>
+                    </button>
+                  </Tooltip>
 
                   {/* İPTAL ET / SIFIRLA BUTONU (Bu proje dağıtılıyorsa gösterilir) */}
                   {isCurrentProjectReleasing && (
-                    <button
-                      type="button"
-                      onClick={() => void handleCancelRelease()}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 border border-destructive/20 transition-all cursor-pointer"
-                      title="Bu projenin takılan veya yürütülen dağıtım sürecini sıfırla/iptal et"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>Bu Projenin Dağıtımını İptal Et / Sıfırla</span>
-                    </button>
+                    <Tooltip content="Çalışan dağıtım sürecini durdurur ve durumu sıfırlar" position="bottom" className="w-full">
+                      <button
+                        type="button"
+                        onClick={() => void handleCancelRelease()}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive hover:bg-destructive/10 border border-destructive/20 transition-all cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Bu Projenin Dağıtımını İptal Et / Sıfırla</span>
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
 
@@ -3200,20 +3318,25 @@ export default function App() {
 
                 <div className="space-y-1.5 max-h-[480px] overflow-y-auto pr-1">
                   {currentSteps.map((step) => (
-                    <div
+                    <Tooltip
                       key={step.id}
-                      className={`flex items-center justify-between p-2 rounded-md text-xs border transition-all ${
-                        step.status === 'running'
-                          ? 'bg-secondary border-border text-foreground font-semibold'
-                          : step.status === 'success'
-                          ? 'bg-secondary/40 border-border text-muted-foreground'
-                          : step.status === 'skipped'
-                          ? 'bg-muted/40 border-border/40 text-muted-foreground/60'
-                          : step.status === 'failed'
-                          ? 'bg-destructive/10 border-destructive/30 text-destructive font-semibold'
-                          : 'bg-background border-border text-muted-foreground'
-                      }`}
+                      content={`Aşama ${step.id}: ${step.name} • Durum: ${step.status.toUpperCase()}`}
+                      position="left"
+                      className="w-full"
                     >
+                      <div
+                        className={`w-full flex items-center justify-between p-2 rounded-md text-xs border transition-all ${
+                          step.status === 'running'
+                            ? 'bg-secondary border-border text-foreground font-semibold'
+                            : step.status === 'success'
+                            ? 'bg-secondary/40 border-border text-muted-foreground'
+                            : step.status === 'skipped'
+                            ? 'bg-muted/40 border-border/40 text-muted-foreground/60'
+                            : step.status === 'failed'
+                            ? 'bg-destructive/10 border-destructive/30 text-destructive font-semibold'
+                            : 'bg-background border-border text-muted-foreground'
+                        }`}
+                      >
                       <div className="flex items-center gap-2 truncate">
                         <span className="font-mono text-[10px] w-4 text-muted-foreground">
                           {step.id}
@@ -3250,6 +3373,7 @@ export default function App() {
                         )}
                       </div>
                     </div>
+                  </Tooltip>
                   ))}
                 </div>
               </div>
@@ -3444,63 +3568,76 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-2 self-start md:self-auto">
-                <button
-                  type="button"
-                  onClick={() => void loadHistory(historyFilter)}
-                  disabled={isLoadingHistory}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHistory ? 'animate-spin text-primary' : ''}`} />
-                  <span>{isLoadingHistory ? 'Yenileniyor...' : 'Veritabanını Yenile'}</span>
-                </button>
+                <Tooltip content="SQLite veritabanından en güncel kayıtları yeniden çek" position="left">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void loadHistory(historyFilter);
+                      toast.info('Veritabanı kayıtları güncellendi.', 'Yenilendi');
+                    }}
+                    disabled={isLoadingHistory}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHistory ? 'animate-spin text-primary' : ''}`} />
+                    <span>{isLoadingHistory ? 'Yenileniyor...' : 'Veritabanını Yenile'}</span>
+                  </button>
+                </Tooltip>
               </div>
             </div>
 
             {/* 4 KPI / İSTATİSTİK KARTI */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Toplam Dağıtım</span>
-                  <Rocket className="w-4 h-4 text-primary" />
+              <Tooltip content="Tüm projeler için oluşturulan toplam sürüm sayısı" position="top">
+                <div className="w-full p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    <span>Toplam Dağıtım</span>
+                    <Rocket className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                    {historyReleases.length}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">Kayıtlı sürüm paketi</div>
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-foreground">
-                  {historyReleases.length}
-                </div>
-                <div className="text-[11px] text-muted-foreground">Kayıtlı sürüm paketi</div>
-              </div>
+              </Tooltip>
 
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Başarılı Dağıtımlar</span>
-                  <CheckCircle2 className="w-4 h-4 text-foreground" />
+              <Tooltip content="Başarıyla tamamlanıp mağazalara iletilen sürümler" position="top">
+                <div className="w-full p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    <span>Başarılı Dağıtımlar</span>
+                    <CheckCircle2 className="w-4 h-4 text-foreground" />
+                  </div>
+                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                    {historyReleases.filter(r => r.status === 'RELEASED').length}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">Mağazalara teslim edildi</div>
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-foreground">
-                  {historyReleases.filter(r => r.status === 'RELEASED').length}
-                </div>
-                <div className="text-[11px] text-muted-foreground">Mağazalara teslim edildi</div>
-              </div>
+              </Tooltip>
 
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Hata Alan Dağıtımlar</span>
-                  <AlertCircle className="w-4 h-4 text-destructive" />
+              <Tooltip content="Derleme, test veya yükleme sırasında hata alan sürümler" position="top">
+                <div className="w-full p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    <span>Hata Alan Dağıtımlar</span>
+                    <AlertCircle className="w-4 h-4 text-destructive" />
+                  </div>
+                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                    {historyReleases.filter(r => r.status === 'FAILED').length}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">Düzeltme ve yeniden deneme</div>
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-foreground">
-                  {historyReleases.filter(r => r.status === 'FAILED').length}
-                </div>
-                <div className="text-[11px] text-muted-foreground">Düzeltme ve yeniden deneme</div>
-              </div>
+              </Tooltip>
 
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
-                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
-                  <span>Denetim Kayıtları</span>
-                  <FileText className="w-4 h-4 text-foreground" />
+              <Tooltip content="SQLite veritabanındaki denetim ve operasyon logları" position="top">
+                <div className="w-full p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                    <span>Denetim Kayıtları</span>
+                    <FileText className="w-4 h-4 text-foreground" />
+                  </div>
+                  <div className="text-2xl font-extrabold font-mono text-foreground">
+                    {auditLogs.length}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">SQLite işlem günlüğü</div>
                 </div>
-                <div className="text-2xl font-extrabold font-mono text-foreground">
-                  {auditLogs.length}
-                </div>
-                <div className="text-[11px] text-muted-foreground">SQLite işlem günlüğü</div>
-              </div>
+              </Tooltip>
             </div>
 
             {/* FİLTRELEME VE ARAMA ÇUBUĞU */}
@@ -3508,35 +3645,39 @@ export default function App() {
               <div className="flex flex-wrap items-center gap-2">
                 {/* Proje Filtresi */}
                 <div className="flex items-center p-0.5 bg-secondary rounded-lg border border-border">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHistoryFilter('all');
-                      void loadHistory('all');
-                    }}
-                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                      historyFilter === 'all'
-                        ? 'bg-background text-foreground shadow-2xs'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Tüm Projeler
-                  </button>
-                  {projectName && (
+                  <Tooltip content="Sistemdeki tüm kayıtlı projelerin geçmişi" position="top">
                     <button
                       type="button"
                       onClick={() => {
-                        setHistoryFilter('current');
-                        void loadHistory('current');
+                        setHistoryFilter('all');
+                        void loadHistory('all');
                       }}
                       className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                        historyFilter === 'current'
+                        historyFilter === 'all'
                           ? 'bg-background text-foreground shadow-2xs'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {projectName}
+                      Tüm Projeler
                     </button>
+                  </Tooltip>
+                  {projectName && (
+                    <Tooltip content={`Yalnızca "${projectName}" projesine ait dağıtımlar`} position="top">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryFilter('current');
+                          void loadHistory('current');
+                        }}
+                        className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                          historyFilter === 'current'
+                            ? 'bg-background text-foreground shadow-2xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {projectName}
+                      </button>
+                    </Tooltip>
                   )}
                 </div>
 
@@ -4052,14 +4193,16 @@ export default function App() {
                     <span>Tüm projeler için genel (global) anahtar olarak kaydet</span>
                   </label>
 
-                  <button
-                    type="submit"
-                    disabled={isSavingGoogle || (!googleJsonInput.trim() && !googlePathInput.trim())}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
-                  >
-                    <Save className={`w-3.5 h-3.5 ${isSavingGoogle ? 'animate-spin' : ''}`} />
-                    <span>{isSavingGoogle ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
-                  </button>
+                  <Tooltip content="Google Play Service Account kimliğini test eder ve kalıcı olarak kaydeder" position="top">
+                    <button
+                      type="submit"
+                      disabled={isSavingGoogle || (!googleJsonInput.trim() && !googlePathInput.trim())}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    >
+                      <Save className={`w-3.5 h-3.5 ${isSavingGoogle ? 'animate-spin' : ''}`} />
+                      <span>{isSavingGoogle ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
+                    </button>
+                  </Tooltip>
                 </div>
               </form>
             )}
@@ -4158,14 +4301,16 @@ export default function App() {
                     <span>Tüm projeler için genel (global) anahtar olarak kaydet</span>
                   </label>
 
-                  <button
-                    type="submit"
-                    disabled={isSavingApple || !appleKeyIdInput.trim() || !appleIssuerIdInput.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
-                  >
-                    <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
-                    <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
-                  </button>
+                  <Tooltip content="Apple App Store Connect API anahtarını test eder ve kalıcı olarak kaydeder" position="top">
+                    <button
+                      type="submit"
+                      disabled={isSavingApple || !appleKeyIdInput.trim() || !appleIssuerIdInput.trim()}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:opacity-90 cursor-pointer disabled:opacity-50"
+                    >
+                      <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
+                      <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
+                    </button>
+                  </Tooltip>
                 </div>
 
                 {/* CANLI APP STORE CONNECT HESAP UYGULAMALARI */}
@@ -4539,23 +4684,27 @@ export default function App() {
                   </label>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleTestAI()}
-                      disabled={isTestingAI || isSavingAI}
-                      className="px-3.5 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      {isTestingAI ? 'Test Ediliyor...' : 'Bağlantıyı Test Et'}
-                    </button>
+                    <Tooltip content="Seçilen yapay zeka modeline test isteği göndererek doğrular" position="top">
+                      <button
+                        type="button"
+                        onClick={() => void handleTestAI()}
+                        disabled={isTestingAI || isSavingAI}
+                        className="px-3.5 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {isTestingAI ? 'Test Ediliyor...' : 'Bağlantıyı Test Et'}
+                      </button>
+                    </Tooltip>
 
-                    <button
-                      type="submit"
-                      disabled={isSavingAI}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
-                    >
-                      <Save className={`w-3.5 h-3.5 ${isSavingAI ? 'animate-spin' : ''}`} />
-                      <span>{isSavingAI ? 'Kaydediliyor...' : 'Ayarları Kaydet'}</span>
-                    </button>
+                    <Tooltip content="Yapay zeka model ve anahtar yapılandırmasını kaydeder" position="top">
+                      <button
+                        type="submit"
+                        disabled={isSavingAI}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                      >
+                        <Save className={`w-3.5 h-3.5 ${isSavingAI ? 'animate-spin' : ''}`} />
+                        <span>{isSavingAI ? 'Kaydediliyor...' : 'Ayarları Kaydet'}</span>
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               </form>
