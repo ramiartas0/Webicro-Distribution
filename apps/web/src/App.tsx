@@ -26,7 +26,8 @@ import {
   X,
   Info,
   Save,
-  Compass
+  Compass,
+  Trash2
 } from 'lucide-react';
 
 interface CommitItem {
@@ -496,6 +497,31 @@ export default function App() {
     }
   };
 
+  // PROJEYİ LİSTEDEN KALDIR
+  const handleRemoveProject = async (e: React.MouseEvent, projectPath: string, projectName: string) => {
+    e.stopPropagation();
+    if (!window.confirm(`"${projectName}" projesini listeden kaldırmak istediğinize emin misiniz?`)) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/projects/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: projectPath }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { projects: ProjectEntry[]; activePath: string };
+        setProjects(data.projects || []);
+        if (data.activePath) {
+          setActiveProjectPath(data.activePath);
+        }
+        await fetchProjectDetails();
+      }
+    } catch (err) {
+      console.error('Proje kaldırma hatası:', err);
+    }
+  };
+
   // GEÇMİŞ SÜRÜMLERİ YÜKLE
   const loadHistory = async () => {
     try {
@@ -849,20 +875,30 @@ export default function App() {
               >
                 {/* PROJE ADI & KARŞILAŞTIRMA ROZETİ */}
                 <div className="flex items-start justify-between gap-1 mb-1">
-                  <div className="font-semibold text-xs text-foreground truncate max-w-[160px]" title={p.name}>
+                  <div className="font-semibold text-xs text-foreground truncate max-w-[145px]" title={p.name}>
                     {p.name}
                   </div>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                    comp?.comparisonStatus === 'UPDATE_READY'
-                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                      : comp?.comparisonStatus === 'UP_TO_DATE'
-                      ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
-                      : comp?.comparisonStatus === 'NEW_APP'
-                      ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
-                      : 'bg-muted text-muted-foreground border border-border'
-                  }`}>
-                    {comp?.badge || 'Bekliyor'}
-                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                      comp?.comparisonStatus === 'UPDATE_READY'
+                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        : comp?.comparisonStatus === 'UP_TO_DATE'
+                        ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                        : comp?.comparisonStatus === 'NEW_APP'
+                        ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                        : 'bg-muted text-muted-foreground border border-border'
+                    }`}>
+                      {comp?.badge || 'Bekliyor'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => void handleRemoveProject(e, p.path, p.name)}
+                      title="Projeyi Listeden Kaldır"
+                      className="p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* PAKET / BUNDLE ID */}

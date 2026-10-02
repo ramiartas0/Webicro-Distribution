@@ -241,6 +241,71 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
   return results;
 }
 
+/**
+ * Mükerrer (duplicate) Flutter projelerini eler.
+ * Mağazada yayında olan (live), sürüm karşılığı bulunan ve daha güncel olan projeyi korur.
+ */
+export function deduplicateProjects(projects: ProjectEntry[], activePath?: string): ProjectEntry[] {
+  const scoreProject = (p: ProjectEntry): number => {
+    let score = 0;
+    // 1. Aktif proje ise öncelik ver
+    if (activePath && path.resolve(p.path) === path.resolve(activePath)) {
+      score += 10000;
+    }
+    // 2. Mağazada canlı sürüm varsa yüksek öncelik
+    const gpLive = p.stores?.googlePlay?.status === 'live';
+    const asLive = p.stores?.appStore?.status === 'live';
+    if (gpLive || asLive) {
+      score += 3000;
+    }
+    if (gpLive && asLive) {
+      score += 2000;
+    }
+    // 3. Karşılaştırma durumu
+    if (p.stores?.comparisonStatus === 'UPDATE_READY' || p.stores?.comparisonStatus === 'UP_TO_DATE') {
+      score += 1500;
+    }
+    // 4. Build numarası ve versiyon
+    score += (p.buildNumber || 0);
+    // 5. Pubspec varlığı
+    if (p.hasPubspec) {
+      score += 100;
+    }
+    return score;
+  };
+
+  // Skorlara göre azalan sırada sırala (en kaliteli / en güncel / canlı olan en başta)
+  const sorted = [...projects].sort((a, b) => scoreProject(b) - scoreProject(a));
+
+  const seenPackages = new Set<string>();
+  const seenNames = new Set<string>();
+  const seenPaths = new Set<string>();
+  const result: ProjectEntry[] = [];
+
+  for (const p of sorted) {
+    const resolvedP = path.resolve(p.path);
+    if (seenPaths.has(resolvedP)) continue;
+
+    const normName = p.name.trim().toLowerCase().replace(/[-_]/g, '');
+    const normPkg = p.package ? p.package.trim().toLowerCase() : '';
+
+    // Eğer aynı paket adına veya aynı normalize isme sahip proje daha önce eklendiyse (yani daha yüksek skorlu olanı zaten aldıysak), bunu atla!
+    if (normPkg && seenPackages.has(normPkg)) {
+      continue;
+    }
+    if (normName && seenNames.has(normName)) {
+      continue;
+    }
+
+    if (normPkg) seenPackages.add(normPkg);
+    if (normName) seenNames.add(normName);
+    seenPaths.add(resolvedP);
+    result.push(p);
+  }
+
+  return result;
+}
+
 export interface StoreCredentials {
   googlePlay?: {
     serviceAccountEmail?: string;
@@ -730,14 +795,18 @@ export const uiCommand = new Command('ui')
         list = list.filter(p => path.resolve(p.path) !== path.resolve(process.cwd()));
       }
 
+      // Mükerrer (duplicate) projeleri temizle: Mağazada canlı ve güncel olanı koru
+      list = deduplicateProjects(list, activeProjectDir);
+
       return list;
     };
 
     const saveStoredProjects = (projects: ProjectEntry[]) => {
       try {
+        const deduped = deduplicateProjects(projects, activeProjectDir);
         const dir = path.dirname(projectsFile);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(projectsFile, JSON.stringify(projects, null, 2), 'utf8');
+        fs.writeFileSync(projectsFile, JSON.stringify(deduped, null, 2), 'utf8');
       } catch {
         // Hata
       }
@@ -952,6 +1021,35 @@ export const uiCommand = new Command('ui')
             activeProjectDir = resolvedPath;
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true, activePath: activeProjectDir, projects: currentList }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 3.1 POST /api/projects/remove - Projeyi Listeden Kaldırma
+      if (req.method === 'POST' && pathname === '/api/projects/remove') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+          try {
+            const payload = JSON.parse(body || '{}') as { path?: string; id?: string };
+            const currentList = getStoredProjects();
+            const filtered = currentList.filter(p => {
+              if (payload.path && path.resolve(p.path) === path.resolve(payload.path)) return false;
+              if (payload.id && p.id === payload.id) return false;
+              return true;
+            });
+            saveStoredProjects(filtered);
+            if (activeProjectDir && payload.path && path.resolve(activeProjectDir) === path.resolve(payload.path)) {
+              if (filtered[0]) {
+                activeProjectDir = filtered[0].path;
+              }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, activePath: activeProjectDir, projects: filtered }));
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: String(err) }));
