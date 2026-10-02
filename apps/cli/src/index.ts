@@ -6,6 +6,7 @@ import { retryCommand } from './commands/retry.js';
 import { rollbackCommand } from './commands/rollback.js';
 import { logsCommand } from './commands/logs.js';
 import { approveCommand } from './commands/approve.js';
+import { uiCommand } from './commands/ui.js';
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
     .description('AI-Powered Flutter Release Orchestrator');
 
   program.addCommand(releaseCommand, { isDefault: true });
+  program.addCommand(uiCommand);
   program.addCommand(statusCommand);
   program.addCommand(resumeCommand);
   program.addCommand(retryCommand);

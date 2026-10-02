@@ -4,7 +4,7 @@ packages:
 
 allowBuilds:
   better-sqlite3: true
-  esbuild: set this to true or false
+  esbuild: true
 
 catalog:
   # CLI & Terminal
