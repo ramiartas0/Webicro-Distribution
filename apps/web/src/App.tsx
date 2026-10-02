@@ -149,6 +149,19 @@ interface StoreTestResult {
 
 export type GoogleTrack = 'internal' | 'alpha' | 'beta' | 'production';
 
+export function compareSemver(v1: string, v2: string): number {
+  const p1 = v1.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = v2.replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++) {
+    const num1 = p1[i] ?? 0;
+    const num2 = p2[i] ?? 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+}
+
 export function isValidGoogleTrack(val: unknown): val is GoogleTrack {
   return val === 'internal' || val === 'alpha' || val === 'beta' || val === 'production';
 }
@@ -2203,16 +2216,6 @@ export default function App() {
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
               <span>{isSyncingStores ? 'Taranıyor...' : 'Mağaza Senkronizasyonu'}</span>
             </button>
-
-            <button
-              onClick={() => void handleSyncStoreVersion('smart')}
-              disabled={isSyncingStoreVersion}
-              title="Yerel pubspec.yaml dosyasını mağazadaki en yüksek canlı sürüme eşitler"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-600/30 bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600 hover:text-white text-xs font-medium transition-all cursor-pointer disabled:opacity-60"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-              <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : '⚡ Sürümü Eşitle'}</span>
-            </button>
           </div>
         </header>
 
@@ -2220,29 +2223,51 @@ export default function App() {
           <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
           {/* ===================== CANLI STORE KARŞILAŞTIRMA MATRİSİ ===================== */}
           <section className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-            {/* HESAPLANAN MAĞAZA VE EŞİTLİK DEĞİŞKENLERİ */}
+            {/* HESAPLANAN MAĞAZA VE EN YÜKSEK SÜRÜM DEĞİŞKENLERİ */}
             {(() => {
-              const googleVer = activeComparison?.googlePlay?.version ? activeComparison.googlePlay.version.replace(/^v/, '') : undefined;
-              const googleCode = activeComparison?.googlePlay?.versionCode;
-              const isGoogleLive = activeComparison?.googlePlay?.status === 'live';
-              const currentVerClean = currentVersion ? currentVersion.replace(/^v/, '') : '';
-              const isLocalEqualGoogle = Boolean(
-                isGoogleLive &&
-                googleVer === currentVerClean &&
-                googleCode === currentBuildNumber
-              );
+              const googleVer = activeComparison?.googlePlay?.status === 'live' && activeComparison.googlePlay.version
+                ? activeComparison.googlePlay.version.replace(/^v/, '')
+                : '';
+              const googleCode = activeComparison?.googlePlay?.status === 'live' && activeComparison.googlePlay.versionCode
+                ? activeComparison.googlePlay.versionCode
+                : 0;
 
-              const appleVerRaw = activeComparison?.appStore?.version ? activeComparison.appStore.version.replace(/^v/, '') : undefined;
-              const appleVerSem = appleVerRaw ? (appleVerRaw.split('.').length === 2 ? `${appleVerRaw}.0` : appleVerRaw) : undefined;
-              const appleBuildParsed = activeComparison?.appStore?.buildNumber ? parseInt(activeComparison.appStore.buildNumber, 10) : undefined;
-              const isAppleLive = activeComparison?.appStore?.status === 'live';
-              const isLocalEqualApple = Boolean(
-                isAppleLive &&
-                appleVerSem === currentVerClean &&
-                appleBuildParsed === currentBuildNumber
-              );
+              let appleVer = '';
+              let appleCode = 0;
+              if (activeComparison?.appStore?.status === 'live') {
+                if (activeComparison.appStore.version) {
+                  const cleanAppVer = activeComparison.appStore.version.replace(/^v/, '');
+                  appleVer = cleanAppVer.split('.').length === 2 ? `${cleanAppVer}.0` : cleanAppVer;
+                }
+                if (activeComparison.appStore.buildNumber) {
+                  const parsed = parseInt(activeComparison.appStore.buildNumber, 10);
+                  if (!isNaN(parsed)) appleCode = parsed;
+                }
+              }
 
-              const isOutOfSyncWithAnyStore = (isGoogleLive && !isLocalEqualGoogle) || (isAppleLive && !isLocalEqualApple);
+              const currentVerClean = currentVersion ? currentVersion.replace(/^v/, '') : '1.0.0';
+              const currentCode = currentBuildNumber || 1;
+
+              // 1. Google Play, App Store ve Yerel Kod arasındaki EN BÜYÜK sürümü bul
+              let highestVersion = currentVerClean;
+              if (googleVer && compareSemver(highestVersion, googleVer) < 0) {
+                highestVersion = googleVer;
+              }
+              if (appleVer && compareSemver(highestVersion, appleVer) < 0) {
+                highestVersion = appleVer;
+              }
+
+              // 2. EN BÜYÜK build numarasını bul
+              const highestBuildNumber = Math.max(currentCode, googleCode, appleCode);
+
+              // 3. Eşitlik kontrolü (Mağazalar ve yerel hepsi bu büyük sürüme eşit mi?)
+              const hasAnyStoreLive = Boolean(googleVer || appleVer);
+              const isGoogleEqual = !googleVer || (googleVer === highestVersion && googleCode === highestBuildNumber);
+              const isAppleEqual = !appleVer || (appleVer === highestVersion && appleCode === highestBuildNumber);
+              const isLocalEqual = currentVerClean === highestVersion && currentCode === highestBuildNumber;
+
+              const areAllInSync = hasAnyStoreLive && isGoogleEqual && isAppleEqual && isLocalEqual;
+              const canSyncToHigher = hasAnyStoreLive && !areAllInSync;
 
               return (
                 <>
@@ -2256,24 +2281,11 @@ export default function App() {
                         Canlı Mağaza Karşılaştırma Matrisi (Store vs Local)
                       </h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Yerel kod tabanındaki sürüm ile Google Play ve Apple App Store sürümlerinin anlık karşılaştırması ve eşitleme merkezi.
+                        Yerel kod tabanındaki sürüm ile Google Play ve Apple App Store sürümlerinin anlık karşılaştırması.
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {isOutOfSyncWithAnyStore && (
-                        <button
-                          type="button"
-                          onClick={() => void handleSyncStoreVersion('smart')}
-                          disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                          title="Yerel pubspec.yaml dosyasını mağazalardaki en yüksek canlı sürüme eşitler"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : '⚡ Mağazalarla Eşitle (Akıllı)'}</span>
-                        </button>
-                      )}
-
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
                         activeComparison?.badge === 'Mağaza Daha İleri'
                           ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
@@ -2367,33 +2379,11 @@ export default function App() {
                             Hesap: {googlePlayInfo.serviceAccount ? googlePlayInfo.serviceAccount.split('@')[0] : 'play-store-deployer'}
                           </div>
                         </div>
-                        <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
-                          {activeComparison?.googlePlay?.message || 'Durum: Kontrol edildi'}
-                        </div>
                       </div>
 
-                      {/* GOOGLE PLAY VERSİYON EŞİTLEME AKSİYONU */}
-                      {isGoogleLive && (
-                        <div className="pt-2 border-t border-border/50">
-                          {isLocalEqualGoogle ? (
-                            <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium bg-emerald-500/10 py-1.5 px-2 rounded-md">
-                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Yerel kod Play Store ile eşit</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void handleSyncStoreVersion('google_play')}
-                              disabled={isSyncingStoreVersion}
-                              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              title="Yerel pubspec.yaml dosyasını Google Play canlı sürümüne eşitler"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                              <span>⚡ Google Play'e Eşitle (v{googleVer || currentVersion}+{googleCode || currentBuildNumber})</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                        {activeComparison?.googlePlay?.message || 'Durum: Kontrol edildi'}
+                      </div>
                     </div>
 
                     {/* 3. APPLE APP STORE CONNECT */}
@@ -2449,38 +2439,15 @@ export default function App() {
                             )}
                           </div>
                         </div>
-
-                        <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
-                          {activeComparison?.appStore?.message || 'Durum: Kontrol edildi'}
-                        </div>
                       </div>
 
-                      {/* APP STORE VERSİYON EŞİTLEME AKSİYONU */}
-                      {isAppleLive && (
-                        <div className="pt-2 border-t border-border/50">
-                          {isLocalEqualApple ? (
-                            <div className="flex items-center gap-1.5 text-xs text-sky-400 font-medium bg-sky-500/10 py-1.5 px-2 rounded-md">
-                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Yerel kod App Store ile eşit</span>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => void handleSyncStoreVersion('app_store')}
-                              disabled={isSyncingStoreVersion}
-                              className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-md bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              title="Yerel pubspec.yaml dosyasını Apple App Store canlı sürümüne eşitler"
-                            >
-                              <RefreshCw className={`w-3 h-3 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                              <span>⚡ App Store'a Eşitle (v{appleVerSem || currentVersion}+{appleBuildParsed || currentBuildNumber})</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 truncate">
+                        {activeComparison?.appStore?.message || 'Durum: Kontrol edildi'}
+                      </div>
                     </div>
                   </div>
 
-                  {/* KARŞILAŞTIRMA ÖZET KARARI VE ÇOKLU EŞİTLEME ÇUBUĞU */}
+                  {/* KARŞILAŞTIRMA ÖZET KARARI VE TEK EŞİTLEME BUTONU */}
                   <div className="p-3.5 rounded-lg bg-secondary/50 border border-border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-secondary-foreground">
                     <div className="flex items-center gap-2.5">
                       <Info className="w-4 h-4 text-primary shrink-0" />
@@ -2489,45 +2456,24 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      {isGoogleLive && !isLocalEqualGoogle && (
-                        <button
-                          type="button"
-                          onClick={() => void handleSyncStoreVersion('google_play')}
-                          disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-emerald-600/15 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-600/30 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
-                          title="Yerel pubspec.yaml dosyasını doğrudan Google Play canlı sürümüne eşitler"
-                        >
-                          <GooglePlayIcon className="w-3.5 h-3.5" />
-                          <span>Google Play ile Eşitle</span>
-                        </button>
-                      )}
-
-                      {isAppleLive && !isLocalEqualApple && (
-                        <button
-                          type="button"
-                          onClick={() => void handleSyncStoreVersion('app_store')}
-                          disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-sky-600/15 hover:bg-sky-600 text-sky-600 hover:text-white border border-sky-600/30 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
-                          title="Yerel pubspec.yaml dosyasını doğrudan Apple App Store canlı sürümüne eşitler"
-                        >
-                          <AppStoreConnectIcon className="w-3.5 h-3.5" />
-                          <span>App Store ile Eşitle</span>
-                        </button>
-                      )}
-
-                      {isOutOfSyncWithAnyStore && (
+                    <div className="flex items-center shrink-0">
+                      {canSyncToHigher ? (
                         <button
                           type="button"
                           onClick={() => void handleSyncStoreVersion('smart')}
                           disabled={isSyncingStoreVersion}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                          title="Yerel pubspec.yaml dosyasını mağazadaki en yüksek canlı sürüme eşitler"
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+                          title="Düşük olan sürümü büyük olan sürüme yükselterek mağazalarla eşitler"
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
-                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : '⚡ En Yüksek Sürüme Eşitle'}</span>
+                          <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : `⚡ Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`}</span>
                         </button>
-                      )}
+                      ) : areAllInSync ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-semibold text-xs">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          <span>Sürümler Eşit (v{highestVersion} #{highestBuildNumber})</span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </>
