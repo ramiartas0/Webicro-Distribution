@@ -273,7 +273,6 @@ export default function App() {
   const [targetAndroid, setTargetAndroid] = useState<boolean>(true);
   const [targetIos, setTargetIos] = useState<boolean>(true);
   const [googleTrack, setGoogleTrack] = useState<'internal' | 'alpha' | 'beta' | 'production'>('internal');
-  const [rolloutPercentage, setRolloutPercentage] = useState<number>(100);
   const [isDryRun, setIsDryRun] = useState<boolean>(false);
 
   // AI Sürüm Notları (Varsayılan olarak boş başlar, AI veya manuel doldurulur)
@@ -1140,7 +1139,7 @@ export default function App() {
           skipAndroid: !targetAndroid,
           skipIos: !targetIos,
           googleTrack,
-          rollout: rolloutPercentage,
+          rollout: 100,
           notesTr: releaseNotesTR,
           notesEn: releaseNotesEN,
         }),
@@ -1756,24 +1755,6 @@ export default function App() {
                             <option value="production">Üretim</option>
                           </select>
                         </div>
-
-                        {googleTrack === 'production' && (
-                          <div>
-                            <div className="flex justify-between text-[11px] text-muted-foreground mb-1">
-                              <span>Kademeli Dağıtım (Rollout):</span>
-                              <span className="font-mono font-bold text-foreground">%{rolloutPercentage}</span>
-                            </div>
-                            <input
-                              type="range"
-                              min="5"
-                              max="100"
-                              step="5"
-                              value={rolloutPercentage}
-                              onChange={(e) => setRolloutPercentage(parseInt(e.target.value, 10))}
-                              className="w-full accent-primary cursor-pointer"
-                            />
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
