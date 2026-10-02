@@ -41,6 +41,7 @@ interface PipelineStep {
   id: number;
   name: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+  details?: string;
 }
 
 interface ReleaseHistoryItem {
@@ -90,6 +91,9 @@ export interface ProjectEntry {
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
+  releasing?: boolean;
+  currentStageId?: number;
+  totalStages?: number;
 }
 
 interface StoreTestResult {
@@ -210,6 +214,7 @@ export default function App() {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [releaseCompleted, setReleaseCompleted] = useState<boolean>(false);
+  const [activePipelineProject, setActivePipelineProject] = useState<string>('');
 
   // Geçmiş ve Denetim Kayıtları
   const [historyReleases, setHistoryReleases] = useState<ReleaseHistoryItem[]>([]);
@@ -217,31 +222,17 @@ export default function App() {
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // 20 Adımlık Boru Hattı
-  const initialSteps: PipelineStep[] = [
-    { id: 1, name: 'Ortam ve Konfigürasyon Doğrulama', status: 'pending' },
-    { id: 2, name: 'Veritabanı ve Migration Başlatma', status: 'pending' },
-    { id: 3, name: 'Sürüm ID Üretimi (REL-XXX)', status: 'pending' },
-    { id: 4, name: 'Git Çalışma Ağacı ve Tag Analizi', status: 'pending' },
-    { id: 5, name: 'SemVer ve Build Çözümleme', status: 'pending' },
-    { id: 6, name: 'Sürüm Dağıtım Planı Oluşturma', status: 'pending' },
-    { id: 7, name: 'CHANGELOG.md Markdown Üretimi', status: 'pending' },
-    { id: 8, name: 'AI Sürüm Notları Oluşturma (Gemini/OpenAI)', status: 'pending' },
-    { id: 9, name: 'Mağaza Karakter ve Güvenlik Validasyonu', status: 'pending' },
-    { id: 10, name: 'pubspec.yaml Versiyon Güncelleme', status: 'pending' },
-    { id: 11, name: 'Flutter Doctor ve Statik Kod Analizi', status: 'pending' },
-    { id: 12, name: 'Birim ve Entegrasyon Testleri (flutter test)', status: 'pending' },
-    { id: 13, name: 'Android Release AAB Derleme', status: 'pending' },
-    { id: 14, name: 'Android Artifact SHA-256 Hashing', status: 'pending' },
-    { id: 15, name: 'iOS Release IPA Derleme (macOS)', status: 'pending' },
-    { id: 16, name: 'iOS Artifact SHA-256 Hashing', status: 'pending' },
-    { id: 17, name: 'Google Play Console Developer API Yükleme', status: 'pending' },
-    { id: 18, name: 'Apple App Store Connect API Yükleme', status: 'pending' },
-    { id: 19, name: 'Onay ve İnceleme Gönderimi', status: 'pending' },
-    { id: 20, name: 'Denetim Günlüğü ve Dağıtım Tamamlama', status: 'pending' },
+  // 6 Sıralı Kurumsal Dağıtım Aşaması (Sequential Pipeline)
+  const initialStages: PipelineStep[] = [
+    { id: 1, name: 'Hazırlık ve Git Analizi', status: 'pending' },
+    { id: 2, name: 'Sürümleme ve Sürüm Notları', status: 'pending' },
+    { id: 3, name: 'Statik Kod Analizi ve Testler', status: 'pending' },
+    { id: 4, name: 'Android Paketi Derleme (AAB)', status: 'pending' },
+    { id: 5, name: 'iOS Paketi Derleme (IPA)', status: 'pending' },
+    { id: 6, name: 'Mağaza Dağıtımı ve İnceleme', status: 'pending' },
   ];
 
-  const [steps, setSteps] = useState<PipelineStep[]>(initialSteps);
+  const [steps, setSteps] = useState<PipelineStep[]>(initialStages);
 
   // Otomatik aşağı kaydırma
   useEffect(() => {
@@ -442,9 +433,169 @@ export default function App() {
     }
   };
 
+  // KALICI PİPELİNE DURUMUNU YÜKLE (Sayfa yenilendiğinde veya projeye dönüldüğünde)
+  const loadPipelineStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/release/status');
+      if (res.ok) {
+        const data = await res.json() as {
+          active?: boolean;
+          pipeline?: {
+            projectPath: string;
+            projectName: string;
+            isReleasing: boolean;
+            completed: boolean;
+            failed: boolean;
+            currentStageId: number;
+            totalStages: number;
+            stages: PipelineStep[];
+            logs: string[];
+          } | null;
+          status?: {
+            projectPath: string;
+            projectName: string;
+            isReleasing: boolean;
+            completed: boolean;
+            failed: boolean;
+            currentStageId: number;
+            totalStages: number;
+            stages: PipelineStep[];
+            logs: string[];
+          } | null;
+        };
+        const st = data.pipeline || data.status;
+        if (st) {
+          setIsReleasing(st.isReleasing);
+          setReleaseCompleted(st.completed);
+          setActivePipelineProject(st.projectPath);
+          setActiveStepIndex(st.currentStageId);
+          if (st.stages && st.stages.length > 0) {
+            setSteps(st.stages);
+          }
+          if (st.logs && st.logs.length > 0) {
+            setLogs(st.logs);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Pipeline durumu yüklenemedi:', err);
+    }
+  }, []);
+
+  // CANLI SSE DİNLEYİCİSİ (Boru Hattı Senkronizasyonu & Sayfa Yenilense Bile Canlı Kalır)
   useEffect(() => {
     void loadProjectsAndActive();
-  }, [loadProjectsAndActive]);
+    void loadPipelineStatus();
+
+    const eventSource = new EventSource('/api/release/events');
+
+    eventSource.onmessage = (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data as string) as {
+          type: 'sync' | 'pipeline_init' | 'pipeline_update' | 'pipeline_completed' | 'pipeline_failed';
+          pipeline?: {
+            projectPath: string;
+            projectName: string;
+            isReleasing: boolean;
+            completed: boolean;
+            failed: boolean;
+            currentStageId: number;
+            totalStages: number;
+            stages: PipelineStep[];
+            logs: string[];
+          };
+          projectPath?: string;
+          projectName?: string;
+          stages?: PipelineStep[];
+          logs?: string[];
+        };
+
+        if (payload.type === 'sync' && payload.pipeline) {
+          const p = payload.pipeline;
+          setIsReleasing(p.isReleasing);
+          setReleaseCompleted(p.completed);
+          setActivePipelineProject(p.projectPath);
+          setActiveStepIndex(p.currentStageId);
+          if (p.stages && p.stages.length > 0) setSteps(p.stages);
+          if (p.logs && p.logs.length > 0) setLogs(p.logs);
+
+          setProjects((prev) =>
+            prev.map((item) =>
+              item.path === p.projectPath
+                ? { ...item, releasing: p.isReleasing, currentStageId: p.currentStageId, totalStages: p.totalStages }
+                : item
+            )
+          );
+        } else if (payload.type === 'pipeline_init') {
+          setIsReleasing(true);
+          setReleaseCompleted(false);
+          if (payload.projectPath) setActivePipelineProject(payload.projectPath);
+          if (payload.stages) setSteps(payload.stages);
+          if (payload.logs) setLogs(payload.logs);
+          setActiveStepIndex(1);
+
+          setProjects((prev) =>
+            prev.map((item) =>
+              item.path === payload.projectPath
+                ? { ...item, releasing: true, currentStageId: 1, totalStages: 6 }
+                : item
+            )
+          );
+        } else if (payload.type === 'pipeline_update' && payload.pipeline) {
+          const p = payload.pipeline;
+          setIsReleasing(p.isReleasing);
+          setReleaseCompleted(p.completed);
+          setActivePipelineProject(p.projectPath);
+          setActiveStepIndex(p.currentStageId);
+          if (p.stages && p.stages.length > 0) setSteps(p.stages);
+          if (p.logs && p.logs.length > 0) setLogs(p.logs);
+
+          setProjects((prev) =>
+            prev.map((item) =>
+              item.path === p.projectPath
+                ? { ...item, releasing: p.isReleasing, currentStageId: p.currentStageId, totalStages: p.totalStages }
+                : item
+            )
+          );
+        } else if (payload.type === 'pipeline_completed' && payload.pipeline) {
+          const p = payload.pipeline;
+          setIsReleasing(false);
+          setReleaseCompleted(true);
+          setActiveStepIndex(6);
+          if (p.stages && p.stages.length > 0) setSteps(p.stages);
+          if (p.logs && p.logs.length > 0) setLogs(p.logs);
+
+          setProjects((prev) =>
+            prev.map((item) =>
+              item.path === p.projectPath
+                ? { ...item, releasing: false, currentStageId: 6, totalStages: 6 }
+                : item
+            )
+          );
+        } else if (payload.type === 'pipeline_failed' && payload.pipeline) {
+          const p = payload.pipeline;
+          setIsReleasing(false);
+          setReleaseCompleted(false);
+          if (p.stages && p.stages.length > 0) setSteps(p.stages);
+          if (p.logs && p.logs.length > 0) setLogs(p.logs);
+
+          setProjects((prev) =>
+            prev.map((item) =>
+              item.path === p.projectPath
+                ? { ...item, releasing: false }
+                : item
+            )
+          );
+        }
+      } catch (err) {
+        console.error('SSE mesaj işleme hatası:', err);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [loadProjectsAndActive, loadPipelineStatus]);
 
   // CANLI MAĞAZA SENKRONİZASYONU
   const handleSyncStores = async () => {
@@ -744,100 +895,59 @@ export default function App() {
 
     setIsReleasing(true);
     setReleaseCompleted(false);
-    setActiveStepIndex(0);
-    setSteps(initialSteps);
+    setActiveStepIndex(1);
+    setActivePipelineProject(activeProjectPath);
+    setSteps(initialStages.map((s, idx) => (idx === 0 ? { ...s, status: 'running' } : { ...s, status: 'pending' })));
     setLogs([
       `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
       `[${new Date().toLocaleTimeString()}] Hedef Sürüm: ${nextVersion}+${nextBuildNumber}`,
       `[${new Date().toLocaleTimeString()}] Proje: ${projectName} (${activeProjectPath})`,
     ]);
 
-    const eventSource = new EventSource('/api/release/events');
-    let currentStepIndex = 0;
-
-    eventSource.onmessage = (e: MessageEvent) => {
-      try {
-        const payload = JSON.parse(e.data as string) as {
-          type: 'step' | 'completed' | 'failed';
-          event?: { step: string; status: string; message?: string; error?: string };
-          summary?: { version?: string };
-          error?: string;
-        };
-
-        if (payload.type === 'step' && payload.event) {
-          const ev = payload.event;
-          const stepMsg = ev.step || 'Adım';
-          
-          setLogs((prev) => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] [${ev.status}] ${stepMsg} ${ev.message ? '- ' + ev.message : ''}`
-          ]);
-
-          if (ev.status === 'RUNNING' || ev.status === 'IN_PROGRESS') {
-            setSteps((prev) =>
-              prev.map((s, idx) => (idx === currentStepIndex ? { ...s, status: 'running' } : s))
-            );
-          } else if (ev.status === 'COMPLETED' || ev.status === 'SUCCESS') {
-            setSteps((prev) =>
-              prev.map((s, idx) => (idx === currentStepIndex ? { ...s, status: 'success' } : s))
-            );
-            currentStepIndex++;
-            setActiveStepIndex(Math.min(currentStepIndex, 20));
-          } else if (ev.status === 'FAILED') {
-            setSteps((prev) =>
-              prev.map((s, idx) => (idx === currentStepIndex ? { ...s, status: 'failed' } : s))
-            );
-            setLogs((prev) => [
-              ...prev,
-              `[${new Date().toLocaleTimeString()}] HATA: ${ev.error || 'İşlem başarısız oldu'}`
-            ]);
-          }
-        } else if (payload.type === 'completed') {
-          eventSource.close();
-          setIsReleasing(false);
-          setReleaseCompleted(true);
-          setSteps((prev) => prev.map((s) => ({ ...s, status: 'success' })));
-          setActiveStepIndex(20);
-          setLogs((prev) => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${payload.summary?.version || nextVersion})`
-          ]);
-          void handleSyncStores();
-        } else if (payload.type === 'failed') {
-          eventSource.close();
-          setIsReleasing(false);
-          setLogs((prev) => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] Boru hattı durduruldu: ${payload.error || 'Bilinmeyen hata'}`
-          ]);
-        }
-      } catch (err) {
-        console.error('SSE mesajı işlenemedi:', err);
-      }
-    };
+    // Sidebar'daki aktif projeyi anında "dağıtılıyor" yap (Optimistic Update)
+    setProjects((prev) =>
+      prev.map((item) =>
+        item.path === activeProjectPath
+          ? { ...item, releasing: true, currentStageId: 1, totalStages: 6 }
+          : item
+      )
+    );
 
     try {
       const response = await fetch('/api/release/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          projectPath: activeProjectPath,
+          projectName,
+          version: nextVersion,
+          buildNumber: nextBuildNumber,
           bump: bumpType === 'custom' ? undefined : bumpType,
           manualVersion: bumpType === 'custom' ? customVersion : undefined,
           dryRun: isDryRun,
-          targetAndroid,
-          targetIos,
+          skipAndroid: !targetAndroid,
+          skipIos: !targetIos,
+          googleTrack,
+          rollout: rolloutPercentage,
+          notesTr: releaseNotesTR,
+          notesEn: releaseNotesEN,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Sunucu başlatma isteğini reddetti.');
+        const errData = await response.json() as { error?: string };
+        const errMsg = errData.error || 'Dağıtım başlatılamadı';
+        setIsReleasing(false);
+        setLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] HATA: ${errMsg}`,
+        ]);
       }
     } catch (err) {
       setIsReleasing(false);
-      eventSource.close();
       setLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] Sunucu bağlantı hatası: ${err instanceof Error ? err.message : String(err)}`
+        `[${new Date().toLocaleTimeString()}] Sunucu bağlantı hatası: ${err instanceof Error ? err.message : String(err)}`,
       ]);
     }
   };
@@ -916,21 +1026,28 @@ export default function App() {
         <div className="flex-1 p-2 space-y-2 overflow-y-auto">
           {projects.map((p) => {
             const isSelected = p.path === activeProjectPath;
+            const isReleasingThis = Boolean(p.releasing || (activePipelineProject === p.path && isReleasing));
+            const currentStage = p.currentStageId || (activePipelineProject === p.path ? activeStepIndex : 1) || 1;
+            const totalStageCount = p.totalStages || 6;
             const comp = p.stores;
             return (
               <div
                 key={p.id}
                 onClick={() => void handleSwitchProject(p.path)}
                 className={`group relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer overflow-hidden ${
-                  isSelected
+                  isReleasingThis
+                    ? 'border-primary ring-2 ring-primary/40 bg-card shadow-md animate-pulse'
+                    : isSelected
                     ? 'border-primary/80 bg-card ring-1 ring-primary/25 shadow-sm'
                     : 'border-sidebar-border/80 bg-sidebar/50 hover:bg-sidebar-accent/60 hover:border-sidebar-border shadow-xs'
                 }`}
               >
-                {/* AKTİF PROJE SOL VURGU ÇİZGİSİ */}
-                {isSelected && (
+                {/* AKTİF VEYA DAĞITILAN PROJE SOL VURGU ÇİZGİSİ */}
+                {isReleasingThis ? (
+                  <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-primary rounded-r-full animate-pulse" />
+                ) : isSelected ? (
                   <div className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-primary rounded-r-full" />
-                )}
+                ) : null}
 
                 {/* PROJE BAŞLIĞI VE İKONU */}
                 <div className="flex items-center gap-2.5 mb-2.5">
@@ -965,26 +1082,33 @@ export default function App() {
                       <span className="text-[10px] font-normal text-muted-foreground ml-1">#{p.buildNumber || 1}</span>
                     </span>
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0 ${
-                    comp?.comparisonStatus === 'UPDATE_READY'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                      : comp?.comparisonStatus === 'UP_TO_DATE'
-                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                      : comp?.comparisonStatus === 'NEW_APP'
-                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                      : 'bg-muted text-muted-foreground border border-border/60'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
+                  {isReleasingThis ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shrink-0 bg-primary/15 text-primary border border-primary/30 animate-pulse">
+                      <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                      <span>Dağıtılıyor ({currentStage}/{totalStageCount})</span>
+                    </span>
+                  ) : (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 shrink-0 ${
                       comp?.comparisonStatus === 'UPDATE_READY'
-                        ? 'bg-emerald-500'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                         : comp?.comparisonStatus === 'UP_TO_DATE'
-                        ? 'bg-blue-500'
+                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                         : comp?.comparisonStatus === 'NEW_APP'
-                        ? 'bg-purple-500'
-                        : 'bg-muted-foreground'
-                    }`} />
-                    {comp?.badge || 'Bekliyor'}
-                  </span>
+                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                        : 'bg-muted text-muted-foreground border border-border/60'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        comp?.comparisonStatus === 'UPDATE_READY'
+                          ? 'bg-emerald-500'
+                          : comp?.comparisonStatus === 'UP_TO_DATE'
+                          ? 'bg-blue-500'
+                          : comp?.comparisonStatus === 'NEW_APP'
+                          ? 'bg-purple-500'
+                          : 'bg-muted-foreground'
+                      }`} />
+                      {comp?.badge || 'Bekliyor'}
+                    </span>
+                  )}
                 </div>
 
                 {/* CANLI MAĞAZA KARŞILAŞTIRMA DETAYLARI (2 KOLONLU MİKRO GRID) */}
@@ -1536,7 +1660,7 @@ export default function App() {
                     Dağıtımı Başlat
                   </h4>
                   <p className="text-xs text-muted-foreground mt-1">
-                    20 adımlık tam otomatik orkestrasyon zincirini yürütür.
+                    6 kurumsal aşamalı sıralı dağıtım zincirini yürütür.
                   </p>
                 </div>
 
@@ -1572,15 +1696,15 @@ export default function App() {
                 )}
               </div>
 
-              {/* 20 ADIMLIK İNTERAKTİF BORU HATTI STEPPER */}
+              {/* 6 AŞAMALI SIRALI BORU HATTI STEPPER */}
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
                     <Layers className="w-4 h-4 text-primary" />
-                    Dağıtım Boru Hattı (20 Adım)
+                    Dağıtım Boru Hattı (6 Aşama)
                   </h4>
                   <span className="text-xs font-mono font-semibold text-primary">
-                    {activeStepIndex}/20
+                    {activeStepIndex}/6
                   </span>
                 </div>
 
@@ -1602,7 +1726,14 @@ export default function App() {
                         <span className="font-mono text-[10px] w-4 text-muted-foreground">
                           {step.id}
                         </span>
-                        <span className="truncate">{step.name}</span>
+                        <div className="truncate">
+                          <span className="truncate block font-medium">{step.name}</span>
+                          {step.details && (
+                            <span className="text-[10px] text-muted-foreground/80 block truncate">
+                              {step.details}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="shrink-0 pl-1">

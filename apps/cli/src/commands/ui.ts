@@ -48,6 +48,60 @@ export interface ProjectEntry {
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
+  releasing?: boolean;
+  currentStageId?: number;
+  totalStages?: number;
+}
+
+export interface PipelineStageInfo {
+  id: number;
+  name: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+  details?: string;
+}
+
+export interface ActivePipelineStatus {
+  isReleasing: boolean;
+  projectPath: string;
+  projectName: string;
+  targetVersion: string;
+  currentStageId: number;
+  stages: PipelineStageInfo[];
+  logs: string[];
+  completed: boolean;
+  error?: string;
+  startedAt: string;
+}
+
+export function createDefaultStages(): PipelineStageInfo[] {
+  return [
+    { id: 1, name: 'Hazırlık ve Git Analizi', status: 'pending' },
+    { id: 2, name: 'Sürümleme ve Sürüm Notları', status: 'pending' },
+    { id: 3, name: 'Statik Kod Analizi ve Testler', status: 'pending' },
+    { id: 4, name: 'Android Paketi Derleme (AAB)', status: 'pending' },
+    { id: 5, name: 'iOS Paketi Derleme (IPA)', status: 'pending' },
+    { id: 6, name: 'Mağaza Dağıtımı ve İnceleme', status: 'pending' },
+  ];
+}
+
+export function mapStepNameToStageId(stepName: string): number {
+  const lower = stepName.toLowerCase();
+  if (lower.includes('env') || lower.includes('database') || lower.includes('git') || lower.includes('id')) {
+    return 1;
+  }
+  if (lower.includes('version') || lower.includes('semver') || lower.includes('plan') || lower.includes('changelog') || lower.includes('note') || lower.includes('validat')) {
+    return 2;
+  }
+  if (lower.includes('pubspec') || lower.includes('doctor') || lower.includes('analy') || lower.includes('test')) {
+    return 3;
+  }
+  if (lower.includes('android')) {
+    return 4;
+  }
+  if (lower.includes('ios')) {
+    return 5;
+  }
+  return 6;
 }
 
 /**
@@ -944,8 +998,9 @@ export const uiCommand = new Command('ui')
     const releaseRepo = new ReleaseRepository(dbConn.getDb());
     const auditRepo = new AuditLogRepository(dbConn.getDb());
 
-    // SSE İstemcileri
+    // SSE İstemcileri ve Canlı Dağıtım Durumu (Sayfa yenilense veya başka projeye geçilse bile kaybolmaz)
     const sseClients: http.ServerResponse[] = [];
+    let activePipelineStatus: ActivePipelineStatus | null = null;
 
     const broadcastEvent = (event: Record<string, unknown>) => {
       const data = `data: ${JSON.stringify(event)}\n\n`;
@@ -993,12 +1048,22 @@ export const uiCommand = new Command('ui')
         if (!list.some(p => path.resolve(p.path) === path.resolve(activeProjectDir)) && list[0]) {
           activeProjectDir = list[0].path;
         }
-        saveStoredProjects(list);
+        // Eğer aktif bir dağıtım yürütülüyorsa, ilgili projeye canlı durumu işaretle
+        for (const p of list) {
+          if (activePipelineStatus && path.resolve(p.path) === path.resolve(activePipelineStatus.projectPath)) {
+            p.releasing = activePipelineStatus.isReleasing;
+            p.currentStageId = activePipelineStatus.currentStageId;
+            p.totalStages = 6;
+          } else {
+            p.releasing = false;
+          }
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           activePath: activeProjectDir,
           projects: list,
+          activePipeline: activePipelineStatus,
         }));
         return;
       }
@@ -1782,6 +1847,16 @@ export const uiCommand = new Command('ui')
         return;
       }
 
+      // 8.5 GET /api/release/status - Aktif veya Son Boru Hattı Durumunu Getir
+      if (req.method === 'GET' && pathname === '/api/release/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          active: Boolean(activePipelineStatus?.isReleasing),
+          pipeline: activePipelineStatus,
+        }));
+        return;
+      }
+
       // 9. GET /api/release/events - SSE (Server-Sent Events) Canlı Akış
       if (req.method === 'GET' && pathname === '/api/release/events') {
         res.writeHead(200, {
@@ -1790,6 +1865,12 @@ export const uiCommand = new Command('ui')
           'Connection': 'keep-alive',
         });
         res.write('retry: 3000\n\n');
+
+        // Bağlanan istemciye anlık aktif pipeline durumunu hemen senkronize et
+        if (activePipelineStatus) {
+          res.write(`data: ${JSON.stringify({ type: 'sync', pipeline: activePipelineStatus })}\n\n`);
+        }
+
         sseClients.push(res);
 
         req.on('close', () => {
@@ -1801,7 +1882,7 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 10. POST /api/release/start - Canlı Release Pipeline Başlatma
+      // 10. POST /api/release/start - Canlı Release Pipeline Başlatma (6 Sıralı Kurumsal Aşama)
       if (req.method === 'POST' && pathname === '/api/release/start') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1815,14 +1896,67 @@ export const uiCommand = new Command('ui')
               targetIos?: boolean;
             };
 
+            const meta = detectProjectMetadata(activeProjectDir);
+            const stages = createDefaultStages();
+            stages[0]!.status = 'running';
+
+            activePipelineStatus = {
+              isReleasing: true,
+              projectPath: activeProjectDir,
+              projectName: meta.name || path.basename(activeProjectDir),
+              targetVersion: options.manualVersion || meta.version,
+              currentStageId: 1,
+              stages,
+              logs: [
+                `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
+                `[${new Date().toLocaleTimeString()}] Proje: ${meta.name} (${activeProjectDir})`,
+              ],
+              completed: false,
+              startedAt: new Date().toISOString(),
+            };
+
+            broadcastEvent({ type: 'pipeline_init', pipeline: activePipelineStatus });
+
             const orchestrator = new ReleaseOrchestrator();
 
             orchestrator.onStep((event) => {
-              broadcastEvent({ type: 'step', event });
+              if (!activePipelineStatus) return;
+
+              const stageId = mapStepNameToStageId(event.step);
+              const logLine = `[${new Date().toLocaleTimeString()}] [${event.status}] ${event.step} ${event.message ? '- ' + event.message : ''}`;
+              activePipelineStatus.logs.push(logLine);
+
+              // Sıralı ilerleme mantığı: stageId'den öncekiler 'success', aktif aşama 'running' / 'success', sonrakiler 'pending'
+              for (const st of activePipelineStatus.stages) {
+                if (st.id < stageId) {
+                  st.status = 'success';
+                } else if (st.id === stageId) {
+                  if (event.status === 'RUNNING' || event.status === 'IN_PROGRESS') {
+                    st.status = 'running';
+                    if (event.message) st.details = event.message;
+                  } else if (event.status === 'COMPLETED' || event.status === 'SUCCESS') {
+                    st.status = 'success';
+                    if (event.message) st.details = event.message;
+                  } else if (event.status === 'FAILED') {
+                    st.status = 'failed';
+                    if (event.error) st.details = event.error;
+                  }
+                } else {
+                  st.status = 'pending';
+                }
+              }
+
+              activePipelineStatus.currentStageId = stageId;
+
+              broadcastEvent({
+                type: 'pipeline_update',
+                pipeline: activePipelineStatus,
+                event,
+              });
             });
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ status: 'started' }));
+            res.end(JSON.stringify({ status: 'started', pipeline: activePipelineStatus }));
 
             try {
               const summary = await orchestrator.execute({
@@ -1836,12 +1970,27 @@ export const uiCommand = new Command('ui')
                 skipAi: false,
                 autoApprove: true,
               });
-              broadcastEvent({ type: 'completed', summary });
+
+              if (activePipelineStatus) {
+                activePipelineStatus.isReleasing = false;
+                activePipelineStatus.completed = true;
+                for (const st of activePipelineStatus.stages) {
+                  st.status = 'success';
+                }
+                activePipelineStatus.logs.push(`[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${summary.version})`);
+                broadcastEvent({ type: 'pipeline_completed', summary, pipeline: activePipelineStatus });
+              }
             } catch (execErr) {
-              broadcastEvent({
-                type: 'failed',
-                error: execErr instanceof Error ? execErr.message : String(execErr)
-              });
+              const errMsg = execErr instanceof Error ? execErr.message : String(execErr);
+              if (activePipelineStatus) {
+                activePipelineStatus.isReleasing = false;
+                activePipelineStatus.error = errMsg;
+                if (activePipelineStatus.stages[activePipelineStatus.currentStageId - 1]) {
+                  activePipelineStatus.stages[activePipelineStatus.currentStageId - 1]!.status = 'failed';
+                }
+                activePipelineStatus.logs.push(`[${new Date().toLocaleTimeString()}] HATA: ${errMsg}`);
+                broadcastEvent({ type: 'pipeline_failed', error: errMsg, pipeline: activePipelineStatus });
+              }
             }
 
           } catch (error) {
