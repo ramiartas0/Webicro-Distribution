@@ -94,13 +94,16 @@ export function createDefaultStages(): PipelineStageInfo[] {
     { id: 3, name: 'Statik Kod Analizi ve Testler', status: 'pending' },
     { id: 4, name: 'Android Paketi Derleme (AAB)', status: 'pending' },
     { id: 5, name: 'iOS Paketi Derleme (IPA)', status: 'pending' },
-    { id: 6, name: 'Mağaza Dağıtımı ve İnceleme', status: 'pending' },
+    { id: 6, name: 'Mağaza Dağıtımı & Git Senkronizasyonu', status: 'pending' },
   ];
 }
 
 export function mapStepNameToStageId(stepName: string): number {
   const lower = stepName.toLowerCase();
-  if (lower.includes('env') || lower.includes('database') || lower.includes('git') || lower.includes('id')) {
+  if (lower.includes('git release') || lower.includes('git sync') || lower.includes('submission') || lower.includes('audit')) {
+    return 6;
+  }
+  if (lower.includes('env') || lower.includes('database') || lower.includes('id') || (lower.includes('git') && !lower.includes('release'))) {
     return 1;
   }
   if (lower.includes('version') || lower.includes('semver') || lower.includes('plan') || lower.includes('changelog') || lower.includes('note') || lower.includes('validat')) {
@@ -1734,6 +1737,85 @@ export const uiCommand = new Command('ui')
         return;
       }
 
+      // 3.5 POST /api/project/git-commit-push - Projedeki değişiklikleri GitHub'a commit ve push et
+      if (req.method === 'POST' && pathname === '/api/project/git-commit-push') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              path?: string;
+              message?: string;
+              createTag?: boolean;
+              push?: boolean;
+            };
+
+            const targetDir = payload.path ? path.resolve(payload.path) : activeProjectDir;
+            if (!fs.existsSync(targetDir)) {
+              res.writeHead(404, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Proje dizini bulunamadı' }));
+              return;
+            }
+
+            const pubspecUpdater = new PubspecVersionUpdater();
+            let pubspec = null;
+            try {
+              pubspec = await pubspecUpdater.readPubspec(targetDir);
+            } catch {}
+
+            const projName = pubspec?.name || path.basename(targetDir);
+            const [vStr = '1.0.0', bStr = '1'] = (pubspec?.version || '1.0.0+1').split('+');
+
+            const { GitOperations, GitAnalyzer } = await import('@webicro/git');
+            const gitOps = new GitOperations(targetDir);
+            const result = await gitOps.commitProjectRelease({
+              projectName: projName,
+              version: vStr,
+              buildNumber: Number(bStr) || 1,
+              customMessage: payload.message,
+              createTag: payload.createTag !== false,
+              push: payload.push !== false,
+            });
+
+            // Güncel git durumunu al
+            const gitAnalyzer = new GitAnalyzer(targetDir);
+            const analysis = await gitAnalyzer.analyze();
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              message: result.filesCommitted.length > 0
+                ? `Git commit (${result.commitHash.slice(0, 7)}) ve etiket (${result.tagName || 'yok'}) başarıyla oluşturuldu${result.pushed ? ' ve GitHub\'a push edildi' : ''}.`
+                : 'Çalışma dizini zaten temiz, yeni dosya kaydedilmedi.',
+              result,
+              git: {
+                isRepository: analysis.isRepository,
+                currentBranch: analysis.currentBranch,
+                isClean: analysis.isClean,
+                uncommittedFiles: analysis.uncommittedFiles || [],
+                lastTag: analysis.lastTag,
+                changedFilesCount: analysis.changedFiles.length,
+                hasNativeChanges: analysis.hasNativeChanges,
+                remote: analysis.remote || null,
+                connected: Boolean(analysis.isRepository && analysis.remote),
+                remoteUrl: analysis.remote?.fetchUrl || analysis.remote?.pushUrl || null,
+                webUrl: analysis.remote?.webUrl || null,
+                ownerRepo: analysis.remote?.ownerRepo || null,
+                provider: analysis.remote?.provider || 'github',
+              },
+            }));
+          } catch (gitErr: unknown) {
+            const errMsg = gitErr instanceof Error ? gitErr.message : String(gitErr);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: `Git commit/push hatası: ${errMsg}`,
+            }));
+          }
+        });
+        return;
+      }
+
       // 4. GET /api/project - Aktif Proje Detayları, Git ve Sürüm
       if (req.method === 'GET' && pathname === '/api/project') {
         try {
@@ -1849,6 +1931,12 @@ export const uiCommand = new Command('ui')
               changedFilesCount: gitAnalysis.changedFiles.length,
               hasNativeChanges: gitAnalysis.hasNativeChanges,
               nativeChanges,
+              remote: gitAnalysis.remote || null,
+              connected: Boolean(gitAnalysis.isRepository && gitAnalysis.remote),
+              remoteUrl: gitAnalysis.remote?.fetchUrl || gitAnalysis.remote?.pushUrl || null,
+              webUrl: gitAnalysis.remote?.webUrl || null,
+              ownerRepo: gitAnalysis.remote?.ownerRepo || null,
+              provider: gitAnalysis.remote?.provider || 'github',
             },
             commits: gitAnalysis.commitsSinceLastTag,
             comparison: await compareProjectWithStores(
@@ -2942,6 +3030,10 @@ export const uiCommand = new Command('ui')
               rollout?: number;
               skipAndroid?: boolean;
               skipIos?: boolean;
+              skipGit?: boolean;
+              createGitTag?: boolean;
+              pushGit?: boolean;
+              gitCommitMessage?: string;
             };
 
             const trNotes = options.notesTr?.trim();
@@ -3106,6 +3198,10 @@ export const uiCommand = new Command('ui')
                 rollout: options.rollout,
                 notesTr: options.notesTr,
                 notesEn: options.notesEn,
+                skipGit: options.skipGit,
+                createGitTag: options.createGitTag,
+                pushGit: options.pushGit,
+                gitCommitMessage: options.gitCommitMessage,
               });
 
               const currentStatus = activePipelines.get(releaseTargetDir);

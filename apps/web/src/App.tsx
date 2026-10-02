@@ -316,6 +316,25 @@ export default function App() {
   const [uncommittedFiles, setUncommittedFiles] = useState<string[]>([]);
   const [activeComparison, setActiveComparison] = useState<StoreComparison | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState<boolean>(false);
+  const [gitRemote, setGitRemote] = useState<{
+    connected: boolean;
+    remoteUrl: string | null;
+    webUrl: string | null;
+    ownerRepo: string | null;
+    provider: 'github' | 'gitlab' | 'bitbucket' | 'other';
+    lastTag: string | null;
+  }>({
+    connected: false,
+    remoteUrl: null,
+    webUrl: null,
+    ownerRepo: null,
+    provider: 'github',
+    lastTag: null,
+  });
+  const [isGitPushing, setIsGitPushing] = useState<boolean>(false);
+  const [gitPushSuccessMsg, setGitPushSuccessMsg] = useState<string | null>(null);
+  const [autoGitSync, setAutoGitSync] = useState<boolean>(true);
+
 
   // Proje geçişlerinde verilerin karışmasını engelleyen senkron referanslar
   const activePathRef = useRef<string>('');
@@ -860,6 +879,11 @@ export default function App() {
             androidFiles: string[];
             iosFiles: string[];
           };
+          connected?: boolean;
+          remoteUrl?: string | null;
+          webUrl?: string | null;
+          ownerRepo?: string | null;
+          provider?: 'github' | 'gitlab' | 'bitbucket' | 'other';
         };
         commits?: CommitItem[];
         comparison?: StoreComparison;
@@ -887,6 +911,17 @@ export default function App() {
         setIsGitClean(data.project.isClean ?? true);
         setUncommittedFiles(data.project.uncommittedFiles || data.git?.uncommittedFiles || []);
         setHasPubspec(data.project.hasPubspec ?? false);
+      }
+
+      if (data.git) {
+        setGitRemote({
+          connected: Boolean(data.git.connected),
+          remoteUrl: data.git.remoteUrl || null,
+          webUrl: data.git.webUrl || null,
+          ownerRepo: data.git.ownerRepo || null,
+          provider: data.git.provider || 'github',
+          lastTag: data.git.lastTag || null,
+        });
       }
 
       if (data.git?.nativeChanges) {
@@ -1174,6 +1209,57 @@ export default function App() {
       console.error('Apple uygulamaları listeleme hatası:', err);
     } finally {
       setIsLoadingAppleApps(false);
+    }
+  };
+
+  // PROJE DEĞİŞİKLİKLERİNİ GİT'E KAYDET VE GITHUB'A PUSH ET
+  const handleGitCommitPush = async () => {
+    if (!activeProjectPath) return;
+    setIsGitPushing(true);
+    setGitPushSuccessMsg(null);
+    try {
+      const res = await fetch('/api/project/git-commit-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: activeProjectPath,
+          createTag: true,
+          push: true,
+        }),
+      });
+      const data = await res.json() as {
+        success: boolean;
+        message?: string;
+        error?: string;
+        git?: {
+          isClean: boolean;
+          uncommittedFiles: string[];
+          lastTag: string | null;
+          currentBranch: string;
+          remote: {
+            connected?: boolean;
+            remoteUrl?: string | null;
+            webUrl?: string | null;
+            ownerRepo?: string | null;
+            provider?: 'github' | 'gitlab' | 'bitbucket' | 'other';
+          } | null;
+        };
+      };
+      if (data.success) {
+        setGitPushSuccessMsg(data.message || 'Git commit ve push başarıyla tamamlandı!');
+        if (data.git) {
+          setIsGitClean(data.git.isClean);
+          setUncommittedFiles(data.git.uncommittedFiles || []);
+        }
+        await fetchProjectDetails(activeProjectPath);
+        setTimeout(() => setGitPushSuccessMsg(null), 6000);
+      } else {
+        alert(data.error || 'Git işlemi başarısız oldu.');
+      }
+    } catch (err: unknown) {
+      alert(`Git hatası: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsGitPushing(false);
     }
   };
 
@@ -1765,6 +1851,9 @@ export default function App() {
           rollout: 100,
           notesTr: releaseNotesTR,
           notesEn: releaseNotesEN,
+          skipGit: !autoGitSync,
+          createGitTag: autoGitSync,
+          pushGit: autoGitSync,
         }),
       });
 
@@ -2148,6 +2237,12 @@ export default function App() {
                     Flutter
                   </span>
                 )}
+                {gitRemote.connected && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-500 border-emerald-500/20 flex items-center gap-1" title={gitRemote.remoteUrl || 'GitHub'}>
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                    <span>Git &amp; GitHub Bağlı</span>
+                  </span>
+                )}
                 <div className="relative group">
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-default flex items-center gap-1 ${
                     isGitClean
@@ -2184,14 +2279,70 @@ export default function App() {
                     </div>
                   )}
                 </div>
+
+                {/* TEK TIKLA GİT'E KAYDET & PUSH ET BUTONU */}
+                {!isGitClean && uncommittedFiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleGitCommitPush()}
+                    disabled={isGitPushing}
+                    className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] font-semibold rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                    title="Bu projenin bekleyen değişikliklerini Git'e commit edip doğrudan GitHub'a push et"
+                  >
+                    {isGitPushing ? (
+                      <>
+                        <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        <span>Gönderiliyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <GitCommit className="w-2.5 h-2.5" />
+                        <span>Git'e Kaydet &amp; Push Et</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl">
+              <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl flex items-center gap-1.5">
                 {activeProjectPath ? (
-                  <>{activeProjectPath} • branch: <span className="text-emerald-500">{gitBranch || 'main'}</span></>
+                  <>
+                    <span className="truncate">{activeProjectPath}</span>
+                    <span>•</span>
+                    <span>branch: <span className="text-emerald-500 font-bold">{gitBranch || 'main'}</span></span>
+                    {gitRemote.webUrl && (
+                      <>
+                        <span>•</span>
+                        <a
+                          href={gitRemote.webUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1 shrink-0 font-medium"
+                          title={`GitHub Reposu: ${gitRemote.remoteUrl || ''}`}
+                        >
+                          <GitCommit className="w-3 h-3 text-primary" />
+                          <span>{gitRemote.ownerRepo || 'GitHub'}</span>
+                        </a>
+                      </>
+                    )}
+                    {gitRemote.lastTag && (
+                      <>
+                        <span>•</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-secondary text-muted-foreground border border-border shrink-0">
+                          tag: {gitRemote.lastTag}
+                        </span>
+                      </>
+                    )}
+                  </>
                 ) : (
                   <span className="text-muted-foreground/60">Aktif proje dizini seçilmedi</span>
                 )}
               </p>
+              {gitPushSuccessMsg && (
+                <div className="mt-1 text-[11px] font-medium text-emerald-500 flex items-center gap-1 animate-in fade-in">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{gitPushSuccessMsg}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2989,6 +3140,26 @@ export default function App() {
                       <span className="font-semibold text-xs text-foreground">{getGoogleTrackLabel(googleTrack)}</span>
                     </div>
                   )}
+
+                  <div className="pt-2 border-t border-border/50">
+                    <label className="flex items-start gap-2 cursor-pointer text-xs select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoGitSync}
+                        onChange={(e) => setAutoGitSync(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 mt-0.5 cursor-pointer"
+                      />
+                      <div>
+                        <span className="font-semibold text-foreground flex items-center gap-1.5">
+                          <GitCommit className="w-3.5 h-3.5 text-primary" />
+                          <span>Otomatik Git Commit &amp; Tag (GitHub'a Push)</span>
+                        </span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-normal">
+                          Dağıtım bitince pubspec ve changelog otomatik commit edilir, sürüm etiketi eklenir ve GitHub'a push edilir.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

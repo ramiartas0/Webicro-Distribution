@@ -28,7 +28,9 @@ export class GitAnalyzer {
     try {
       const rel = await this.getRelPath();
       const status = await this.git.status();
-      const files = status.files.map(f => f.path);
+      const files = status.files
+        .map(f => f.path)
+        .filter(f => !f.includes('/.release/') && !f.startsWith('.release/'));
       if (!rel) {
         return files;
       }
@@ -38,6 +40,16 @@ export class GitAnalyzer {
         .map(f => f.startsWith(prefix) ? f.slice(prefix.length) : f);
     } catch {
       return [];
+    }
+  }
+
+  async getRemoteInfo(): Promise<import('./types.js').GitRemoteInfo | null> {
+    try {
+      const { GitOperations } = await import('./operations.js');
+      const ops = new GitOperations(this.targetDir);
+      return await ops.getRemoteInfo();
+    } catch {
+      return null;
     }
   }
 
@@ -51,6 +63,7 @@ export class GitAnalyzer {
     const uncommittedFiles = await this.getUncommittedFiles();
     const clean = uncommittedFiles.length === 0;
     const lastTag = await this.getLastTag();
+    const remote = await this.getRemoteInfo();
 
     const commitsSinceLastTag = await this.getCommitsSince(lastTag || 'HEAD');
     const changedFiles = await this.getChangedFilesSince(lastTag || 'HEAD');
@@ -63,6 +76,7 @@ export class GitAnalyzer {
       currentBranch,
       isClean: clean,
       uncommittedFiles,
+      remote,
       lastTag,
       commitsSinceLastTag,
       changedFiles,

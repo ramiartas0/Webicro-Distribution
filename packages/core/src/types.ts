@@ -22,6 +22,10 @@ export interface OrchestratorOptions {
   rollout?: number;
   notesTr?: string;
   notesEn?: string;
+  skipGit?: boolean;
+  createGitTag?: boolean;
+  pushGit?: boolean;
+  gitCommitMessage?: string;
 }
 
 export interface ReleaseStepEvent {
@@ -39,6 +43,8 @@ export interface ReleaseExecutionSummary {
   iosArtifact?: ArtifactManifest;
   googlePlayStatus?: string;
   appStoreStatus?: string;
+  gitResult?: import('@webicro/git').CommitAndPushResult;
   durationMs: number;
   releaseNotes?: ReleaseNotesMap;
 }
+

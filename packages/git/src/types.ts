@@ -12,11 +12,29 @@ export interface ParsedCommit {
   raw: string;
 }
 
+export interface GitRemoteInfo {
+  name: string;
+  fetchUrl: string;
+  pushUrl: string;
+  webUrl: string | null;
+  ownerRepo: string | null;
+  provider: 'github' | 'gitlab' | 'bitbucket' | 'other';
+}
+
+export interface CommitAndPushResult {
+  commitHash: string;
+  tagName?: string;
+  pushed: boolean;
+  branch: string;
+  filesCommitted: string[];
+}
+
 export interface GitAnalysis {
   isRepository: boolean;
   currentBranch: string;
   isClean: boolean;
   uncommittedFiles?: string[];
+  remote?: GitRemoteInfo | null;
   lastTag: string | null;
   commitsSinceLastTag: ParsedCommit[];
   changedFiles: string[];

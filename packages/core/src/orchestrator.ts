@@ -9,7 +9,7 @@ import {
   ArtifactRepository,
   StoreSubmissionRepository,
 } from '@webicro/database';
-import { GitAnalyzer } from '@webicro/git';
+import { GitAnalyzer, GitOperations } from '@webicro/git';
 import { VersionResolver } from '@webicro/versioning';
 import type { VersionResolution } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
@@ -589,6 +589,39 @@ export class ReleaseOrchestrator {
       this.stateMachine.transitionTo('SUBMITTED');
       emitAndRecord('Submission', 'SUCCESS', 'İnceleme ve onay adımı tamamlandı');
 
+      // 19.5 Git Release Commit, Tag & Push
+      let gitResult: import('@webicro/git').CommitAndPushResult | undefined;
+      if (!options.skipGit) {
+        emitAndRecord('Git Release & Sync', 'IN_PROGRESS');
+        try {
+          const gitOps = new GitOperations(targetDir);
+          gitResult = await gitOps.commitProjectRelease({
+            projectName,
+            version: resolution.versionString,
+            buildNumber: resolution.next.buildNumber,
+            customMessage: options.gitCommitMessage,
+            createTag: options.createGitTag !== false,
+            push: options.pushGit !== false && !options.dryRun,
+          });
+
+          if (gitResult.filesCommitted.length > 0) {
+            const pushMsg = gitResult.pushed ? ' (GitHub’a push edildi)' : '';
+            emitAndRecord(
+              'Git Release & Sync',
+              'SUCCESS',
+              `Commit ${gitResult.commitHash.slice(0, 7)} ve etiket ${gitResult.tagName || ''} oluşturuldu${pushMsg}`
+            );
+          } else {
+            emitAndRecord('Git Release & Sync', 'SUCCESS', 'Git çalışma dizini zaten güncel, yeni değişiklik yok');
+          }
+        } catch (gitErr: unknown) {
+          const msg = gitErr instanceof Error ? gitErr.message : String(gitErr);
+          emitAndRecord('Git Release & Sync', 'SUCCESS', `Git adımı uyarısı: ${msg}`);
+        }
+      } else {
+        emitAndRecord('Git Release & Sync', 'SKIPPED', 'Git entegrasyonu atlandı');
+      }
+
       this.stateMachine.transitionTo('RELEASED');
       releaseRepo.updateStatus(releaseId, 'RELEASED');
       globalReleaseRepo?.updateStatus(releaseId, 'RELEASED');
@@ -606,6 +639,12 @@ export class ReleaseOrchestrator {
           build: resolution.next.buildNumber,
           googlePlayStatus,
           appStoreStatus,
+          gitResult: gitResult ? {
+            commitHash: gitResult.commitHash,
+            tagName: gitResult.tagName,
+            pushed: gitResult.pushed,
+            branch: gitResult.branch,
+          } : undefined,
         }),
       };
       auditRepo.create(completionAudit);
@@ -634,6 +673,7 @@ export class ReleaseOrchestrator {
         iosArtifact,
         googlePlayStatus,
         appStoreStatus,
+        gitResult,
         releaseNotes,
         durationMs: Date.now() - this.startTime
       };
