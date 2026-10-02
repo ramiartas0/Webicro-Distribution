@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "references": [
+    { "path": "packages/shared" },
+    { "path": "packages/database" },
+    { "path": "packages/audit" },
+    { "path": "packages/config" },
+    { "path": "packages/git" },
+    { "path": "packages/versioning" },
+    { "path": "packages/changelog" },
+    { "path": "packages/validation" },
+    { "path": "packages/ai" },
+    { "path": "packages/flutter" },
+    { "path": "packages/android" },
+    { "path": "packages/ios" },
+    { "path": "packages/artifacts" },
+    { "path": "packages/security" },
+    { "path": "packages/google-play" },
+    { "path": "packages/app-store" },
+    { "path": "packages/notifications" },
+    { "path": "packages/core" },
+    { "path": "apps/cli" }
+  ],
+  "include": [],
+  "exclude": ["node_modules", "dist"]
+}

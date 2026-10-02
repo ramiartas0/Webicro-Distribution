@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# Release data
+.release/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+
+# Temporary
+tmp/
+temp/
+
+# Secrets - NEVER commit these
+*.p8
+*.p12
+*.keystore
+*.jks
+service-account*.json
+google-play-key*.json
+AuthKey_*.p8
