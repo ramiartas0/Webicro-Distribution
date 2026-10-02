@@ -51,11 +51,14 @@ export const releaseCommand = new Command('release')
         configPath: typeof options['config'] === 'string' ? options['config'] : undefined,
       });
       
+      const [verPart, buildPart] = summary.version.includes('+') ? summary.version.split('+') : [summary.version, '1'];
+      const finalBuildNum = Number(buildPart) || 1;
+
       const reporter = new FinalReporter();
       reporter.printSummary({
         releaseId: summary.releaseId,
-        nextVersion: summary.version,
-        buildNumber: 250,
+        nextVersion: verPart || summary.version,
+        buildNumber: finalBuildNum,
         androidArtifactInfo: options['skipAndroid'] ? 'none' : 'build/app/outputs/bundle/release/app-release.aab',
         androidStatus: options['skipAndroid'] ? 'skipped' : 'success',
         iosArtifactInfo: options['skipIos'] ? 'none' : 'build/ios/ipa/Runner.ipa',

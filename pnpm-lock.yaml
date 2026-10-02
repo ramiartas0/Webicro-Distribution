@@ -101,6 +101,9 @@ importers:
       '@clack/prompts':
         specifier: 'catalog:'
         version: 1.8.1
+      '@webicro/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@webicro/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -113,15 +116,24 @@ importers:
       '@webicro/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@webicro/flutter':
+        specifier: workspace:*
+        version: link:../../packages/flutter
       '@webicro/git':
         specifier: workspace:*
         version: link:../../packages/git
       '@webicro/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@webicro/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       '@webicro/versioning':
         specifier: workspace:*
         version: link:../../packages/versioning
+      better-sqlite3:
+        specifier: 'catalog:'
+        version: 11.10.0
       chalk:
         specifier: 'catalog:'
         version: 5.6.2
@@ -131,6 +143,9 @@ importers:
       ora:
         specifier: 'catalog:'
         version: 9.4.1
+      simple-git:
+        specifier: 'catalog:'
+        version: 3.36.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

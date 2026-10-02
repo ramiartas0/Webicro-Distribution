@@ -2,7 +2,12 @@
   "name": "@webicro/flutter",
   "version": "1.0.0",
   "type": "module",
-  "exports": { ".": { "import": "./src/index.ts" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
@@ -17,5 +22,7 @@
     "tsup": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }
