@@ -311,7 +311,7 @@ export default function App() {
   const [targetAndroid, setTargetAndroid] = useState<boolean>(true);
   const [targetIos, setTargetIos] = useState<boolean>(true);
   const [googleTrack, setGoogleTrack] = useState<'internal' | 'alpha' | 'beta' | 'production'>('internal');
-  const [isDryRun, setIsDryRun] = useState<boolean>(false);
+  const isDryRun = false;
 
   // AI Sürüm Notları (Varsayılan olarak boş başlar, AI veya manuel doldurulur)
   const [releaseNotesTR, setReleaseNotesTR] = useState<string>('');
@@ -1988,22 +1988,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
-                {/* DRY-RUN MODU */}
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
-                  <label className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-medium cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isDryRun}
-                      onChange={(e) => setIsDryRun(e.target.checked)}
-                      className="rounded text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer"
-                    />
-                    <span>Simülasyon Modu (Dry-Run — Gerçek derleme ve mağaza yüklemesi yapmaz)</span>
-                  </label>
-                  <span className="text-[10px] font-mono uppercase bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded">
-                    Test
-                  </span>
-                </div>
               </div>
 
               {/* AI SÜRÜM NOTLARI */}
@@ -2155,19 +2139,6 @@ export default function App() {
                     <span className="font-semibold text-xs text-foreground">{getGoogleTrackLabel(googleTrack)}</span>
                   </div>
                 </div>
-
-                {/* SÜRÜM NOTU GÜVENLİK KİLİDİ UYARISI */}
-                {(!releaseNotesTR.trim() || !releaseNotesEN.trim()) && (
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
-                    <div className="space-y-0.5">
-                      <span className="font-semibold block">Dağıtım Güvenlik Kilidi Aktif</span>
-                      <span className="text-[11px] leading-relaxed block text-muted-foreground">
-                        Dağıtımın başlayabilmesi için hem Türkçe hem İngilizce sürüm notları zorunludur. Lütfen soldaki &quot;Commitlerden Üret&quot; butonuna tıklayarak AI ile notları oluşturun.
-                      </span>
-                    </div>
-                  </div>
-                )}
 
                 <div className="space-y-2">
                   <button
