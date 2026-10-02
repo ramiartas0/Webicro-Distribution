@@ -1,0 +1,20 @@
+{
+  "name": "@webicro/notifications",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": { ".": { "import": "./src/index.ts" } },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@webicro/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
