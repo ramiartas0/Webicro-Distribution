@@ -5,6 +5,7 @@ export interface AndroidBuildConfig {
   flavor?: string;
   target?: string;
   dartDefines?: Record<string, string>;
+  onLog?: (line: string) => void;
 }
 
 export interface AndroidBuildResult {

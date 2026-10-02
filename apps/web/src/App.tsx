@@ -318,6 +318,7 @@ export default function App() {
   const [releaseNotesEN, setReleaseNotesEN] = useState<string>('');
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
   const [copiedLang, setCopiedLang] = useState<'tr' | 'en' | null>(null);
+  const [isLogsCopied, setIsLogsCopied] = useState<boolean>(false);
 
   // 6 Sıralı Kurumsal Dağıtım Aşaması (Sequential Pipeline)
   const initialStages: PipelineStep[] = [
@@ -1192,6 +1193,14 @@ export default function App() {
     void navigator.clipboard.writeText(text);
     setCopiedLang(lang);
     setTimeout(() => setCopiedLang(null), 2000);
+  };
+
+  const handleCopyLogs = () => {
+    if (currentLogs.length === 0) return;
+    const text = currentLogs.join('\n');
+    void navigator.clipboard.writeText(text);
+    setIsLogsCopied(true);
+    setTimeout(() => setIsLogsCopied(false), 2000);
   };
 
   // DAĞITIMI BAŞLAT (HER PROJE İÇİN BAĞIMSIZ VE İZOLE ORKESTRASYON)
@@ -2267,23 +2276,45 @@ export default function App() {
           {/* ===================== CANLI KONSOL & LOG AKIŞI ===================== */}
           <section className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-primary" />
-                Canlı Konsol & Terminal Çıktısı
-              </h4>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {currentLogs.length} satır log
-              </span>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-primary" />
+                  Canlı Konsol & Terminal Çıktısı
+                </h4>
+                <span className="text-[10px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-muted/60 border border-border/40">
+                  {currentLogs.length} satır log
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyLogs}
+                disabled={currentLogs.length === 0}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                title="Tüm konsol loglarını panoya kopyala"
+              >
+                {isLogsCopied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-emerald-500 font-semibold">Kopyalandı!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Logları Kopyala</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <div className="p-4 rounded-lg bg-zinc-950 text-zinc-100 font-mono text-xs h-64 overflow-y-auto space-y-1 border border-zinc-800 selection:bg-zinc-800">
+            <div className="p-4 rounded-lg bg-zinc-950 text-zinc-100 font-mono text-xs h-64 overflow-y-auto space-y-1 border border-zinc-800 select-text cursor-text selection:bg-primary selection:text-primary-foreground">
               {currentLogs.length === 0 ? (
-                <div className="text-zinc-500 flex items-center justify-center h-full">
+                <div className="text-zinc-500 flex items-center justify-center h-full select-none">
                   Dağıtım başlatıldığında canlı orkestrasyon adımları ve işlem logları burada akacaktır.
                 </div>
               ) : (
                 currentLogs.map((log, idx) => (
-                  <div key={idx} className="leading-relaxed whitespace-pre-wrap break-all">
+                  <div key={idx} className="leading-relaxed whitespace-pre-wrap break-all select-text">
                     {log}
                   </div>
                 ))

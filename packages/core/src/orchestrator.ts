@@ -295,6 +295,19 @@ export class ReleaseOrchestrator {
             const buildRes = await builder.build({
               buildName: resolution.versionString,
               buildNumber: resolution.next.buildNumber,
+              onLog: (line) => {
+                if (
+                  line.includes('Gradle') ||
+                  line.includes('bundleRelease') ||
+                  line.includes('Built') ||
+                  line.includes('AAB') ||
+                  line.includes('temizliği') ||
+                  line.includes('Bağımlılıklar') ||
+                  line.includes('derlemesi')
+                ) {
+                  emitAndRecord('Android Build', 'IN_PROGRESS', line);
+                }
+              },
             }, targetDir);
             emitAndRecord('Android Build', 'SUCCESS', `AAB derlendi: ${path.basename(buildRes.aabPath)}`);
 
