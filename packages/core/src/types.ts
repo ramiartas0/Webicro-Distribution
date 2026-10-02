@@ -1,8 +1,10 @@
-import type { ReleaseStatus, StepStatus } from '@webicro/database';
-import type { ReleaseConfig } from '@webicro/config';
-import type { VersionResolution } from '@webicro/versioning';
+import type { ReleaseStatus } from '@webicro/database';
+export type { ReleaseConfig } from '@webicro/config';
+export type { VersionResolution } from '@webicro/versioning';
 import type { ArtifactManifest } from '@webicro/artifacts';
 import type { ReleaseNotesMap } from '@webicro/validation';
+
+export type StepStatus = 'PENDING' | 'RUNNING' | 'IN_PROGRESS' | 'SUCCESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
 export interface OrchestratorOptions {
   configPath?: string;

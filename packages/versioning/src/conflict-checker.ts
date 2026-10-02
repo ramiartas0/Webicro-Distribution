@@ -1,6 +1,5 @@
 import { simpleGit } from 'simple-git';
 import type { SemanticVersion, VersionConflict } from './types.js';
-import { formatVersion } from './semver.js';
 
 export class VersionConflictChecker {
   async checkGitTags(version: string, repoPath?: string): Promise<VersionConflict | null> {

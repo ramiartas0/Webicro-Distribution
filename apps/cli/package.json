@@ -1,0 +1,35 @@
+{
+  "name": "@webicro/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "release": "./dist/index.js",
+    "webicro": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@webicro/shared": "workspace:*",
+    "@webicro/database": "workspace:*",
+    "@webicro/audit": "workspace:*",
+    "@webicro/config": "workspace:*",
+    "@webicro/git": "workspace:*",
+    "@webicro/versioning": "workspace:*",
+    "@webicro/core": "workspace:*",
+    "commander": "catalog:",
+    "@clack/prompts": "catalog:",
+    "ora": "catalog:",
+    "chalk": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

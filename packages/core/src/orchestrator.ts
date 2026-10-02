@@ -5,7 +5,6 @@ import { ReleasePlanner } from './release-planner.js';
 import type { OrchestratorOptions, ReleaseExecutionSummary, ReleaseStepEvent } from './types.js';
 import type { VersionResolution } from '@webicro/versioning';
 
-type StepStatus = 'PENDING' | 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 
 export class OrchestratorError extends AppError {
   constructor(message: string) {
@@ -17,15 +16,22 @@ export class ReleaseOrchestrator {
   private stateMachine: ReleaseStateMachine;
   private planner: ReleasePlanner;
   private startTime: number = 0;
+  private listeners: Array<(event: ReleaseStepEvent) => void> = [];
   
   constructor() {
     this.stateMachine = new ReleaseStateMachine('DRAFT');
     this.planner = new ReleasePlanner();
   }
 
+  public onStep(listener: (event: ReleaseStepEvent) => void): void {
+    this.listeners.push(listener);
+  }
+
+  public async execute(options: OrchestratorOptions): Promise<ReleaseExecutionSummary> {
+    return this.run(options);
+  }
+
   public async resume(releaseId: string, options: OrchestratorOptions): Promise<ReleaseExecutionSummary> {
-    // In a real implementation we would fetch the state from the DB.
-    // For now, assume it's starting fresh or retrying.
     return this.run(options, releaseId);
   }
 
@@ -69,6 +75,7 @@ export class ReleaseOrchestrator {
 
       // 6. Release Plan Creation
       const plan = this.planner.createPlan(mockResolution, options);
+      this.emit({ step: 'Release Plan Creation', status: 'SUCCESS', message: `${plan.steps.length} steps planned` });
 
       this.stateMachine.transitionTo('VALIDATING');
 
@@ -159,8 +166,9 @@ export class ReleaseOrchestrator {
     }
   }
 
-  private emit(event: { step: string, status: StepStatus, message?: string, error?: string }) {
-    // In a real application, this would trigger callbacks or listeners.
-    // console.log(`[${event.status}] ${event.step}${event.error ? ': ' + event.error : ''}`);
+  private emit(event: ReleaseStepEvent): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
   }
 }

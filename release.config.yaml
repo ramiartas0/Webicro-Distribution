@@ -1,0 +1,48 @@
+project:
+  name: Piyyuu
+  package: com.piyyuu.app
+  path: .
+
+version:
+  strategy: conventional-commits
+  auto_increment: true
+
+build:
+  flutter_channel: stable
+  clean: true
+  run_tests: true
+  run_analyze: true
+
+android:
+  enabled: true
+  track: internal
+  rollout: 100
+
+ios:
+  enabled: true
+  submit_for_review: false
+
+ai:
+  enabled: true
+  provider: gemini
+  generate_release_notes: true
+  generate_localizations: true
+  languages:
+    - en
+    - tr
+
+stores:
+  google_play: false
+  app_store_connect: false
+
+security:
+  require_clean_git: true
+  scan_secrets: true
+
+deployment:
+  approval_required: false
+
+notifications:
+  enabled: true
+  channels:
+    - console

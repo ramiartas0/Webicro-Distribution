@@ -1,5 +1,5 @@
 import { mkdir, copyFile, stat, writeFile } from 'fs/promises';
-import { dirname, join, basename } from 'path';
+import { join, basename } from 'path';
 import type { ArtifactManifest } from './types.js';
 import { calculateFileHash } from './hasher.js';
 

@@ -1,17 +1,21 @@
 import type { ParsedCommit, VersionBump } from '@webicro/git';
 import { determineVersionBump } from '@webicro/git';
 import type { SemanticVersion, VersionResolution } from './types.js';
-import { parseVersion, formatVersion, bumpVersion, incrementBuildNumber } from './semver.js';
+import { parseVersion, formatVersion, bumpVersion } from './semver.js';
 
 export interface VersionResolverOptions {
   strategy?: 'conventional-commits' | 'manual';
 }
 
 export class VersionResolver {
-  private strategy: 'conventional-commits' | 'manual';
+  private readonly strategy: 'conventional-commits' | 'manual';
 
   constructor(options?: VersionResolverOptions) {
     this.strategy = options?.strategy || 'conventional-commits';
+  }
+
+  public getStrategy(): 'conventional-commits' | 'manual' {
+    return this.strategy;
   }
 
   resolve(params: { currentVersion: string; commits: ParsedCommit[]; manualVersion?: string; manualBump?: VersionBump }): VersionResolution {
