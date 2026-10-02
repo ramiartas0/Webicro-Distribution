@@ -64,20 +64,21 @@ export class GitOperations {
     this.git = simpleGit(this.targetDir);
   }
 
-  private async getRelPath(): Promise<string> {
-    try {
-      const topLevel = await this.git.revparse(['--show-toplevel']);
-      const trimmed = topLevel.trim();
-      const rel = path.relative(trimmed, this.targetDir);
-      return rel && rel !== '.' ? rel.replace(/\\/g, '/') : '';
-    } catch {
-      return '';
-    }
+  private async getRootContext(): Promise<{ rootGit: SimpleGit; topLevel: string; rel: string }> {
+    const topLevel = (await this.git.revparse(['--show-toplevel'])).trim();
+    const rel = path.relative(topLevel, this.targetDir);
+    const normalizedRel = rel && rel !== '.' ? rel.replace(/\\/g, '/') : '';
+    return {
+      rootGit: simpleGit(topLevel),
+      topLevel,
+      rel: normalizedRel,
+    };
   }
 
   async getRemoteInfo(): Promise<GitRemoteInfo | null> {
     try {
-      const remotes = await this.git.getRemotes(true);
+      const { rootGit } = await this.getRootContext();
+      const remotes = await rootGit.getRemotes(true);
       if (!remotes || remotes.length === 0) {
         return null;
       }
@@ -105,7 +106,8 @@ export class GitOperations {
 
   async getCurrentBranch(): Promise<string> {
     try {
-      const status = await this.git.status();
+      const { rootGit } = await this.getRootContext();
+      const status = await rootGit.status();
       return status.current || 'main';
     } catch {
       return 'main';
@@ -114,8 +116,8 @@ export class GitOperations {
 
   async getUncommittedProjectFiles(): Promise<string[]> {
     try {
-      const rel = await this.getRelPath();
-      const status = await this.git.status();
+      const { rootGit, rel } = await this.getRootContext();
+      const status = await rootGit.status();
       const files = status.files
         .map((f) => f.path)
         .filter((f) => !f.includes('/.release/') && !f.startsWith('.release/'));
@@ -145,11 +147,11 @@ export class GitOperations {
       throw new Error(`Git reposu bulunamadı: ${this.targetDir}`);
     }
 
-    const rel = await this.getRelPath();
+    const { rootGit, rel } = await this.getRootContext();
     const branch = await this.getCurrentBranch();
 
-    // 1. Projeye ait uncommitted dosyaları bul
-    const status = await this.git.status();
+    // 1. Projeye ait uncommitted dosyaları bul (repo köküne göre yollar)
+    const status = await rootGit.status();
     const rawFiles = status.files
       .map((f) => f.path)
       .filter((f) => !f.includes('/.release/') && !f.startsWith('.release/'));
@@ -164,7 +166,7 @@ export class GitOperations {
 
     if (filesToStage.length === 0) {
       // Değişiklik yoksa mevcut HEAD hash'ini al
-      const head = await this.git.revparse(['HEAD']);
+      const head = await rootGit.revparse(['HEAD']);
       return {
         commitHash: head.trim(),
         branch,
@@ -173,8 +175,8 @@ export class GitOperations {
       };
     }
 
-    // 2. Sadece bu projeye ait dosyaları stage et (diğer projeler karışmasın)
-    await this.git.add(filesToStage);
+    // 2. Sadece bu projeye ait dosyaları stage et (repo kökünden)
+    await rootGit.add(filesToStage);
 
     // 3. Commit mesajını oluştur
     const commitMessage =
@@ -183,15 +185,15 @@ export class GitOperations {
         options.buildNumber ? ` (#${options.buildNumber})` : ''
       }`;
 
-    const commitResult = await this.git.commit(commitMessage, filesToStage);
-    const commitHash = commitResult.commit || (await this.git.revparse(['HEAD'])).trim();
+    const commitResult = await rootGit.commit(commitMessage, filesToStage);
+    const commitHash = commitResult.commit || (await rootGit.revparse(['HEAD'])).trim();
 
     // 4. Tag oluştur (eğer istenmişse)
     let tagName: string | undefined;
     if (options.createTag !== false) {
       tagName = `${options.projectName}-v${options.version}`;
       try {
-        await this.git.addTag(tagName);
+        await rootGit.addTag(tagName);
       } catch (tagErr: unknown) {
         // Tag zaten varsa force güncelleme yapmayıp uyaralım veya sessiz geçelim
         const errMsg = tagErr instanceof Error ? tagErr.message : String(tagErr);
@@ -207,9 +209,9 @@ export class GitOperations {
       const remoteInfo = await this.getRemoteInfo();
       if (remoteInfo) {
         try {
-          await this.git.push('origin', branch);
+          await rootGit.push('origin', branch);
           if (tagName) {
-            await this.git.push(['origin', tagName]);
+            await rootGit.push(['origin', tagName]);
           }
           pushed = true;
         } catch (pushErr: unknown) {
@@ -228,3 +230,4 @@ export class GitOperations {
     };
   }
 }
+
