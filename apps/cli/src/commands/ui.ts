@@ -244,15 +244,12 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
 /**
  * Mükerrer (duplicate) Flutter projelerini eler.
  * Mağazada yayında olan (live), sürüm karşılığı bulunan ve daha güncel olan projeyi korur.
+ * ÖNEMLİ: Sıralama aktif projeye göre değişmez, orijinal eklenme/liste sırasını stabil korur.
  */
-export function deduplicateProjects(projects: ProjectEntry[], activePath?: string): ProjectEntry[] {
+export function deduplicateProjects(projects: ProjectEntry[], _activePath?: string): ProjectEntry[] {
   const scoreProject = (p: ProjectEntry): number => {
     let score = 0;
-    // 1. Aktif proje ise öncelik ver
-    if (activePath && path.resolve(p.path) === path.resolve(activePath)) {
-      score += 10000;
-    }
-    // 2. Mağazada canlı sürüm varsa yüksek öncelik
+    // 1. Mağazada canlı sürüm varsa yüksek öncelik
     const gpLive = p.stores?.googlePlay?.status === 'live';
     const asLive = p.stores?.appStore?.status === 'live';
     if (gpLive || asLive) {
@@ -261,26 +258,26 @@ export function deduplicateProjects(projects: ProjectEntry[], activePath?: strin
     if (gpLive && asLive) {
       score += 2000;
     }
-    // 3. Karşılaştırma durumu
+    // 2. Karşılaştırma durumu
     if (p.stores?.comparisonStatus === 'UPDATE_READY' || p.stores?.comparisonStatus === 'UP_TO_DATE') {
       score += 1500;
     }
-    // 4. Build numarası ve versiyon
+    // 3. Build numarası ve versiyon
     score += (p.buildNumber || 0);
-    // 5. Pubspec varlığı
+    // 4. Pubspec varlığı
     if (p.hasPubspec) {
       score += 100;
     }
     return score;
   };
 
-  // Skorlara göre azalan sırada sırala (en kaliteli / en güncel / canlı olan en başta)
+  // Skorlara göre azalan sırada sırala (en kaliteli / en güncel / canlı olan adayları önce değerlendir)
   const sorted = [...projects].sort((a, b) => scoreProject(b) - scoreProject(a));
 
   const seenPackages = new Set<string>();
   const seenNames = new Set<string>();
   const seenPaths = new Set<string>();
-  const result: ProjectEntry[] = [];
+  const selected: ProjectEntry[] = [];
 
   for (const p of sorted) {
     const resolvedP = path.resolve(p.path);
@@ -289,7 +286,7 @@ export function deduplicateProjects(projects: ProjectEntry[], activePath?: strin
     const normName = p.name.trim().toLowerCase().replace(/[-_]/g, '');
     const normPkg = p.package ? p.package.trim().toLowerCase() : '';
 
-    // Eğer aynı paket adına veya aynı normalize isme sahip proje daha önce eklendiyse (yani daha yüksek skorlu olanı zaten aldıysak), bunu atla!
+    // Eğer aynı paket adına veya aynı normalize isme sahip proje daha önce eklendiyse, kopyayı atla
     if (normPkg && seenPackages.has(normPkg)) {
       continue;
     }
@@ -300,10 +297,93 @@ export function deduplicateProjects(projects: ProjectEntry[], activePath?: strin
     if (normPkg) seenPackages.add(normPkg);
     if (normName) seenNames.add(normName);
     seenPaths.add(resolvedP);
-    result.push(p);
+    selected.push(p);
   }
 
-  return result;
+  // Orijinal dizideki sırayı (stable order) koruyarak döndür (Böylece seçim yapıldığında liste zıplamaz)
+  const originalIndexMap = new Map<string, number>();
+  projects.forEach((p, idx) => {
+    originalIndexMap.set(path.resolve(p.path), idx);
+  });
+
+  return selected.sort((a, b) => {
+    const idxA = originalIndexMap.get(path.resolve(a.path)) ?? 0;
+    const idxB = originalIndexMap.get(path.resolve(b.path)) ?? 0;
+    return idxA - idxB;
+  });
+}
+
+/**
+ * Verilen Flutter projesinin en kaliteli uygulama ikonunu (App Icon) bulur
+ */
+export function findProjectAppIcon(projectPath: string): string | null {
+  if (!fs.existsSync(projectPath)) return null;
+
+  // 1. iOS AppIcon setindeki yüksek çözünürlüklü ikonlar
+  const iosAppIconDir = path.join(projectPath, 'ios/Runner/Assets.xcassets/AppIcon.appiconset');
+  if (fs.existsSync(iosAppIconDir)) {
+    const preferredIos = [
+      'Icon-App-1024x1024@1x.png',
+      'Icon-App-60x60@3x.png',
+      'Icon-App-76x76@2x.png',
+      'Icon-App-60x60@2x.png',
+      'Icon-App-83.5x83.5@2x.png',
+      'Icon-App-40x40@3x.png',
+    ];
+    for (const name of preferredIos) {
+      const full = path.join(iosAppIconDir, name);
+      if (fs.existsSync(full)) return full;
+    }
+    try {
+      const files = fs.readdirSync(iosAppIconDir).filter(f => f.endsWith('.png'));
+      if (files.length > 0) {
+        files.sort((a, b) => {
+          const statA = fs.statSync(path.join(iosAppIconDir, a));
+          const statB = fs.statSync(path.join(iosAppIconDir, b));
+          return statB.size - statA.size;
+        });
+        return path.join(iosAppIconDir, files[0]);
+      }
+    } catch {
+      // devam et
+    }
+  }
+
+  // 2. Android mipmap ikonları
+  const androidResDir = path.join(projectPath, 'android/app/src/main/res');
+  if (fs.existsSync(androidResDir)) {
+    const mipmapDirs = [
+      'mipmap-xxxhdpi',
+      'mipmap-xxhdpi',
+      'mipmap-xhdpi',
+      'mipmap-hdpi',
+      'mipmap-mdpi',
+    ];
+    const iconNames = ['launcher_icon.png', 'ic_launcher.png', 'ic_launcher_foreground.png'];
+    for (const dir of mipmapDirs) {
+      for (const name of iconNames) {
+        const full = path.join(androidResDir, dir, name);
+        if (fs.existsSync(full)) return full;
+      }
+    }
+  }
+
+  // 3. assets/ dizinindeki logo veya icon dosyaları
+  const assetCandidates = [
+    'assets/images/logo-k.png',
+    'assets/images/logo.png',
+    'assets/images/app_icon.png',
+    'assets/icon/icon.png',
+    'assets/icons/icon.png',
+    'assets/logo.png',
+    'assets/icon.png',
+  ];
+  for (const rel of assetCandidates) {
+    const full = path.join(projectPath, rel);
+    if (fs.existsSync(full)) return full;
+  }
+
+  return null;
 }
 
 export interface StoreCredentials {
@@ -903,6 +983,42 @@ export const uiCommand = new Command('ui')
           projects: list,
         }));
         return;
+      }
+
+      // 1.2 GET /api/projects/icon - Projenin Gerçek Uygulama İkonunu Servis Et
+      if (req.method === 'GET' && pathname === '/api/projects/icon') {
+        try {
+          const targetProjPath = url.searchParams.get('path');
+          if (!targetProjPath || !fs.existsSync(targetProjPath)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Proje dizini bulunamadı.' }));
+            return;
+          }
+
+          const iconPath = findProjectAppIcon(targetProjPath);
+          if (!iconPath || !fs.existsSync(iconPath)) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Proje ikonu bulunamadı.' }));
+            return;
+          }
+
+          const ext = path.extname(iconPath).toLowerCase();
+          const contentType = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png';
+          const stat = fs.statSync(iconPath);
+
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': stat.size,
+            'Cache-Control': 'public, max-age=3600',
+          });
+          const stream = fs.createReadStream(iconPath);
+          stream.pipe(res);
+          return;
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(err) }));
+          return;
+        }
       }
 
       // 1.2 POST /api/projects/auto-discover - Çevredeki veya Belirtilen Dizindeki Flutter Projelerini Tara

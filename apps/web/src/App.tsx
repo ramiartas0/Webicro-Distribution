@@ -27,7 +27,7 @@ import {
   Compass,
   Trash2
 } from 'lucide-react';
-import { GooglePlayIcon, AppStoreConnectIcon } from './components/icons';
+import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 
 interface CommitItem {
   hash: string;
@@ -431,9 +431,10 @@ export default function App() {
     }
   };
 
-  // PROJE DEĞİŞTİR
+  // PROJE DEĞİŞTİR (Sıralamayı bozmadan, sadece seçili projeyi güncelle)
   const handleSwitchProject = async (targetPath: string) => {
     if (targetPath === activeProjectPath) return;
+    setActiveProjectPath(targetPath);
     try {
       const res = await fetch('/api/projects/switch', {
         method: 'POST',
@@ -441,7 +442,8 @@ export default function App() {
         body: JSON.stringify({ path: targetPath }),
       });
       if (res.ok) {
-        await loadProjectsAndActive();
+        await fetchProjectDetails();
+        await loadStoreCredentials();
       }
     } catch (err) {
       console.error('Proje değiştirme hatası:', err);
@@ -878,43 +880,52 @@ export default function App() {
               <div
                 key={p.id}
                 onClick={() => void handleSwitchProject(p.path)}
-                className={`p-3 rounded-lg border text-left transition-all cursor-pointer relative ${
+                className={`p-3 rounded-xl border text-left transition-all cursor-pointer relative overflow-hidden ${
                   isSelected
-                    ? 'bg-sidebar-accent border-primary ring-1 ring-primary/20 shadow-sm'
+                    ? 'border-2 border-primary bg-primary/5 ring-2 ring-primary/20 shadow-md pl-3.5'
                     : 'border-sidebar-border bg-sidebar hover:bg-sidebar-accent/50 hover:border-sidebar-border/80'
                 }`}
               >
-                {/* PROJE ADI & KARŞILAŞTIRMA ROZETİ */}
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <div className="font-semibold text-xs text-foreground truncate max-w-[145px]" title={p.name}>
-                    {p.name}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                      comp?.comparisonStatus === 'UPDATE_READY'
-                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                        : comp?.comparisonStatus === 'UP_TO_DATE'
-                        ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
-                        : comp?.comparisonStatus === 'NEW_APP'
-                        ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
-                        : 'bg-muted text-muted-foreground border border-border'
-                    }`}>
-                      {comp?.badge || 'Bekliyor'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => void handleRemoveProject(e, p.path, p.name)}
-                      title="Projeyi Listeden Kaldır"
-                      className="p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
+                {/* AKTİF PROJE SOL VURGU ÇİZGİSİ */}
+                {isSelected && (
+                  <div className="absolute left-0 top-2 bottom-2 w-1 bg-primary rounded-r-full" />
+                )}
 
-                {/* PAKET / BUNDLE ID */}
-                <div className="text-[10px] font-mono text-muted-foreground truncate mb-2" title={p.package}>
-                  {p.package || 'com.example.app'}
+                {/* PROJE BAŞLIĞI VE İKONU */}
+                <div className="flex items-start gap-2.5 mb-2">
+                  <ProjectAppIcon path={p.path} name={p.name} className="w-9 h-9" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-1 mb-0.5">
+                      <div className="font-semibold text-xs text-foreground truncate" title={p.name}>
+                        {p.name}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => void handleRemoveProject(e, p.path, p.name)}
+                        title="Projeyi Listeden Kaldır"
+                        className="p-1 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors shrink-0"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="text-[10px] font-mono text-muted-foreground truncate" title={p.package}>
+                        {p.package || 'com.example.app'}
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                        comp?.comparisonStatus === 'UPDATE_READY'
+                          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                          : comp?.comparisonStatus === 'UP_TO_DATE'
+                          ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                          : comp?.comparisonStatus === 'NEW_APP'
+                          ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                          : 'bg-muted text-muted-foreground border border-border'
+                      }`}>
+                        {comp?.badge || 'Bekliyor'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* YEREL KOD DURUMU */}
@@ -1022,28 +1033,31 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* ÜST BAŞLIK & PROJE ÖZETİ */}
         <header className="px-6 py-4 border-b border-border bg-card/60 backdrop-blur sticky top-0 z-10 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-lg font-bold tracking-tight text-foreground">{projectName}</h2>
-              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
-                {projectPackage}
-              </span>
-              {hasPubspec && (
-                <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                  Flutter
+          <div className="flex items-center gap-3">
+            <ProjectAppIcon path={activeProjectPath} name={projectName} className="w-10 h-10 rounded-xl shadow-sm border border-border" />
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-bold tracking-tight text-foreground">{projectName}</h2>
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
+                  {projectPackage}
                 </span>
-              )}
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                isGitClean
-                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                  : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-              }`}>
-                {isGitClean ? 'Git Temiz' : 'Değişiklikler Var'}
-              </span>
+                {hasPubspec && (
+                  <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                    Flutter
+                  </span>
+                )}
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                  isGitClean
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                }`}>
+                  {isGitClean ? 'Git Temiz' : 'Değişiklikler Var'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl">
+                {activeProjectPath} • branch: <span className="text-emerald-500">{gitBranch}</span>
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl">
-              {activeProjectPath} • branch: <span className="text-emerald-500">{gitBranch}</span>
-            </p>
           </div>
 
           <div className="flex items-center gap-2">

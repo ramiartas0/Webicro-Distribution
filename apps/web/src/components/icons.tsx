@@ -83,3 +83,50 @@ export function AppStoreIcon({ className = 'w-4 h-4', ...props }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Flutter Projesinin Gerçek Uygulama İkonu (Bulunamazsa Baş Harf Gradient Avatar)
+ */
+export function ProjectAppIcon({
+  path,
+  name,
+  className = 'w-9 h-9',
+}: {
+  path: string;
+  name: string;
+  className?: string;
+}) {
+  const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasError(false);
+  }, [path]);
+
+  const initials = (name || 'App')
+    .replace(/[^a-zA-Z0-9]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || '')
+    .join('') || name.substring(0, 2).toUpperCase();
+
+  if (hasError || !path) {
+    return (
+      <div
+        className={`${className} rounded-xl bg-gradient-to-br from-primary/15 via-primary/25 to-primary/35 border border-primary/25 flex items-center justify-center font-bold text-xs text-primary shadow-sm shrink-0 select-none`}
+      >
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={`/api/projects/icon?path=${encodeURIComponent(path)}`}
+      alt={name}
+      onError={() => setHasError(true)}
+      className={`${className} rounded-xl object-cover border border-border/50 shadow-sm shrink-0 bg-background`}
+      loading="lazy"
+    />
+  );
+}
