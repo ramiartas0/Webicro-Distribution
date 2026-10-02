@@ -24,7 +24,8 @@ import {
   Key,
   Code2,
   X,
-  Info
+  Info,
+  Save
 } from 'lucide-react';
 
 interface CommitItem {
@@ -114,6 +115,17 @@ export default function App() {
   const [showStoreTestModal, setShowStoreTestModal] = useState<boolean>(false);
   const [showWikiModal, setShowWikiModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+
+  // API Bağlantı Formları (Kendi API'ne Bağlan)
+  const [activeStoreTab, setActiveStoreTab] = useState<'google' | 'apple'>('google');
+  const [googleJsonInput, setGoogleJsonInput] = useState<string>('');
+  const [googlePathInput, setGooglePathInput] = useState<string>('');
+  const [appleKeyIdInput, setAppleKeyIdInput] = useState<string>('');
+  const [appleIssuerIdInput, setAppleIssuerIdInput] = useState<string>('');
+  const [applePrivateKeyInput, setApplePrivateKeyInput] = useState<string>('');
+  const [isSavingGoogle, setIsSavingGoogle] = useState<boolean>(false);
+  const [isSavingApple, setIsSavingApple] = useState<boolean>(false);
+  const [saveGlobal, setSaveGlobal] = useState<boolean>(false);
 
   // Proje Detayları
   const [projectName, setProjectName] = useState<string>('Webicro Distribution');
@@ -241,6 +253,61 @@ export default function App() {
   const nextVersion = calculateNextVersion();
   const nextBuildNumber = currentBuildNumber + 1;
 
+  // KALICI KİMLİK BİLGİLERİNİ YÜKLE
+  const loadStoreCredentials = useCallback(async () => {
+    try {
+      const res = await fetch('/api/stores/credentials');
+      if (res.ok) {
+        const data = await res.json() as {
+          googlePlay?: {
+            configured: boolean;
+            serviceAccountEmail?: string;
+            projectId?: string;
+            keyPath?: string;
+            verified: boolean;
+          };
+          appStore?: {
+            configured: boolean;
+            keyId?: string;
+            issuerId?: string;
+            hasPrivateKey: boolean;
+            verified: boolean;
+          };
+        };
+
+        if (data.googlePlay?.configured) {
+          setGooglePlayInfo((prev) => ({
+            ...prev,
+            connected: data.googlePlay?.verified || Boolean(data.googlePlay?.serviceAccountEmail),
+            serviceAccount: data.googlePlay?.serviceAccountEmail || prev.serviceAccount,
+            projectId: data.googlePlay?.projectId,
+            keyPath: data.googlePlay?.keyPath,
+          }));
+          if (data.googlePlay.keyPath && !googlePathInput) {
+            setGooglePathInput(data.googlePlay.keyPath);
+          }
+        }
+
+        if (data.appStore?.configured) {
+          setAppStoreInfo((prev) => ({
+            ...prev,
+            connected: data.appStore?.verified || Boolean(data.appStore?.keyId),
+            keyId: data.appStore?.keyId || prev.keyId,
+            issuerId: data.appStore?.issuerId || prev.issuerId,
+          }));
+          if (data.appStore.keyId && !appleKeyIdInput) {
+            setAppleKeyIdInput(data.appStore.keyId);
+          }
+          if (data.appStore.issuerId && !appleIssuerIdInput) {
+            setAppleIssuerIdInput(data.appStore.issuerId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Kimlik bilgileri yüklenemedi:', err);
+    }
+  }, [googlePathInput, appleKeyIdInput, appleIssuerIdInput]);
+
   // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
     try {
@@ -251,10 +318,11 @@ export default function App() {
         setActiveProjectPath(pData.activePath);
       }
       await fetchProjectDetails();
+      await loadStoreCredentials();
     } catch (err) {
       console.error('Projeler yüklenemedi:', err);
     }
-  }, []);
+  }, [loadStoreCredentials]);
 
   const fetchProjectDetails = async () => {
     try {
@@ -396,38 +464,50 @@ export default function App() {
     }
   };
 
-  // GOOGLE PLAY TESTİ
-  const handleTestGooglePlay = async () => {
+  // KENDİ GOOGLE PLAY APISINI BAĞLA VE KALICI KAYDET
+  const handleSaveGooglePlay = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingGoogle(true);
     setGoogleTestResult({ testing: true, tested: false, success: false });
     try {
-      const res = await fetch('/api/stores/test-google', { method: 'POST' });
+      const res = await fetch('/api/stores/save-google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceAccountJson: googleJsonInput.trim() || undefined,
+          keyPath: googlePathInput.trim() || undefined,
+          saveGlobal,
+        }),
+      });
       const data = await res.json() as {
-        success: boolean;
+        success?: boolean;
         message?: string;
         error?: string;
         serviceAccount?: string;
         projectId?: string;
-        keyPath?: string;
-        oauthReady?: boolean;
-        oauthDetails?: string;
-        permissionsRequired?: string[];
       };
-      setGoogleTestResult({
-        testing: false,
-        tested: true,
-        success: data.success,
-        message: data.message,
-        error: data.error,
-        details: data as unknown as Record<string, unknown>,
-      });
-      if (data.serviceAccount) {
+
+      if (res.ok && data.success) {
+        setGoogleTestResult({
+          testing: false,
+          tested: true,
+          success: true,
+          message: data.message || 'Google Play API anahtarı başarıyla kaydedildi ve doğrulandı.',
+        });
         setGooglePlayInfo((prev) => ({
           ...prev,
-          connected: data.success,
+          connected: true,
           serviceAccount: data.serviceAccount || prev.serviceAccount,
           projectId: data.projectId,
-          keyPath: data.keyPath,
         }));
+        await loadProjectsAndActive();
+      } else {
+        setGoogleTestResult({
+          testing: false,
+          tested: true,
+          success: false,
+          error: data.error || 'Google Play API kaydetme ve test başarısız oldu.',
+        });
       }
     } catch (err) {
       setGoogleTestResult({
@@ -436,41 +516,57 @@ export default function App() {
         success: false,
         error: `Sunucu bağlantı hatası: ${String(err)}`,
       });
+    } finally {
+      setIsSavingGoogle(false);
     }
   };
 
-  // APPLE APP STORE TESTİ
-  const handleTestAppleStore = async () => {
+  // KENDİ APPLE APP STORE APISINI BAĞLA VE KALICI KAYDET
+  const handleSaveAppleStore = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingApple(true);
     setAppleTestResult({ testing: true, tested: false, success: false });
     try {
-      const res = await fetch('/api/stores/test-apple', { method: 'POST' });
+      const res = await fetch('/api/stores/save-apple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: appleKeyIdInput.trim(),
+          issuerId: appleIssuerIdInput.trim(),
+          privateKey: applePrivateKeyInput.trim() || undefined,
+          saveGlobal,
+        }),
+      });
       const data = await res.json() as {
-        success: boolean;
+        success?: boolean;
         message?: string;
         error?: string;
-        stage?: string;
         keyId?: string;
         issuerId?: string;
-        appCount?: number;
-        sampleApps?: Array<{ name: string; bundleId: string }>;
-        missingFields?: string[];
-        tip?: string;
+        details?: string;
       };
-      setAppleTestResult({
-        testing: false,
-        tested: true,
-        success: data.success,
-        message: data.message,
-        error: data.error,
-        details: data as unknown as Record<string, unknown>,
-      });
-      if (data.keyId) {
+
+      if (res.ok && data.success) {
+        setAppleTestResult({
+          testing: false,
+          tested: true,
+          success: true,
+          message: data.details || data.message || 'Apple App Store Connect API anahtarı başarıyla kaydedildi.',
+        });
         setAppStoreInfo((prev) => ({
           ...prev,
-          connected: data.success,
+          connected: true,
           keyId: data.keyId || prev.keyId,
           issuerId: data.issuerId || prev.issuerId,
         }));
+        await loadProjectsAndActive();
+      } else {
+        setAppleTestResult({
+          testing: false,
+          tested: true,
+          success: false,
+          error: data.error || 'Apple API kaydetme ve doğrulama başarısız oldu.',
+        });
       }
     } catch (err) {
       setAppleTestResult({
@@ -479,6 +575,8 @@ export default function App() {
         success: false,
         error: `Sunucu bağlantı hatası: ${String(err)}`,
       });
+    } finally {
+      setIsSavingApple(false);
     }
   };
 
@@ -773,7 +871,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              <span>Sistem & Mağaza Doğrulama</span>
+              <span>Mağaza API & Bağlantı Yönetimi</span>
             </div>
             <ChevronRight className="w-3 h-3 opacity-60" />
           </button>
@@ -835,12 +933,20 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowStoreTestModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer"
+            >
+              <Key className="w-3.5 h-3.5 text-primary" />
+              <span>API Kimliklerini Yapılandır</span>
+            </button>
+
+            <button
               onClick={() => void handleSyncStores()}
               disabled={isSyncingStores}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer disabled:opacity-60"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
-              <span>{isSyncingStores ? 'Mağazalar Taranıyor...' : 'Mağaza Senkronizasyonu'}</span>
+              <span>{isSyncingStores ? 'Taranıyor...' : 'Mağaza Senkronizasyonu'}</span>
             </button>
           </div>
         </header>
@@ -901,7 +1007,11 @@ export default function App() {
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
                     <Smartphone className="w-3.5 h-3.5 text-emerald-500" /> Google Play Console
                   </span>
-                  <span className="text-[10px] text-emerald-500 font-semibold">Production</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    googlePlayInfo.connected ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-secondary'
+                  }`}>
+                    {googlePlayInfo.connected ? 'API Bağlı' : 'Bağlı Değil'}
+                  </span>
                 </div>
                 <div className="pt-1">
                   <div className="text-2xl font-extrabold font-mono text-foreground">
@@ -911,6 +1021,8 @@ export default function App() {
                       <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
                     ) : activeComparison?.googlePlay?.status === 'auth_error' ? (
                       <span className="text-rose-500 text-lg">Yetki Gerekli</span>
+                    ) : googlePlayInfo.connected ? (
+                      <span className="text-emerald-500 text-lg">Bağlantı Hazır</span>
                     ) : (
                       <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                     )}
@@ -930,7 +1042,11 @@ export default function App() {
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
                     <Apple className="w-3.5 h-3.5 text-sky-400" /> App Store Connect
                   </span>
-                  <span className="text-[10px] text-sky-400 font-semibold">TestFlight / Review</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                    appStoreInfo.connected ? 'text-sky-400 bg-sky-500/10' : 'text-muted-foreground bg-secondary'
+                  }`}>
+                    {appStoreInfo.connected ? 'API Bağlı' : 'Yapılandırılmadı'}
+                  </span>
                 </div>
                 <div className="pt-1">
                   <div className="text-2xl font-extrabold font-mono text-foreground">
@@ -938,6 +1054,8 @@ export default function App() {
                       `v${activeComparison.appStore.buildNumber}`
                     ) : activeComparison?.appStore?.status === 'not_found' ? (
                       <span className="text-muted-foreground text-lg">Kayıtlı Değil</span>
+                    ) : appStoreInfo.connected ? (
+                      <span className="text-sky-400 text-lg">Bağlantı Hazır</span>
                     ) : (
                       <span className="text-muted-foreground text-lg">Yapılandırılmadı</span>
                     )}
@@ -1379,15 +1497,20 @@ export default function App() {
         </div>
       )}
 
-      {/* ===================== MODAL: SİSTEM & MAĞAZA TESTLERİ ===================== */}
+      {/* ===================== MODAL: KENDİ APİ'NE BAĞLAN & MAĞAZA DOĞRULAMA ===================== */}
       {showStoreTestModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-card border border-border rounded-xl shadow-xl max-w-3xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
-                <ShieldCheck className="w-5 h-5 text-primary" />
-                Sistem & Mağaza Canlı Doğrulama Paneli
-              </h3>
+              <div>
+                <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
+                  <Key className="w-5 h-5 text-primary" />
+                  Kendi API Kimliklerini Bağla & Doğrula
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Bu projeye ({projectName}) veya tüm projelerinize kendi Google Play ve App Store API anahtarlarınızı bağlayın.
+                </p>
+              </div>
               <button
                 onClick={() => setShowStoreTestModal(false)}
                 className="text-muted-foreground hover:text-foreground cursor-pointer"
@@ -1396,36 +1519,81 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* GOOGLE PLAY TEST KARTI */}
-              <div className="p-4 rounded-xl border border-border bg-background/50 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm flex items-center gap-2">
-                    <Smartphone className="w-4 h-4 text-emerald-500" />
-                    Google Play Console
-                  </span>
+            {/* SEKMELER: GOOGLE PLAY / APPLE APP STORE */}
+            <div className="flex items-center gap-2 border-b border-border pb-2">
+              <button
+                onClick={() => setActiveStoreTab('google')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                  activeStoreTab === 'google'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                    : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
+                }`}
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>Google Play Console API</span>
+                {googlePlayInfo.connected && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
+              </button>
+
+              <button
+                onClick={() => setActiveStoreTab('apple')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                  activeStoreTab === 'apple'
+                    ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                    : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
+                }`}
+              >
+                <Apple className="w-4 h-4" />
+                <span>Apple App Store Connect API</span>
+                {appStoreInfo.connected && <span className="w-2 h-2 rounded-full bg-sky-400"></span>}
+              </button>
+            </div>
+
+            {/* TAB 1: GOOGLE PLAY API BAĞLANTI FORMU */}
+            {activeStoreTab === 'google' && (
+              <form onSubmit={(e) => void handleSaveGooglePlay(e)} className="space-y-4">
+                <div className="p-3 rounded-lg bg-background border border-border flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Aktif Kayıtlı Hesap:</span>{' '}
+                    <span className="font-mono font-semibold text-foreground">
+                      {googlePlayInfo.serviceAccount}
+                    </span>
+                  </div>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                     googlePlayInfo.connected
                       ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
-                    {googlePlayInfo.connected ? 'Bağlantı Hazır' : 'Bekliyor'}
+                    {googlePlayInfo.connected ? '✓ Bağlantı Hazır' : '⚪ Bekliyor'}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-muted-foreground font-mono">
-                  <div className="truncate">Hesap: {googlePlayInfo.serviceAccount}</div>
-                  <div className="truncate">Key Path: {googlePlayInfo.keyPath || '~/.secrets/google-play-key.json'}</div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>Google Cloud Service Account JSON İçeriği:</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">JSON dosyasını açıp içeriğini yapıştırın</span>
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={googleJsonInput}
+                    onChange={(e) => setGoogleJsonInput(e.target.value)}
+                    placeholder='{"type": "service_account", "project_id": "...", "private_key_id": "...", "private_key": "-----BEGIN PRIVATE KEY...", "client_email": "play-store-deployer@..."}'
+                    className="w-full text-xs font-mono p-3 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed"
+                  />
                 </div>
 
-                <button
-                  onClick={() => void handleTestGooglePlay()}
-                  disabled={googleTestResult.testing}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-secondary text-secondary-foreground font-semibold text-xs border border-border hover:bg-secondary/80 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${googleTestResult.testing ? 'animate-spin text-primary' : ''}`} />
-                  <span>{googleTestResult.testing ? 'Doğrulanıyor...' : 'Google Play Bağlantısını Test Et'}</span>
-                </button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>Veya Doğrudan JSON Dosya Yolu:</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">örneğin: ~/.secrets/google-play-key.json</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={googlePathInput}
+                    onChange={(e) => setGooglePathInput(e.target.value)}
+                    placeholder="/Users/.../.secrets/google-play-key.json"
+                    className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </div>
 
                 {googleTestResult.tested && (
                   <div className={`p-3 rounded-lg text-xs border ${
@@ -1434,43 +1602,98 @@ export default function App() {
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
                   }`}>
                     {googleTestResult.success ? (
-                      <div>✓ {googleTestResult.message || 'Service Account ve OAuth yetkisi doğrulandı.'}</div>
+                      <div>✓ {googleTestResult.message || 'Google Play Service Account başarıyla bağlandı ve kaydedildi!'}</div>
                     ) : (
-                      <div>✕ {googleTestResult.error || 'Doğrulama başarısız.'}</div>
+                      <div>✕ {googleTestResult.error || 'Doğrulama başarısız oldu.'}</div>
                     )}
                   </div>
                 )}
-              </div>
 
-              {/* APPLE APP STORE TEST KARTI */}
-              <div className="p-4 rounded-xl border border-border bg-background/50 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm flex items-center gap-2">
-                    <Apple className="w-4 h-4 text-sky-400" />
-                    Apple App Store Connect
-                  </span>
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveGlobal}
+                      onChange={(e) => setSaveGlobal(e.target.checked)}
+                      className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <span>Tüm projeler için genel (global) anahtar olarak kaydet</span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingGoogle || (!googleJsonInput.trim() && !googlePathInput.trim())}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className={`w-3.5 h-3.5 ${isSavingGoogle ? 'animate-spin' : ''}`} />
+                    <span>{isSavingGoogle ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 2: APPLE APP STORE CONNECT API FORMU */}
+            {activeStoreTab === 'apple' && (
+              <form onSubmit={(e) => void handleSaveAppleStore(e)} className="space-y-4">
+                <div className="p-3 rounded-lg bg-background border border-border flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Aktif Key ID:</span>{' '}
+                    <span className="font-mono font-semibold text-foreground">
+                      {appStoreInfo.keyId}
+                    </span>
+                  </div>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                     appStoreInfo.connected
                       ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
-                    {appStoreInfo.connected ? 'Bağlantı Hazır' : 'Yapılandırılmadı'}
+                    {appStoreInfo.connected ? '✓ Bağlantı Hazır' : '⚪ Yapılandırılmadı'}
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-muted-foreground font-mono">
-                  <div>Key ID: {appStoreInfo.keyId}</div>
-                  <div>Issuer ID: {appStoreInfo.issuerId}</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground block">
+                      App Store Key ID*:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appleKeyIdInput}
+                      onChange={(e) => setAppleKeyIdInput(e.target.value)}
+                      placeholder="örneğin: 2X9R427ADR"
+                      className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground block">
+                      App Store Issuer ID (UUID)*:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={appleIssuerIdInput}
+                      onChange={(e) => setAppleIssuerIdInput(e.target.value)}
+                      placeholder="57246542-96fe-1a63-e053-0824d011072a"
+                      className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => void handleTestAppleStore()}
-                  disabled={appleTestResult.testing}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-secondary text-secondary-foreground font-semibold text-xs border border-border hover:bg-secondary/80 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${appleTestResult.testing ? 'animate-spin text-primary' : ''}`} />
-                  <span>{appleTestResult.testing ? 'Test Ediliyor...' : 'App Store Bağlantısını Test Et'}</span>
-                </button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                    <span>AuthKey .p8 Özel Anahtar İçeriği:</span>
+                    <span className="text-[10px] font-normal text-muted-foreground">-----BEGIN PRIVATE KEY----- bloğunu yapıştırın</span>
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={applePrivateKeyInput}
+                    onChange={(e) => setApplePrivateKeyInput(e.target.value)}
+                    placeholder="-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQg...\n-----END PRIVATE KEY-----"
+                    className="w-full text-xs font-mono p-3 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed"
+                  />
+                </div>
 
                 {appleTestResult.tested && (
                   <div className={`p-3 rounded-lg text-xs border ${
@@ -1479,14 +1702,35 @@ export default function App() {
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
                   }`}>
                     {appleTestResult.success ? (
-                      <div>✓ {appleTestResult.message || 'JWT Token üretildi ve Apple API doğrulandı.'}</div>
+                      <div>✓ {appleTestResult.message || 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!'}</div>
                     ) : (
-                      <div>✕ {appleTestResult.error || 'Doğrulama başarısız.'}</div>
+                      <div>✕ {appleTestResult.error || 'Doğrulama başarısız oldu.'}</div>
                     )}
                   </div>
                 )}
-              </div>
-            </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={saveGlobal}
+                      onChange={(e) => setSaveGlobal(e.target.checked)}
+                      className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                    />
+                    <span>Tüm projeler için genel (global) anahtar olarak kaydet</span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingApple || !appleKeyIdInput.trim() || !appleIssuerIdInput.trim()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
+                    <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1602,7 +1846,7 @@ export default function App() {
                     Hizmet hesabının <strong>Anahtarlar (Keys)</strong> sekmesinden <code>JSON</code> formatında yeni bir anahtar indirin.
                   </li>
                   <li>
-                    İndirilen JSON anahtarını <code>~/.secrets/google-play-key.json</code> yoluna yerleştirin veya <code>.env</code> dosyanızda <code>GOOGLE_PLAY_SERVICE_ACCOUNT</code> değişkenine dosya yolunu verin.
+                    İndirilen JSON anahtarını kopyalayıp <strong>"API Kimliklerini Yapılandır"</strong> penceresindeki alana yapıştırın ve <strong>"Kaydet ve Bağlantıyı Doğrula"</strong> butonuna basın.
                   </li>
                   <li>
                     <strong>Google Play Console &gt; Kullanıcılar ve İzinler</strong> sekmesinden bu Service Account e-posta adresini davet edin ve aşağıdaki izinleri verin:
@@ -1631,18 +1875,12 @@ export default function App() {
                     Oluşturulan anahtarın <strong>Key ID</strong>'sini ve sayfanın üstündeki <strong>Issuer ID</strong> değerini kopyalayın.
                   </li>
                   <li>
-                    <code>.p8</code> uzantılı özel anahtar dosyasını indirin (bu dosya yalnızca bir kez indirilebilir!).
+                    <code>.p8</code> uzantılı özel anahtar dosyasını indirin ve metin olarak açıp <strong>"API Kimliklerini Yapılandır"</strong> penceresindeki alana yapıştırın.
                   </li>
                   <li>
-                    Projenizin kök dizinindeki <code>.env</code> dosyasına bu bilgileri ekleyin:
+                    <strong>"Kaydet ve Bağlantıyı Doğrula"</strong> butonuna basarak kalıcı olarak hesabınıza bağlayın.
                   </li>
                 </ol>
-
-                <div className="p-3 rounded bg-zinc-950 text-zinc-100 font-mono text-[11px] border border-zinc-800">
-                  APPSTORE_KEY_ID=ABCD1234EF<br/>
-                  APPSTORE_ISSUER_ID=12345678-1234-1234-1234-123456789abc<br/>
-                  APPSTORE_PRIVATE_KEY_PATH=/Users/kullanici/.secrets/AuthKey_ABCD1234EF.p8
-                </div>
               </div>
 
               {/* TEST YÖNTEMLERİ */}
@@ -1652,7 +1890,7 @@ export default function App() {
                   3. Bağlantılar Nasıl Test Edilir?
                 </h4>
                 <p>
-                  Sol menüdeki <strong>"Sistem & Mağaza Doğrulama"</strong> butonuna tıklayarak açılan pencereden her iki mağazanın canlı API el sıkışmasını tek tıkla test edebilirsiniz. Doğrulayıcı; anahtar dosyalarının geçerliliğini, JWT token üretimini ve mağaza izinlerini gerçek zamanlı olarak denetler.
+                  Üst menüdeki veya sol alttaki <strong>"API Kimliklerini Yapılandır"</strong> butonuna tıklayarak açılan pencereden her iki mağazanın canlı API el sıkışmasını tek tıkla test edebilir, istediğiniz zaman yeni anahtarlar tanımlayabilirsiniz. Kaydedilen anahtarlar proje dizininde kalıcı olarak saklanır ve sayfa yenilense dahi korunur.
                 </p>
               </div>
             </div>

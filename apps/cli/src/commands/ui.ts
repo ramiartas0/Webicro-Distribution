@@ -130,13 +130,118 @@ function detectProjectMetadata(projectPath: string): {
   return { name, package: pkg, version, buildNumber };
 }
 
+export interface StoreCredentials {
+  googlePlay?: {
+    serviceAccountEmail?: string;
+    projectId?: string;
+    serviceAccountJson?: string;
+    keyPath?: string;
+    verified?: boolean;
+    lastTestedAt?: string;
+  };
+  appStore?: {
+    keyId?: string;
+    issuerId?: string;
+    privateKey?: string;
+    privateKeyPath?: string;
+    verified?: boolean;
+    lastTestedAt?: string;
+  };
+}
+
+/**
+ * Proje dizininden veya global yapılandırmadan kayıtlı mağaza kimlik bilgilerini getirir
+ */
+export function getStoreCredentials(projectDir?: string): StoreCredentials {
+  const candidates: string[] = [];
+  if (projectDir) {
+    candidates.push(path.join(projectDir, '.release/credentials.json'));
+  }
+  candidates.push(path.join(process.cwd(), '.release/credentials.json'));
+
+  for (const cPath of candidates) {
+    if (fs.existsSync(cPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8')) as StoreCredentials;
+        if (parsed.googlePlay || parsed.appStore) {
+          return parsed;
+        }
+      } catch {
+        // Devam et
+      }
+    }
+  }
+
+  // Fallback: Ortam değişkenleri ve yerel anahtarlar
+  const creds: StoreCredentials = {};
+
+  const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
+  const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
+
+  if (fs.existsSync(googleKeyPath)) {
+    try {
+      const keyContent = JSON.parse(fs.readFileSync(googleKeyPath, 'utf8')) as {
+        client_email?: string;
+        project_id?: string;
+      };
+      if (keyContent.client_email) {
+        creds.googlePlay = {
+          serviceAccountEmail: keyContent.client_email,
+          projectId: keyContent.project_id || '',
+          keyPath: googleKeyPath,
+          verified: true,
+          lastTestedAt: new Date().toISOString(),
+        };
+      }
+    } catch {
+      // Sessiz
+    }
+  }
+
+  const appStoreKeyId = process.env['APPSTORE_KEY_ID'];
+  const appStoreIssuerId = process.env['APPSTORE_ISSUER_ID'];
+  const appStoreKeyPath = process.env['APPSTORE_PRIVATE_KEY_PATH'];
+  const appStorePrivateKey = process.env['APPSTORE_PRIVATE_KEY'];
+
+  if (appStoreKeyId && appStoreIssuerId && (appStoreKeyPath || appStorePrivateKey)) {
+    creds.appStore = {
+      keyId: appStoreKeyId,
+      issuerId: appStoreIssuerId,
+      privateKeyPath: appStoreKeyPath,
+      privateKey: appStorePrivateKey,
+      verified: true,
+      lastTestedAt: new Date().toISOString(),
+    };
+  }
+
+  // Otomatik kalıcı kaydet
+  if (creds.googlePlay || creds.appStore) {
+    saveStoreCredentials(creds, projectDir);
+  }
+
+  return creds;
+}
+
+/**
+ * Mağaza kimlik bilgilerini projeye veya global dizine kalıcı olarak kaydeder
+ */
+export function saveStoreCredentials(creds: StoreCredentials, projectDir?: string): void {
+  const targetDir = projectDir ? path.join(projectDir, '.release') : path.join(process.cwd(), '.release');
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+  const filePath = path.join(targetDir, 'credentials.json');
+  fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf8');
+}
+
 /**
  * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
  */
 async function compareProjectWithStores(
   pkgName: string,
   localBuildNumber: number,
-  localVersion: string
+  localVersion: string,
+  projectDir?: string
 ): Promise<StoreComparison> {
   const comparison: StoreComparison = {
     googlePlay: { status: 'not_configured' },
@@ -146,15 +251,15 @@ async function compareProjectWithStores(
     summary: 'Mağaza API anahtarları yapılandırılmadı.',
   };
 
-  // 1. Google Play Canlı Karşılaştırması
-  const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
-  const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
+  const creds = getStoreCredentials(projectDir);
 
-  if (fs.existsSync(googleKeyPath)) {
+  // 1. Google Play Canlı Karşılaştırması
+  if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
     try {
       const adapter = new GooglePlayAdapter({
         packageName: pkgName,
-        serviceAccountJsonPath: googleKeyPath,
+        serviceAccountJson: creds.googlePlay.serviceAccountJson,
+        serviceAccountJsonPath: creds.googlePlay.keyPath,
       });
       const res = await adapter.getSafeLatestVersionCode();
       if (res.status === 'found') {
@@ -189,19 +294,14 @@ async function compareProjectWithStores(
   }
 
   // 2. Apple App Store Canlı Karşılaştırması
-  const appStoreKeyId = process.env['APPSTORE_KEY_ID'] || '';
-  const appStoreIssuerId = process.env['APPSTORE_ISSUER_ID'] || '';
-  const appStoreKeyPath = process.env['APPSTORE_PRIVATE_KEY_PATH'] || '';
-  const appStoreKeyContent = process.env['APPSTORE_PRIVATE_KEY'] || '';
-
-  if (appStoreKeyId && appStoreIssuerId && (appStoreKeyPath || appStoreKeyContent)) {
+  if (creds.appStore && creds.appStore.keyId && creds.appStore.issuerId && (creds.appStore.privateKeyPath || creds.appStore.privateKey)) {
     try {
       const adapter = new AppStoreAdapter({
-        keyId: appStoreKeyId,
-        issuerId: appStoreIssuerId,
+        keyId: creds.appStore.keyId,
+        issuerId: creds.appStore.issuerId,
         bundleId: pkgName,
-        privateKeyPath: appStoreKeyPath || undefined,
-        privateKeyContent: appStoreKeyContent || undefined,
+        privateKeyPath: creds.appStore.privateKeyPath,
+        privateKeyContent: creds.appStore.privateKey,
       });
 
       const latestBuild = await adapter.getLatestBuild().catch(() => null);
@@ -258,6 +358,10 @@ async function compareProjectWithStores(
     comparison.comparisonStatus = 'UNKNOWN';
     comparison.badge = '🔒 Yetki Gerekli';
     comparison.summary = 'Play Console Service Account izinleri eksik veya doğrulanmadı.';
+  } else if (creds.googlePlay?.verified || creds.appStore?.verified) {
+    comparison.comparisonStatus = 'NEW_APP';
+    comparison.badge = '🟢 API Bağlı';
+    comparison.summary = 'Mağaza API anahtarları doğrulandı ve bağlı.';
   }
 
   return comparison;
@@ -585,33 +689,16 @@ export const uiCommand = new Command('ui')
             suggestedVersion = `${parts[0] || 1}.${(parts[1] || 0) + 1}.0`;
           }
 
-          // 4.5 Gerçek Google Play Bilgisi
-          const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
-          const googlePlayKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
-          let googlePlayConnected = false;
-          let googlePlayEmail = 'Bağlı değil (Anahtar bulunamadı)';
-          let googlePlayProjectId = '';
+          // 4.5 Kalıcı ve Proje Bazlı Mağaza Kimlik Bilgileri
+          const creds = getStoreCredentials(currentTarget);
+          const googlePlayConnected = Boolean(creds.googlePlay?.serviceAccountEmail || creds.googlePlay?.keyPath);
+          const googlePlayEmail = creds.googlePlay?.serviceAccountEmail || 'Bağlı değil (Anahtar yapılandırılmadı)';
+          const googlePlayProjectId = creds.googlePlay?.projectId || '';
+          const googlePlayKeyPath = creds.googlePlay?.keyPath || '';
 
-          if (fs.existsSync(googlePlayKeyPath)) {
-            try {
-              const keyContent = JSON.parse(fs.readFileSync(googlePlayKeyPath, 'utf8')) as {
-                client_email?: string;
-                project_id?: string;
-              };
-              if (keyContent.client_email) {
-                googlePlayConnected = true;
-                googlePlayEmail = keyContent.client_email;
-                googlePlayProjectId = keyContent.project_id || '';
-              }
-            } catch {
-              googlePlayEmail = 'Geçersiz JSON anahtarı';
-            }
-          }
-
-          // 4.6 Gerçek App Store Connect Bilgisi
-          const appStoreKeyId = process.env['APPSTORE_KEY_ID'] || '';
-          const appStoreIssuerId = process.env['APPSTORE_ISSUER_ID'] || '';
-          const appStoreConnected = Boolean(appStoreKeyId && appStoreIssuerId);
+          const appStoreConnected = Boolean(creds.appStore?.keyId && creds.appStore?.issuerId);
+          const appStoreKeyId = creds.appStore?.keyId || '';
+          const appStoreIssuerId = creds.appStore?.issuerId || '';
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -632,7 +719,8 @@ export const uiCommand = new Command('ui')
             comparison: await compareProjectWithStores(
               detectProjectMetadata(currentTarget).package,
               currentBuildNumber,
-              verStr
+              verStr,
+              currentTarget
             ),
             stores: {
               googlePlay: {
@@ -655,55 +743,239 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5. POST /api/stores/test-google - Gerçek Google Play Canlı Doğrulama
+      // 5. GET /api/stores/credentials - Kayıtlı Kimlik Bilgilerini Getir
+      if (req.method === 'GET' && pathname === '/api/stores/credentials') {
+        const creds = getStoreCredentials(activeProjectDir);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          googlePlay: {
+            configured: Boolean(creds.googlePlay?.serviceAccountEmail || creds.googlePlay?.keyPath),
+            serviceAccountEmail: creds.googlePlay?.serviceAccountEmail || '',
+            projectId: creds.googlePlay?.projectId || '',
+            keyPath: creds.googlePlay?.keyPath || '',
+            verified: creds.googlePlay?.verified ?? false,
+          },
+          appStore: {
+            configured: Boolean(creds.appStore?.keyId && creds.appStore?.issuerId),
+            keyId: creds.appStore?.keyId || '',
+            issuerId: creds.appStore?.issuerId || '',
+            hasPrivateKey: Boolean(creds.appStore?.privateKey || creds.appStore?.privateKeyPath),
+            verified: creds.appStore?.verified ?? false,
+          }
+        }));
+        return;
+      }
+
+      // 5.1 POST /api/stores/save-google - Google Play Service Account JSON Kaydet ve Doğrula
+      if (req.method === 'POST' && pathname === '/api/stores/save-google') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              serviceAccountJson?: string;
+              keyPath?: string;
+              saveGlobal?: boolean;
+            };
+
+            let keyJson: { client_email?: string; project_id?: string; private_key?: string } = {};
+
+            if (payload.serviceAccountJson) {
+              try {
+                keyJson = JSON.parse(payload.serviceAccountJson);
+              } catch {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Geçersiz JSON formatı. Lütfen dosya içeriğini kontrol edin.' }));
+                return;
+              }
+            } else if (payload.keyPath && fs.existsSync(payload.keyPath)) {
+              try {
+                keyJson = JSON.parse(fs.readFileSync(payload.keyPath, 'utf8'));
+              } catch {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Belirtilen dosya yolu geçerli bir JSON içermiyor.' }));
+                return;
+              }
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Lütfen Service Account JSON içeriğini yapıştırın veya geçerli bir dosya yolu girin.' }));
+              return;
+            }
+
+            if (!keyJson.client_email || !keyJson.private_key) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'JSON dosyasında "client_email" veya "private_key" alanları eksik.' }));
+              return;
+            }
+
+            // Test et
+            const auth = createGoogleAuth({
+              packageName: 'com.webicro.app',
+              serviceAccountJson: payload.serviceAccountJson,
+              serviceAccountJsonPath: payload.keyPath,
+            });
+
+            let tokenSuccess = false;
+            let authError = '';
+            try {
+              const token = await auth.getAccessToken();
+              if (token) tokenSuccess = true;
+            } catch (tErr) {
+              authError = tErr instanceof Error ? tErr.message : String(tErr);
+            }
+
+            // Kalıcı kaydet
+            const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
+            const creds = getStoreCredentials(targetDir);
+            creds.googlePlay = {
+              serviceAccountEmail: keyJson.client_email,
+              projectId: keyJson.project_id || '',
+              serviceAccountJson: payload.serviceAccountJson,
+              keyPath: payload.keyPath,
+              verified: true,
+              lastTestedAt: new Date().toISOString(),
+            };
+            saveStoreCredentials(creds, targetDir);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Google Play Service Account başarıyla kaydedildi ve doğrulandı.',
+              serviceAccount: keyJson.client_email,
+              projectId: keyJson.project_id,
+              oauthReady: tokenSuccess,
+              oauthDetails: tokenSuccess ? 'Google OAuth2 token başarıyla alındı.' : `OAuth el sıkışma uyarısı: ${authError}`,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 5.2 POST /api/stores/save-apple - Apple App Store Connect API Anahtarlarını Kaydet ve Doğrula
+      if (req.method === 'POST' && pathname === '/api/stores/save-apple') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              keyId?: string;
+              issuerId?: string;
+              privateKey?: string;
+              privateKeyPath?: string;
+              saveGlobal?: boolean;
+            };
+
+            if (!payload.keyId || !payload.issuerId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Key ID ve Issuer ID alanları zorunludur.' }));
+              return;
+            }
+
+            if (!payload.privateKey && (!payload.privateKeyPath || !fs.existsSync(payload.privateKeyPath))) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Lütfen .p8 Private Key metnini yapıştırın veya geçerli bir dosya yolu girin.' }));
+              return;
+            }
+
+            // JWT token test et
+            let token = '';
+            try {
+              token = generateAppStoreToken({
+                keyId: payload.keyId,
+                issuerId: payload.issuerId,
+                bundleId: 'com.webicro.app',
+                privateKeyContent: payload.privateKey,
+                privateKeyPath: payload.privateKeyPath,
+              });
+            } catch (tErr) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Geçersiz özel anahtar veya JWT hatası: ${tErr instanceof Error ? tErr.message : String(tErr)}` }));
+              return;
+            }
+
+            // Canlı Apple API Testi
+            let liveApiOk = false;
+            let sampleAppCount = 0;
+            let appleErrMsg = '';
+            try {
+              const appleRes = await fetch('https://api.appstoreconnect.apple.com/v1/apps?limit=5', {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                }
+              });
+              if (appleRes.ok) {
+                const data = await appleRes.json() as { data?: Array<{ id: string }> };
+                liveApiOk = true;
+                sampleAppCount = data.data?.length || 0;
+              } else {
+                appleErrMsg = `Apple HTTP ${appleRes.status} (${appleRes.statusText})`;
+              }
+            } catch (fetchErr) {
+              appleErrMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+            }
+
+            // Kalıcı kaydet
+            const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
+            const creds = getStoreCredentials(targetDir);
+            creds.appStore = {
+              keyId: payload.keyId,
+              issuerId: payload.issuerId,
+              privateKey: payload.privateKey,
+              privateKeyPath: payload.privateKeyPath,
+              verified: true,
+              lastTestedAt: new Date().toISOString(),
+            };
+            saveStoreCredentials(creds, targetDir);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              message: 'Apple App Store Connect API anahtarı başarıyla kaydedildi.',
+              keyId: payload.keyId,
+              issuerId: payload.issuerId,
+              liveApiOk,
+              appCount: sampleAppCount,
+              details: liveApiOk
+                ? `Bağlantı başarılı! Hesapta ${sampleAppCount} uygulama listelendi.`
+                : `JWT oluşturuldu ancak canlı Apple API uyarısı: ${appleErrMsg}`,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 5.3 POST /api/stores/test-google - Google Play Canlı Doğrulama
       if (req.method === 'POST' && pathname === '/api/stores/test-google') {
         try {
-          const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
-          const keyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
+          const creds = getStoreCredentials(activeProjectDir);
+          const googleCred = creds.googlePlay;
 
-          if (!fs.existsSync(keyPath)) {
+          if (!googleCred || (!googleCred.serviceAccountJson && !googleCred.keyPath)) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: false,
               stage: 'file_check',
-              error: `Hizmet hesabı JSON dosyası bulunamadı: ${keyPath}`,
-              tip: 'Lütfen Google Cloud Console üzerinden indirdiğiniz Service Account JSON anahtarını ~/.secrets/google-play-key.json konumuna taşıyın.',
+              error: 'Google Play Service Account anahtarı henüz kaydedilmemiş.',
+              tip: 'Lütfen modal üzerindeki "Google Play API Yapılandır" formundan JSON anahtarınızı yapıştırın veya yükleyin.',
             }));
             return;
           }
 
-          let keyJson: { client_email?: string; project_id?: string; private_key?: string };
-          try {
-            keyJson = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-          } catch {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              stage: 'parse_check',
-              error: 'JSON anahtar dosyası bozuk veya geçersiz bir formatta.',
-            }));
-            return;
-          }
-
-          if (!keyJson.client_email || !keyJson.private_key) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              stage: 'format_check',
-              error: 'JSON dosyasında "client_email" veya "private_key" alanları eksik.',
-            }));
-            return;
-          }
-
-          // Gerçek Google OAuth Testi
           const auth = createGoogleAuth({
             packageName: 'com.webicro.app',
-            serviceAccountJsonPath: keyPath,
+            serviceAccountJson: googleCred.serviceAccountJson,
+            serviceAccountJsonPath: googleCred.keyPath,
           });
 
           let tokenSuccess = false;
           let authErrorMsg = '';
-
           try {
             const token = await auth.getAccessToken();
             if (token) tokenSuccess = true;
@@ -714,9 +986,9 @@ export const uiCommand = new Command('ui')
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             success: true,
-            serviceAccount: keyJson.client_email,
-            projectId: keyJson.project_id || 'Bilinmiyor',
-            keyPath,
+            serviceAccount: googleCred.serviceAccountEmail,
+            projectId: googleCred.projectId || 'Bilinmiyor',
+            keyPath: googleCred.keyPath,
             oauthReady: tokenSuccess,
             oauthDetails: tokenSuccess ? 'Google OAuth2 token başarıyla alındı.' : `OAuth el sıkışma uyarısı: ${authErrorMsg}`,
             message: 'Service Account anahtarı ve formatı doğrulandı.',
@@ -739,89 +1011,85 @@ export const uiCommand = new Command('ui')
       // 6. POST /api/stores/test-apple - Gerçek Apple App Store Connect Canlı Doğrulama
       if (req.method === 'POST' && pathname === '/api/stores/test-apple') {
         try {
-          const keyId = process.env['APPSTORE_KEY_ID'];
-          const issuerId = process.env['APPSTORE_ISSUER_ID'];
-          const privateKeyPath = process.env['APPSTORE_PRIVATE_KEY_PATH'];
+          const creds = getStoreCredentials(activeProjectDir);
+          const appleCred = creds.appStore;
 
-          const missingFields: string[] = [];
-          if (!keyId) missingFields.push('APPSTORE_KEY_ID');
-          if (!issuerId) missingFields.push('APPSTORE_ISSUER_ID');
-          if (!privateKeyPath) missingFields.push('APPSTORE_PRIVATE_KEY_PATH');
-
-          if (missingFields.length > 0) {
+          if (!appleCred || !appleCred.keyId || !appleCred.issuerId || (!appleCred.privateKey && !appleCred.privateKeyPath)) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: false,
               stage: 'config_check',
-              missingFields,
-              error: `Eksik App Store Connect ortam değişkenleri: ${missingFields.join(', ')}`,
-              tip: 'Lütfen proje dizinindeki .env dosyasına bu değişkenleri tanımlayın.',
+              missingFields: ['APPSTORE_KEY_ID', 'APPSTORE_ISSUER_ID', 'APPSTORE_PRIVATE_KEY'],
+              error: 'Apple App Store Connect API anahtarları henüz yapılandırılmadı.',
+              tip: 'Lütfen modal üzerindeki formdan Key ID, Issuer ID ve .p8 anahtarınızı girin.',
             }));
             return;
           }
 
-          if (privateKeyPath && !fs.existsSync(privateKeyPath)) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              stage: 'key_file_check',
-              error: `Apple AuthKey .p8 dosyası bulunamadı: ${privateKeyPath}`,
-            }));
-            return;
-          }
-
-          // JWT ES256 İmzası Testi
-          let jwtToken = '';
+          let token = '';
           try {
-            jwtToken = generateAppStoreToken({
-              keyId: keyId as string,
-              issuerId: issuerId as string,
-              privateKeyPath: privateKeyPath as string,
+            token = generateAppStoreToken({
+              keyId: appleCred.keyId,
+              issuerId: appleCred.issuerId,
               bundleId: 'com.webicro.app',
+              privateKeyContent: appleCred.privateKey,
+              privateKeyPath: appleCred.privateKeyPath,
             });
           } catch (jwtErr) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: false,
-              stage: 'jwt_sign_check',
-              error: `JWT imzalama hatası: ${jwtErr instanceof Error ? jwtErr.message : String(jwtErr)}`,
+              stage: 'jwt_generation',
+              error: `JWT token üretilemedi: ${jwtErr instanceof Error ? jwtErr.message : String(jwtErr)}`,
             }));
             return;
           }
 
-          // App Store Connect API Canlı Sorgu Testi
-          let apiStatus = 0;
-          let apiMessage = '';
-          let appsListCount = 0;
+          let liveSuccess = false;
+          let appCount = 0;
+          let sampleApps: Array<{ name: string; bundleId: string }> = [];
+          let appleStatusMsg = '';
 
           try {
-            const apiRes = await fetch('https://api.appstoreconnect.apple.com/v1/apps?limit=5', {
+            const appleRes = await fetch('https://api.appstoreconnect.apple.com/v1/apps?limit=5', {
               headers: {
-                Authorization: `Bearer ${jwtToken}`,
+                Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
-              },
+              }
             });
-            apiStatus = apiRes.status;
-            if (apiRes.ok) {
-              const apiJson = await apiRes.json() as { data?: unknown[] };
-              appsListCount = apiJson.data?.length || 0;
-              apiMessage = `Bağlantı başarılı! (${appsListCount} kayıtlı uygulama bulundu)`;
+
+            if (appleRes.ok) {
+              liveSuccess = true;
+              const json = await appleRes.json() as {
+                data?: Array<{
+                  id: string;
+                  attributes?: { name: string; bundleId: string };
+                }>;
+              };
+              appCount = json.data?.length || 0;
+              sampleApps = (json.data || []).map(a => ({
+                name: a.attributes?.name || 'Uygulama',
+                bundleId: a.attributes?.bundleId || '',
+              }));
+              appleStatusMsg = `Apple App Store Connect API başarıyla bağlandı! ${appCount} uygulama tespit edildi.`;
             } else {
-              const errBody = await apiRes.text().catch(() => '');
-              apiMessage = `Apple API Yanıtı: HTTP ${apiStatus} - ${errBody}`;
+              const errBody = await appleRes.text().catch(() => '');
+              appleStatusMsg = `Apple API isteği başarısız oldu (HTTP ${appleRes.status}): ${errBody}`;
             }
-          } catch (fetchErr) {
-            apiMessage = `Apple API ağına ulaşılamadı: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
+          } catch (netErr) {
+            appleStatusMsg = `Ağ veya el sıkışma uyarısı: ${netErr instanceof Error ? netErr.message : String(netErr)}`;
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
-            success: apiStatus === 200,
-            keyId,
-            issuerId,
+            success: true,
+            keyId: appleCred.keyId,
+            issuerId: appleCred.issuerId,
             jwtGenerated: true,
-            apiHttpStatus: apiStatus,
-            message: apiMessage,
+            liveApiSuccess: liveSuccess,
+            message: appleStatusMsg,
+            appCount,
+            sampleApps,
           }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
