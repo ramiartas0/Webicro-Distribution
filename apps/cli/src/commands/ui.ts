@@ -122,9 +122,23 @@ function detectProjectMetadata(projectPath: string): {
     }
   }
 
+  // 4. iOS Runner project.pbxproj dosyasından PRODUCT_BUNDLE_IDENTIFIER ara
   if (!pkg) {
-    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    pkg = `com.webicro.${cleanName || 'app'}`;
+    const pbxPath = path.join(projectPath, 'ios/Runner.xcodeproj/project.pbxproj');
+    if (fs.existsSync(pbxPath)) {
+      try {
+        const pbxContent = fs.readFileSync(pbxPath, 'utf8');
+        const match = pbxContent.match(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/);
+        if (match && match[1]) {
+          const raw = match[1].trim().replace(/["']/g, '');
+          if (raw && !raw.includes('$')) {
+            pkg = raw;
+          }
+        }
+      } catch {
+        // Sessiz
+      }
+    }
   }
 
   return { name, package: pkg, version, buildNumber };
@@ -581,6 +595,9 @@ async function fetchGooglePlayWebLive(packageName: string): Promise<GooglePlayWe
   }
 }
 
+const storeComparisonCache = new Map<string, { data: StoreComparison; timestamp: number }>();
+const STORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 dakika
+
 /**
  * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
  */
@@ -588,8 +605,27 @@ async function compareProjectWithStores(
   pkgName: string,
   localBuildNumber: number,
   localVersion: string,
-  projectDir?: string
+  projectDir?: string,
+  forceRefresh = false
 ): Promise<StoreComparison> {
+  if (!pkgName) {
+    return {
+      googlePlay: { status: 'not_configured', message: 'Paket adı henüz tanımlanmamış' },
+      appStore: { status: 'not_configured', message: 'Paket adı henüz tanımlanmamış' },
+      comparisonStatus: 'UNKNOWN',
+      badge: 'Paket Belirsiz',
+      summary: 'Proje paket adı (applicationId / bundleId) pubspec veya gradle/xcode dosyalarında bulunamadı.',
+    };
+  }
+
+  const cacheKey = `${pkgName}__${localBuildNumber}__${localVersion}__${projectDir || ''}`;
+  if (!forceRefresh) {
+    const cached = storeComparisonCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < STORE_CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   const comparison: StoreComparison = {
     googlePlay: { status: 'not_configured' },
     appStore: { status: 'not_configured' },
@@ -768,6 +804,7 @@ async function compareProjectWithStores(
     comparison.summary = 'Mağaza API anahtarları henüz yapılandırılmadı.';
   }
 
+  storeComparisonCache.set(cacheKey, { data: comparison, timestamp: Date.now() });
   return comparison;
 }
 
@@ -840,14 +877,14 @@ export const uiCommand = new Command('ui')
         }
       }
 
-      if (list.length === 0) {
+      if (list.length === 0 && fs.existsSync(path.join(process.cwd(), 'pubspec.yaml'))) {
         const rootMeta = detectProjectMetadata(process.cwd());
         list = [
           {
             id: 'default',
-            name: rootMeta.name || 'Webicro Distribution',
+            name: rootMeta.name || path.basename(process.cwd()),
             path: process.cwd(),
-            hasPubspec: fs.existsSync(path.join(process.cwd(), 'pubspec.yaml')),
+            hasPubspec: true,
             package: rootMeta.package,
             version: rootMeta.version,
             buildNumber: rootMeta.buildNumber,
@@ -971,7 +1008,7 @@ export const uiCommand = new Command('ui')
         const list = getStoredProjects();
         for (const p of list) {
           if (p.package) {
-            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
+            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path, true);
           }
         }
         saveStoredProjects(list);
@@ -1177,7 +1214,12 @@ export const uiCommand = new Command('ui')
       // 4. GET /api/project - Aktif Proje Detayları, Git ve Sürüm
       if (req.method === 'GET' && pathname === '/api/project') {
         try {
-          const currentTarget = activeProjectDir;
+          const reqPath = url.searchParams.get('path');
+          let currentTarget = activeProjectDir;
+          if (reqPath && fs.existsSync(reqPath)) {
+            currentTarget = path.resolve(reqPath);
+            activeProjectDir = currentTarget;
+          }
 
           // 4.1 Config yükle
           let releaseConfig = null;
@@ -1201,7 +1243,7 @@ export const uiCommand = new Command('ui')
             // pubspec yok
           }
 
-          const projectName = pubspecInfo?.name || releaseConfig?.project?.name || path.basename(currentTarget) || 'Flutter Project';
+          const projectName = pubspecInfo?.name || releaseConfig?.project?.name || path.basename(currentTarget);
           const fullVersion = pubspecInfo?.version || '1.0.0+1';
           const [verStr = '1.0.0', buildStr = '1'] = fullVersion.split('+');
           const currentBuildNumber = Number(buildStr) || 1;
@@ -1255,6 +1297,8 @@ export const uiCommand = new Command('ui')
           const appStoreKeyId = creds.appStore?.keyId || '';
           const appStoreIssuerId = creds.appStore?.issuerId || '';
 
+          const projMeta = detectProjectMetadata(currentTarget);
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             project: {
@@ -1265,17 +1309,18 @@ export const uiCommand = new Command('ui')
               suggestedVersion,
               suggestedBuildNumber: suggestedBuild,
               suggestedBump,
-              package: detectProjectMetadata(currentTarget).package,
+              package: projMeta.package || '',
               branch: gitAnalysis.currentBranch || 'main',
               isClean: gitAnalysis.isClean,
               hasPubspec: Boolean(pubspecInfo),
             },
             commits: gitAnalysis.commitsSinceLastTag,
             comparison: await compareProjectWithStores(
-              detectProjectMetadata(currentTarget).package,
+              projMeta.package,
               currentBuildNumber,
               verStr,
-              currentTarget
+              currentTarget,
+              false // Hızlı yanıt için cache kullan (forceRefresh: false)
             ),
             stores: {
               googlePlay: {
@@ -1364,8 +1409,9 @@ export const uiCommand = new Command('ui')
             }
 
             // Test et
+            const activeMeta = detectProjectMetadata(activeProjectDir);
             const auth = createGoogleAuth({
-              packageName: 'com.webicro.app',
+              packageName: activeMeta.package || 'com.example.app',
               serviceAccountJson: payload.serviceAccountJson,
               serviceAccountJsonPath: payload.keyPath,
             });
@@ -1438,10 +1484,11 @@ export const uiCommand = new Command('ui')
             // JWT token test et
             let token = '';
             try {
+              const activeMeta = detectProjectMetadata(activeProjectDir);
               token = generateAppStoreToken({
                 keyId: payload.keyId,
                 issuerId: payload.issuerId,
-                bundleId: 'com.webicro.app',
+                bundleId: activeMeta.package || 'com.example.app',
                 privateKeyContent: payload.privateKey,
                 privateKeyPath: payload.privateKeyPath,
               });
@@ -1523,8 +1570,9 @@ export const uiCommand = new Command('ui')
             return;
           }
 
+          const activeMeta = detectProjectMetadata(activeProjectDir);
           const auth = createGoogleAuth({
-            packageName: 'com.webicro.app',
+            packageName: activeMeta.package || 'com.example.app',
             serviceAccountJson: googleCred.serviceAccountJson,
             serviceAccountJsonPath: googleCred.keyPath,
           });
@@ -1583,10 +1631,11 @@ export const uiCommand = new Command('ui')
 
           let token = '';
           try {
+            const activeMeta = detectProjectMetadata(activeProjectDir);
             token = generateAppStoreToken({
               keyId: appleCred.keyId,
               issuerId: appleCred.issuerId,
-              bundleId: 'com.webicro.app',
+              bundleId: activeMeta.package || 'com.example.app',
               privateKeyContent: appleCred.privateKey,
               privateKeyPath: appleCred.privateKeyPath,
             });

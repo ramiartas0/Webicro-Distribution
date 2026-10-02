@@ -142,18 +142,23 @@ export default function App() {
   const [isSavingApple, setIsSavingApple] = useState<boolean>(false);
   const [saveGlobal, setSaveGlobal] = useState<boolean>(false);
 
-  // Proje Detayları
-  const [projectName, setProjectName] = useState<string>('Webicro Distribution');
-  const [projectPackage, setProjectPackage] = useState<string>('com.webicro.app');
-  const [gitBranch, setGitBranch] = useState<string>('main');
-  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
-  const [currentBuildNumber, setCurrentBuildNumber] = useState<number>(1);
+  // Proje Detayları (Fallback ve uydurma veriler kaldırıldı)
+  const [projectName, setProjectName] = useState<string>('');
+  const [projectPackage, setProjectPackage] = useState<string>('');
+  const [gitBranch, setGitBranch] = useState<string>('');
+  const [currentVersion, setCurrentVersion] = useState<string>('');
+  const [currentBuildNumber, setCurrentBuildNumber] = useState<number>(0);
   const [bumpType, setBumpType] = useState<'patch' | 'minor' | 'major' | 'custom'>('minor');
   const [customVersion, setCustomVersion] = useState<string>('');
   const [commits, setCommits] = useState<CommitItem[]>([]);
   const [hasPubspec, setHasPubspec] = useState<boolean>(false);
   const [isGitClean, setIsGitClean] = useState<boolean>(true);
   const [activeComparison, setActiveComparison] = useState<StoreComparison | null>(null);
+  const [isLoadingProject, setIsLoadingProject] = useState<boolean>(false);
+
+  // Proje geçişlerinde verilerin karışmasını engelleyen senkron referanslar
+  const activePathRef = useRef<string>('');
+  const requestSeqRef = useRef<number>(0);
 
   // Mağaza Bilgileri
   const [googlePlayInfo, setGooglePlayInfo] = useState<{
@@ -339,20 +344,45 @@ export default function App() {
       const pRes = await fetch('/api/projects');
       if (pRes.ok) {
         const pData = await pRes.json() as { activePath: string; projects: ProjectEntry[] };
-        setProjects(pData.projects || []);
-        setActiveProjectPath(pData.activePath);
+        const fetchedProjects = pData.projects || [];
+        setProjects(fetchedProjects);
+        
+        const currentActive = pData.activePath || fetchedProjects[0]?.path || '';
+        setActiveProjectPath(currentActive);
+        activePathRef.current = currentActive;
+
+        // İlk projenin temel bilgilerini anında göster
+        const initialProj = fetchedProjects.find(p => p.path === currentActive);
+        if (initialProj) {
+          setProjectName(initialProj.name);
+          setProjectPackage(initialProj.package || '');
+          setCurrentVersion(initialProj.version || '');
+          setCurrentBuildNumber(initialProj.buildNumber || 0);
+          setActiveComparison(initialProj.stores || null);
+        }
+
+        if (currentActive) {
+          await fetchProjectDetails(currentActive);
+        }
       }
-      await fetchProjectDetails();
       await loadStoreCredentials();
     } catch (err) {
       console.error('Projeler yüklenemedi:', err);
     }
   }, [loadStoreCredentials]);
 
-  const fetchProjectDetails = async () => {
+  const fetchProjectDetails = async (targetPath?: string) => {
+    const pathToFetch = targetPath || activePathRef.current || activeProjectPath;
+    if (!pathToFetch) return;
+
+    const thisSeq = ++requestSeqRef.current;
+    setIsLoadingProject(true);
+
     try {
-      const res = await fetch('/api/project');
+      const res = await fetch(`/api/project?path=${encodeURIComponent(pathToFetch)}`);
       if (!res.ok) return;
+      if (thisSeq !== requestSeqRef.current) return; // Kullanıcı bu sırada başka projeye tıkladıysa eski yanıtı at
+
       const data = await res.json() as {
         project?: {
           name: string;
@@ -382,13 +412,13 @@ export default function App() {
       };
 
       if (data.project) {
-        setProjectName(data.project.name);
-        setProjectPackage(data.project.package || 'com.webicro.app');
-        setCurrentVersion(data.project.currentVersion);
-        setCurrentBuildNumber(data.project.currentBuildNumber);
-        setGitBranch(data.project.branch);
-        setIsGitClean(data.project.isClean);
-        setHasPubspec(data.project.hasPubspec);
+        setProjectName(data.project.name || '');
+        setProjectPackage(data.project.package || '');
+        setCurrentVersion(data.project.currentVersion || '');
+        setCurrentBuildNumber(data.project.currentBuildNumber || 0);
+        setGitBranch(data.project.branch || '');
+        setIsGitClean(data.project.isClean ?? true);
+        setHasPubspec(data.project.hasPubspec ?? false);
       }
 
       if (data.commits) {
@@ -405,6 +435,10 @@ export default function App() {
       }
     } catch (err) {
       console.error('Proje detayı alınamadı:', err);
+    } finally {
+      if (thisSeq === requestSeqRef.current) {
+        setIsLoadingProject(false);
+      }
     }
   };
 
@@ -431,23 +465,30 @@ export default function App() {
     }
   };
 
-  // PROJE DEĞİŞTİR (Sıralamayı bozmadan, sadece seçili projeyi güncelle)
+  // PROJE DEĞİŞTİR (Sıralamayı bozmadan, anında ve karışıklık olmadan geçiş yap)
   const handleSwitchProject = async (targetPath: string) => {
     if (targetPath === activeProjectPath) return;
+
+    // 1. Aktif yolu hemen güncelle
     setActiveProjectPath(targetPath);
-    try {
-      const res = await fetch('/api/projects/switch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: targetPath }),
-      });
-      if (res.ok) {
-        await fetchProjectDetails();
-        await loadStoreCredentials();
-      }
-    } catch (err) {
-      console.error('Proje değiştirme hatası:', err);
+    activePathRef.current = targetPath;
+
+    // 2. Anında Optimistic Update: Hedef projenin verilerini sidebar listesinden anında ekrana yansıt
+    const targetProj = projects.find(p => p.path === targetPath);
+    if (targetProj) {
+      setProjectName(targetProj.name);
+      setProjectPackage(targetProj.package || '');
+      setCurrentVersion(targetProj.version || '');
+      setCurrentBuildNumber(targetProj.buildNumber || 0);
+      setActiveComparison(targetProj.stores || null);
     }
+
+    // 3. Eski projenin commit'lerini ve detaylarını anında sıfırla (veriler ASLA karışmasın)
+    setCommits([]);
+
+    // 4. Arka plandan taze detayları ve kimlik bilgilerini çek
+    await fetchProjectDetails(targetPath);
+    await loadStoreCredentials();
   };
 
   // TÜM FLUTTER PROJELERİNİ OTOMATİK KEŞFET VEYA BELİRTİLEN DİZİNİ TARA
@@ -1046,13 +1087,15 @@ export default function App() {
         {/* ÜST BAŞLIK & PROJE ÖZETİ */}
         <header className="px-6 py-4 border-b border-border bg-card/60 backdrop-blur sticky top-0 z-10 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <ProjectAppIcon path={activeProjectPath} name={projectName} className="w-10 h-10 rounded-xl shadow-sm border border-border" />
+            <ProjectAppIcon path={activeProjectPath} name={projectName || 'Proje'} className="w-10 h-10 rounded-xl shadow-sm border border-border" />
             <div>
               <div className="flex items-center gap-2.5">
-                <h2 className="text-lg font-bold tracking-tight text-foreground">{projectName}</h2>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
-                  {projectPackage}
-                </span>
+                <h2 className="text-lg font-bold tracking-tight text-foreground">{projectName || 'Proje Seçilmedi'}</h2>
+                {projectPackage && (
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
+                    {projectPackage}
+                  </span>
+                )}
                 {hasPubspec && (
                   <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">
                     Flutter
@@ -1067,7 +1110,11 @@ export default function App() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl">
-                {activeProjectPath} • branch: <span className="text-emerald-500">{gitBranch}</span>
+                {activeProjectPath ? (
+                  <>{activeProjectPath} • branch: <span className="text-emerald-500">{gitBranch || 'main'}</span></>
+                ) : (
+                  <span className="text-muted-foreground/60">Aktif proje dizini seçilmedi</span>
+                )}
               </p>
             </div>
           </div>
@@ -1130,18 +1177,24 @@ export default function App() {
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
                     <Code2 className="w-3.5 h-3.5 text-primary" /> Yerel Kod (Local)
                   </span>
-                  <span className="font-mono text-emerald-500">{gitBranch}</span>
+                  <span className="font-mono text-emerald-500">{gitBranch || 'main'}</span>
                 </div>
                 <div className="pt-1">
                   <div className="text-2xl font-extrabold font-mono text-foreground">
-                    {currentVersion}
+                    {currentVersion ? (currentVersion.startsWith('v') ? currentVersion : `v${currentVersion}`) : '-'}
                   </div>
                   <div className="text-xs font-mono text-muted-foreground">
-                    Build Numarası: #{currentBuildNumber}
+                    Build Numarası: #{currentBuildNumber || 1}
                   </div>
                 </div>
                 <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-                  Son Commit: <span className="font-mono text-foreground font-semibold">{commits[0]?.hash.substring(0, 7) || 'yok'}</span> ({commits.length} commit incelendi)
+                  {commits.length > 0 ? (
+                    <>Son Commit: <span className="font-mono text-foreground font-semibold">{commits[0]?.hash.substring(0, 7)}</span> ({commits.length} commit incelendi)</>
+                  ) : isLoadingProject ? (
+                    <span className="text-muted-foreground/80 italic">Commit geçmişi analiz ediliyor...</span>
+                  ) : (
+                    <span className="text-muted-foreground/60">İncelenen commit bulunamadı</span>
+                  )}
                 </div>
               </div>
 
