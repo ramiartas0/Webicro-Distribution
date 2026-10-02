@@ -102,7 +102,17 @@ interface StoreTestResult {
 }
 
 export default function App() {
-  const [isDark, setIsDark] = useState<boolean>(true);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('webicro_theme');
+      if (saved !== null) {
+        return saved === 'dark';
+      }
+    } catch {
+      // localStorage erisim hatasinda varsayilana don
+    }
+    return false; // Varsayilan olarak Light Mode
+  });
   
   // Proje Listesi ve Aktif Proje
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
@@ -237,8 +247,18 @@ export default function App() {
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
+      try {
+        localStorage.setItem('webicro_theme', 'dark');
+      } catch {
+        // ignore
+      }
     } else {
       document.documentElement.classList.remove('dark');
+      try {
+        localStorage.setItem('webicro_theme', 'light');
+      } catch {
+        // ignore
+      }
     }
   }, [isDark]);
 
