@@ -328,9 +328,40 @@ export default function App() {
     success: false,
   });
 
-  // Dağıtım Form Seçenekleri
+  // Dağıtım Form Seçenekleri & Hızlı Platform Seçimi
+  type TargetPlatformMode = 'all' | 'android' | 'ios';
+  const [platformMode, setPlatformMode] = useState<TargetPlatformMode>('android');
   const [targetAndroid, setTargetAndroid] = useState<boolean>(true);
-  const [targetIos, setTargetIos] = useState<boolean>(true);
+  const [targetIos, setTargetIos] = useState<boolean>(false);
+  const [gitNativeChanges, setGitNativeChanges] = useState<{
+    androidChanged: boolean;
+    iosChanged: boolean;
+    androidFiles: string[];
+    iosFiles: string[];
+  } | null>(null);
+
+  const applyPlatformMode = useCallback((mode: TargetPlatformMode, targetPath?: string) => {
+    setPlatformMode(mode);
+    if (mode === 'android') {
+      setTargetAndroid(true);
+      setTargetIos(false);
+    } else if (mode === 'ios') {
+      setTargetAndroid(false);
+      setTargetIos(true);
+    } else {
+      setTargetAndroid(true);
+      setTargetIos(true);
+    }
+    const p = targetPath || activePathRef.current || activeProjectPath;
+    if (p) {
+      try {
+        localStorage.setItem(`webicro_platform_mode_${p}`, mode);
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeProjectPath]);
+
   const [googleTrack, setGoogleTrack] = useState<'internal' | 'alpha' | 'beta' | 'production'>('internal');
   const isDryRun = false;
 
@@ -560,6 +591,20 @@ export default function App() {
           hasPubspec: boolean;
           configuredTrack?: string;
         };
+        git?: {
+          isRepository: boolean;
+          currentBranch: string;
+          isClean: boolean;
+          lastTag: string | null;
+          changedFilesCount: number;
+          hasNativeChanges: boolean;
+          nativeChanges?: {
+            androidChanged: boolean;
+            iosChanged: boolean;
+            androidFiles: string[];
+            iosFiles: string[];
+          };
+        };
         commits?: CommitItem[];
         comparison?: StoreComparison;
         stores?: {
@@ -585,6 +630,23 @@ export default function App() {
         setGitBranch(data.project.branch || '');
         setIsGitClean(data.project.isClean ?? true);
         setHasPubspec(data.project.hasPubspec ?? false);
+      }
+
+      if (data.git?.nativeChanges) {
+        setGitNativeChanges(data.git.nativeChanges);
+      } else {
+        setGitNativeChanges(null);
+      }
+
+      try {
+        const savedMode = localStorage.getItem(`webicro_platform_mode_${pathToFetch}`) as TargetPlatformMode;
+        if (savedMode && (savedMode === 'all' || savedMode === 'android' || savedMode === 'ios')) {
+          applyPlatformMode(savedMode, pathToFetch);
+        } else {
+          applyPlatformMode('android', pathToFetch);
+        }
+      } catch {
+        applyPlatformMode('android', pathToFetch);
       }
 
       if (data.commits) {
@@ -1318,14 +1380,33 @@ export default function App() {
       return;
     }
 
+    if (!targetAndroid && !targetIos) {
+      alert('Lütfen dağıtılacak en az bir platform seçin (Android veya iOS).');
+      return;
+    }
+
     const targetPath = activeProjectPath;
     if (!targetPath) return;
 
-    const initialPipelineSteps = initialStages.map((s, idx) => (idx === 0 ? { ...s, status: 'running' as const } : { ...s, status: 'pending' as const }));
+    const initialPipelineSteps = initialStages.map((s, idx) => {
+      if (!targetAndroid && s.id === 4) {
+        return { ...s, status: 'skipped' as const, details: 'Android derlemesi atlandı' };
+      }
+      if (!targetIos && s.id === 5) {
+        return { ...s, status: 'skipped' as const, details: 'iOS derlemesi atlandı' };
+      }
+      if (idx === 0) {
+        return { ...s, status: 'running' as const };
+      }
+      return { ...s, status: 'pending' as const };
+    });
+
+    const platformLabel = targetAndroid && targetIos ? 'Android + iOS' : targetAndroid ? 'Sadece Android (AAB)' : 'Sadece iOS (IPA)';
     const initialPipelineLogs = [
       `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
       `[${new Date().toLocaleTimeString()}] Hedef Sürüm: ${nextVersion}+${nextBuildNumber}`,
       `[${new Date().toLocaleTimeString()}] Proje: ${projectName} (${targetPath})`,
+      `[${new Date().toLocaleTimeString()}] Dağıtım Modu: ${platformLabel}`,
     ];
 
     // Bu proje için izole optimistic durum güncellemesi
@@ -1366,6 +1447,9 @@ export default function App() {
           bump: bumpType === 'custom' ? undefined : bumpType,
           manualVersion: bumpType === 'custom' ? customVersion : undefined,
           dryRun: isDryRun,
+          targetPlatform: platformMode,
+          targetAndroid,
+          targetIos,
           skipAndroid: !targetAndroid,
           skipIos: !targetIos,
           googleTrack,
@@ -1996,31 +2080,158 @@ export default function App() {
                 </div>
               </div>
 
-              {/* HEDEF MAĞAZALAR & ROLLOUT */}
+              {/* HEDEF MAĞAZALAR & PLATFORM SEÇİMİ */}
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-                <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  <span className="flex items-center gap-1.5">
-                    <GooglePlayIcon className="w-4 h-4 shrink-0" />
-                    <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                    <span className="flex items-center gap-1.5">
+                      <GooglePlayIcon className="w-4 h-4 shrink-0" />
+                      <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
+                    </span>
+                    Hedef Dağıtım Kanalları & Platform
+                  </h4>
+
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border bg-secondary/80 text-foreground">
+                    {targetAndroid && targetIos
+                      ? '⚡ Tam Dağıtım (Android + iOS)'
+                      : targetAndroid
+                      ? '⚡ Hızlı: Sadece Android (~1.5 dk)'
+                      : '⚡ Hızlı: Sadece iOS (~2.5 dk)'}
                   </span>
-                  Hedef Dağıtım Kanalları
-                </h4>
+                </div>
+
+                {/* HIZLI PLATFORM SEÇİCİ (SEGMENTED CONTROL) */}
+                <div className="p-1.5 bg-secondary/60 rounded-xl border border-border flex flex-col sm:flex-row items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applyPlatformMode('android')}
+                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      platformMode === 'android'
+                        ? 'bg-background text-emerald-500 shadow-sm border border-emerald-500/40 ring-1 ring-emerald-500/20'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <GooglePlayIcon className="w-4 h-4 shrink-0" />
+                    <span>Sadece Android</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      AAB (~1.5 dk)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyPlatformMode('ios')}
+                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      platformMode === 'ios'
+                        ? 'bg-background text-sky-400 shadow-sm border border-sky-400/40 ring-1 ring-sky-400/20'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
+                    <span>Sadece iOS</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">
+                      IPA (~2.5 dk)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => applyPlatformMode('all')}
+                    className={`w-full sm:flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      platformMode === 'all'
+                        ? 'bg-background text-foreground shadow-sm border border-primary/50 ring-1 ring-primary/20'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                    }`}
+                  >
+                    <span className="flex items-center -space-x-1">
+                      <GooglePlayIcon className="w-3.5 h-3.5" />
+                      <AppStoreConnectIcon className="w-3.5 h-3.5" />
+                    </span>
+                    <span>Tüm Platformlar</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                      İkisi Birden
+                    </span>
+                  </button>
+                </div>
+
+                {/* AKILLI DEĞİŞİKLİK TESPİTİ (SMART GIT CHANGE DETECTION BANNER) */}
+                {gitNativeChanges && (gitNativeChanges.androidChanged || gitNativeChanges.iosChanged) && (
+                  <div className="space-y-2">
+                    {gitNativeChanges.androidChanged && !gitNativeChanges.iosChanged && (
+                      <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs flex flex-wrap items-center justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 shrink-0 text-emerald-500 animate-pulse" />
+                          <span>
+                            <strong>Akıllı Git Tespiti:</strong> Son commit'lerde yalnızca Android dosyaları değişmiş ({gitNativeChanges.androidFiles.length} dosya). Dağıtımı hızlandırmak için iOS atlanabilir.
+                          </span>
+                        </div>
+                        {platformMode !== 'android' && (
+                          <button
+                            type="button"
+                            onClick={() => applyPlatformMode('android')}
+                            className="px-2.5 py-1 rounded bg-emerald-500 text-white font-medium text-[11px] shrink-0 hover:bg-emerald-600 transition-colors cursor-pointer shadow-xs"
+                          >
+                            ⚡ Sadece Android Moduna Geç
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {gitNativeChanges.iosChanged && !gitNativeChanges.androidChanged && (
+                      <div className="p-3 rounded-lg bg-sky-500/10 border border-sky-500/20 text-xs flex flex-wrap items-center justify-between gap-3 text-sky-600 dark:text-sky-400">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 shrink-0 text-sky-400 animate-pulse" />
+                          <span>
+                            <strong>Akıllı Git Tespiti:</strong> Son commit'lerde yalnızca iOS dosyaları değişmiş ({gitNativeChanges.iosFiles.length} dosya). Dağıtımı hızlandırmak için Android atlanabilir.
+                          </span>
+                        </div>
+                        {platformMode !== 'ios' && (
+                          <button
+                            type="button"
+                            onClick={() => applyPlatformMode('ios')}
+                            className="px-2.5 py-1 rounded bg-sky-500 text-white font-medium text-[11px] shrink-0 hover:bg-sky-600 transition-colors cursor-pointer shadow-xs"
+                          >
+                            ⚡ Sadece iOS Moduna Geç
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* GOOGLE PLAY AYARLARI */}
-                  <div className="p-3.5 rounded-lg border border-border bg-background/50 space-y-3">
+                  <div className={`p-3.5 rounded-lg border transition-all ${
+                    targetAndroid
+                      ? 'border-emerald-500/30 bg-background shadow-xs'
+                      : 'border-border/60 bg-muted/30 opacity-60'
+                  } space-y-3`}>
                     <div className="flex items-center justify-between">
                       <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
                         <input
                           type="checkbox"
                           checked={targetAndroid}
-                          onChange={(e) => setTargetAndroid(e.target.checked)}
-                          className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            if (!isChecked && !targetIos) {
+                              alert('En az bir platform (Android veya iOS) seçili olmalıdır.');
+                              return;
+                            }
+                            setTargetAndroid(isChecked);
+                            if (isChecked && targetIos) setPlatformMode('all');
+                            else if (isChecked && !targetIos) setPlatformMode('android');
+                            else if (!isChecked && targetIos) setPlatformMode('ios');
+                          }}
+                          className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                         />
                         <GooglePlayIcon className="w-4 h-4 shrink-0" />
                         <span>Google Play Dağıtımı</span>
                       </label>
-                      <span className="text-[10px] text-emerald-500 font-mono">AAB</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                        targetAndroid ? 'bg-emerald-500/10 text-emerald-500' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {targetAndroid ? 'AAB Derlenecek' : 'Atlandı'}
+                      </span>
                     </div>
 
                     {targetAndroid && (
@@ -2068,19 +2279,37 @@ export default function App() {
                   </div>
 
                   {/* APPLE APP STORE AYARLARI */}
-                  <div className="p-3.5 rounded-lg border border-border bg-background/50 space-y-3">
+                  <div className={`p-3.5 rounded-lg border transition-all ${
+                    targetIos
+                      ? 'border-sky-500/30 bg-background shadow-xs'
+                      : 'border-border/60 bg-muted/30 opacity-60'
+                  } space-y-3`}>
                     <div className="flex items-center justify-between">
                       <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
                         <input
                           type="checkbox"
                           checked={targetIos}
-                          onChange={(e) => setTargetIos(e.target.checked)}
-                          className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                          onChange={(e) => {
+                            const isChecked = e.target.checked;
+                            if (!isChecked && !targetAndroid) {
+                              alert('En az bir platform (Android veya iOS) seçili olmalıdır.');
+                              return;
+                            }
+                            setTargetIos(isChecked);
+                            if (isChecked && targetAndroid) setPlatformMode('all');
+                            else if (isChecked && !targetAndroid) setPlatformMode('ios');
+                            else if (!isChecked && targetAndroid) setPlatformMode('android');
+                          }}
+                          className="rounded text-sky-400 focus:ring-sky-400 w-4 h-4 cursor-pointer"
                         />
                         <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
                         <span>Apple App Store Dağıtımı</span>
                       </label>
-                      <span className="text-[10px] text-sky-400 font-mono">IPA</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                        targetIos ? 'bg-sky-400/10 text-sky-400' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {targetIos ? 'IPA Derlenecek' : 'Atlandı'}
+                      </span>
                     </div>
 
                     {targetIos && (
@@ -2232,27 +2461,45 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-1 text-xs">
-                  <div className="flex justify-between">
+                <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Hedef Proje:</span>
                     <span className="font-semibold text-foreground truncate max-w-[130px]">{projectName}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Hedef Sürüm:</span>
                     <span className="font-mono font-bold text-emerald-500">{nextVersion}+{nextBuildNumber}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Kanal:</span>
-                    <span className="font-semibold text-xs text-foreground">{getGoogleTrackLabel(googleTrack)}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Hedef Platform:</span>
+                    <span className={`font-semibold text-[11px] font-mono px-2 py-0.5 rounded border ${
+                      targetAndroid && targetIos
+                        ? 'bg-primary/10 text-primary border-primary/20'
+                        : targetAndroid
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                        : 'bg-sky-400/10 text-sky-400 border-sky-400/20'
+                    }`}>
+                      {targetAndroid && targetIos
+                        ? 'Android + iOS'
+                        : targetAndroid
+                        ? 'Sadece Android (AAB)'
+                        : 'Sadece iOS (IPA)'}
+                    </span>
                   </div>
+                  {targetAndroid && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Play Kanalı:</span>
+                      <span className="font-semibold text-xs text-foreground">{getGoogleTrackLabel(googleTrack)}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <button
                     onClick={() => void handleStartRelease()}
-                    disabled={isCurrentProjectReleasing || !releaseNotesTR.trim() || !releaseNotesEN.trim()}
+                    disabled={isCurrentProjectReleasing || !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)}
                     className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-bold text-sm shadow transition-all cursor-pointer ${
-                      !releaseNotesTR.trim() || !releaseNotesEN.trim()
+                      !releaseNotesTR.trim() || !releaseNotesEN.trim() || (!targetAndroid && !targetIos)
                         ? 'bg-muted text-muted-foreground border border-border cursor-not-allowed opacity-60'
                         : 'bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed'
                     }`}
@@ -2264,6 +2511,12 @@ export default function App() {
                         ? `Dağıtım Yürütülüyor (${currentActiveStep}/6)...`
                         : !releaseNotesTR.trim() || !releaseNotesEN.trim()
                         ? 'Sürüm Notları Gerekli (AI ile Üretin)'
+                        : !targetAndroid && !targetIos
+                        ? 'Platform Seçilmedi'
+                        : targetAndroid && !targetIos
+                        ? 'Hızlı Başlat (Sadece Android)'
+                        : !targetAndroid && targetIos
+                        ? 'Hızlı Başlat (Sadece iOS)'
                         : 'Sürüm Dağıtımını Başlat'}
                     </span>
                   </button>
@@ -2311,6 +2564,8 @@ export default function App() {
                           ? 'bg-primary/10 border-primary text-primary font-semibold'
                           : step.status === 'success'
                           ? 'bg-emerald-500/5 border-emerald-500/20 text-muted-foreground'
+                          : step.status === 'skipped'
+                          ? 'bg-muted/40 border-border/40 text-muted-foreground/60'
                           : step.status === 'failed'
                           ? 'bg-rose-500/10 border-rose-500 text-rose-500 font-semibold'
                           : 'bg-background border-border text-muted-foreground'
@@ -2321,7 +2576,9 @@ export default function App() {
                           {step.id}
                         </span>
                         <div className="truncate">
-                          <span className="truncate block font-medium">{step.name}</span>
+                          <span className={`truncate block font-medium ${step.status === 'skipped' ? 'line-through text-muted-foreground/60' : ''}`}>
+                            {step.name}
+                          </span>
                           {step.details && (
                             <span className="text-[10px] text-muted-foreground/80 block truncate">
                               {step.details}
@@ -2336,6 +2593,11 @@ export default function App() {
                         )}
                         {step.status === 'success' && (
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        )}
+                        {step.status === 'skipped' && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                            Atlandı
+                          </span>
                         )}
                         {step.status === 'failed' && (
                           <AlertCircle className="w-3.5 h-3.5 text-rose-500" />

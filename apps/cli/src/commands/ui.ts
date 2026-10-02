@@ -7,7 +7,7 @@ import { exec } from 'node:child_process';
 import chalk from 'chalk';
 import * as clack from '@clack/prompts';
 
-import { GitAnalyzer } from '@webicro/git';
+import { GitAnalyzer, detectNativeChanges } from '@webicro/git';
 import { VersionResolver } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
 import { DatabaseConnection, ReleaseRepository, AuditLogRepository } from '@webicro/database';
@@ -1424,6 +1424,7 @@ export const uiCommand = new Command('ui')
           const appStoreIssuerId = creds.appStore?.issuerId || '';
 
           const projMeta = detectProjectMetadata(currentTarget);
+          const nativeChanges = detectNativeChanges(gitAnalysis.changedFiles);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -1440,6 +1441,15 @@ export const uiCommand = new Command('ui')
               isClean: gitAnalysis.isClean,
               hasPubspec: Boolean(pubspecInfo),
               configuredTrack: releaseConfig?.android?.track || undefined,
+            },
+            git: {
+              isRepository: gitAnalysis.isRepository,
+              currentBranch: gitAnalysis.currentBranch,
+              isClean: gitAnalysis.isClean,
+              lastTag: gitAnalysis.lastTag,
+              changedFilesCount: gitAnalysis.changedFiles.length,
+              hasNativeChanges: gitAnalysis.hasNativeChanges,
+              nativeChanges,
             },
             commits: gitAnalysis.commitsSinceLastTag,
             comparison: await compareProjectWithStores(
@@ -2557,9 +2567,53 @@ export const uiCommand = new Command('ui')
               return;
             }
 
+            const targetPlatform = options.targetPlatform;
+            let skipAndroid = false;
+            let skipIos = false;
+
+            if (targetPlatform === 'android') {
+              skipAndroid = false;
+              skipIos = true;
+            } else if (targetPlatform === 'ios') {
+              skipAndroid = true;
+              skipIos = false;
+            } else if (targetPlatform === 'both') {
+              skipAndroid = false;
+              skipIos = false;
+            } else {
+              skipAndroid = options.skipAndroid !== undefined
+                ? options.skipAndroid
+                : options.targetAndroid !== undefined
+                ? !options.targetAndroid
+                : false;
+
+              skipIos = options.skipIos !== undefined
+                ? options.skipIos
+                : options.targetIos !== undefined
+                ? !options.targetIos
+                : false;
+            }
+
             const meta = detectProjectMetadata(releaseTargetDir);
             const stages = createDefaultStages();
             stages[0]!.status = 'running';
+
+            if (skipAndroid) {
+              const androidStage = stages.find(s => s.id === 4);
+              if (androidStage) {
+                androidStage.status = 'skipped';
+                androidStage.details = 'Android derlemesi atlandı';
+              }
+            }
+            if (skipIos) {
+              const iosStage = stages.find(s => s.id === 5);
+              if (iosStage) {
+                iosStage.status = 'skipped';
+                iosStage.details = 'iOS derlemesi atlandı';
+              }
+            }
+
+            const platformLabel = skipAndroid && !skipIos ? 'Sadece iOS' : !skipAndroid && skipIos ? 'Sadece Android' : 'Android + iOS';
 
             const projectPipelineStatus: ActivePipelineStatus = {
               isReleasing: true,
@@ -2571,6 +2625,7 @@ export const uiCommand = new Command('ui')
               logs: [
                 `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
                 `[${new Date().toLocaleTimeString()}] Proje: ${options.projectName || meta.name} (${releaseTargetDir})`,
+                `[${new Date().toLocaleTimeString()}] Hedef Platform: ${platformLabel}`,
               ],
               completed: false,
               startedAt: new Date().toISOString(),
@@ -2594,12 +2649,17 @@ export const uiCommand = new Command('ui')
               const logLine = `[${new Date().toLocaleTimeString()}] [${event.status}] ${event.step} ${event.message ? '- ' + event.message : ''}`;
               currentStatus.logs.push(logLine);
 
-              // Sıralı ilerleme mantığı: stageId'den öncekiler 'success', aktif aşama 'running' / 'success', sonrakiler 'pending'
+              // Sıralı ilerleme mantığı: stageId'den öncekiler 'success' (eğer skipped değilse), aktif aşama 'running' / 'success' / 'skipped', sonrakiler 'pending'
               for (const st of currentStatus.stages) {
                 if (st.id < stageId) {
-                  st.status = 'success';
+                  if (st.status !== 'skipped') {
+                    st.status = 'success';
+                  }
                 } else if (st.id === stageId) {
-                  if (event.status === 'RUNNING' || event.status === 'IN_PROGRESS') {
+                  if (event.status === 'SKIPPED') {
+                    st.status = 'skipped';
+                    if (event.message) st.details = event.message;
+                  } else if (event.status === 'RUNNING' || event.status === 'IN_PROGRESS') {
                     st.status = 'running';
                     if (event.message) st.details = event.message;
                   } else if (event.status === 'COMPLETED' || event.status === 'SUCCESS') {
@@ -2610,7 +2670,9 @@ export const uiCommand = new Command('ui')
                     if (event.error) st.details = event.error;
                   }
                 } else {
-                  st.status = 'pending';
+                  if (st.status !== 'skipped') {
+                    st.status = 'pending';
+                  }
                 }
               }
 
@@ -2628,18 +2690,6 @@ export const uiCommand = new Command('ui')
             res.end(JSON.stringify({ status: 'started', projectPath: releaseTargetDir, pipeline: projectPipelineStatus }));
 
             try {
-              const skipAndroid = options.skipAndroid !== undefined
-                ? options.skipAndroid
-                : options.targetAndroid !== undefined
-                ? !options.targetAndroid
-                : false;
-
-              const skipIos = options.skipIos !== undefined
-                ? options.skipIos
-                : options.targetIos !== undefined
-                ? !options.targetIos
-                : true;
-
               const isDryRun = options.dryRun !== undefined ? options.dryRun : false;
 
               const summary = await orchestrator.execute({
@@ -2664,7 +2714,9 @@ export const uiCommand = new Command('ui')
                 currentStatus.isReleasing = false;
                 currentStatus.completed = true;
                 for (const st of currentStatus.stages) {
-                  st.status = 'success';
+                  if (st.status !== 'skipped') {
+                    st.status = 'success';
+                  }
                 }
                 currentStatus.logs.push(`[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${summary.version})`);
 
