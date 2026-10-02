@@ -5,8 +5,6 @@ import {
   Clock,
   GitCommit,
   Sparkles,
-  Smartphone,
-  Apple,
   Copy,
   Check,
   RefreshCw,
@@ -29,6 +27,7 @@ import {
   Compass,
   Trash2
 } from 'lucide-react';
+import { GooglePlayIcon, AppleIcon, AppStoreIcon } from './components/icons';
 
 interface CommitItem {
   hash: string;
@@ -931,7 +930,7 @@ export default function App() {
                   {/* GOOGLE PLAY */}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1 text-muted-foreground">
-                      <Smartphone className="w-2.5 h-2.5 text-emerald-500" /> Play Store:
+                      <GooglePlayIcon className="w-2.5 h-2.5 shrink-0" /> Play Store:
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.googlePlay?.status === 'live' ? (
@@ -955,7 +954,7 @@ export default function App() {
                   {/* APPLE APP STORE */}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1 text-muted-foreground">
-                      <Apple className="w-2.5 h-2.5 text-sky-400" /> App Store:
+                      <AppleIcon className="w-2.5 h-2.5 shrink-0 text-foreground" /> App Store:
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.appStore?.status === 'live' ? (
@@ -1073,7 +1072,10 @@ export default function App() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-primary" />
+                  <span className="flex items-center gap-1">
+                    <GooglePlayIcon className="w-4 h-4 shrink-0" />
+                    <AppleIcon className="w-4 h-4 shrink-0 text-foreground" />
+                  </span>
                   Canlı Mağaza Karşılaştırma Matrisi (Store vs Local)
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -1121,7 +1123,7 @@ export default function App() {
               <div className="p-4 rounded-lg border border-border bg-background/50 space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-500" /> Google Play Console
+                    <GooglePlayIcon className="w-4 h-4" /> Google Play Console
                   </span>
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                     googlePlayInfo.connected ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-secondary'
@@ -1167,7 +1169,7 @@ export default function App() {
               <div className="p-4 rounded-lg border border-border bg-background/50 space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="font-semibold text-foreground flex items-center gap-1.5">
-                    <Apple className="w-3.5 h-3.5 text-sky-400" /> App Store Connect
+                    <AppStoreIcon className="w-4 h-4 shrink-0" /> App Store Connect
                   </span>
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                     appStoreInfo.connected ? 'text-sky-400 bg-sky-500/10' : 'text-muted-foreground bg-secondary'
@@ -1275,7 +1277,10 @@ export default function App() {
               {/* HEDEF MAĞAZALAR & ROLLOUT */}
               <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
                 <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-primary" />
+                  <span className="flex items-center gap-1">
+                    <GooglePlayIcon className="w-4 h-4 shrink-0" />
+                    <AppleIcon className="w-4 h-4 shrink-0 text-foreground" />
+                  </span>
                   Hedef Dağıtım Kanalları
                 </h4>
 
@@ -1290,6 +1295,7 @@ export default function App() {
                           onChange={(e) => setTargetAndroid(e.target.checked)}
                           className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                         />
+                        <GooglePlayIcon className="w-4 h-4 shrink-0" />
                         <span>Google Play Dağıtımı</span>
                       </label>
                       <span className="text-[10px] text-emerald-500 font-mono">AAB</span>
@@ -1344,6 +1350,7 @@ export default function App() {
                           onChange={(e) => setTargetIos(e.target.checked)}
                           className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                         />
+                        <AppleIcon className="w-4 h-4 shrink-0 text-foreground" />
                         <span>Apple App Store Dağıtımı</span>
                       </label>
                       <span className="text-[10px] text-sky-400 font-mono">IPA</span>
@@ -1769,7 +1776,7 @@ export default function App() {
                     : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
                 }`}
               >
-                <Smartphone className="w-4 h-4" />
+                <GooglePlayIcon className="w-4 h-4 shrink-0" />
                 <span>Google Play Console API</span>
                 {googlePlayInfo.connected && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
               </button>
@@ -1782,7 +1789,7 @@ export default function App() {
                     : 'bg-background text-muted-foreground border-transparent hover:bg-secondary'
                 }`}
               >
-                <Apple className="w-4 h-4" />
+                <AppleIcon className="w-4 h-4 shrink-0 text-foreground" />
                 <span>Apple App Store Connect API</span>
                 {appStoreInfo.connected && <span className="w-2 h-2 rounded-full bg-sky-400"></span>}
               </button>
@@ -2084,7 +2091,7 @@ export default function App() {
               {/* GOOGLE PLAY REHBERİ */}
               <div className="p-4 rounded-xl border border-border bg-background space-y-3">
                 <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-emerald-500" />
+                  <GooglePlayIcon className="w-4 h-4 shrink-0" />
                   1. Google Play Console Entegrasyonu İçin Gerekenler
                 </h4>
                 <ol className="list-decimal pl-5 space-y-1.5">
@@ -2113,7 +2120,7 @@ export default function App() {
               {/* APPLE APP STORE REHBERİ */}
               <div className="p-4 rounded-xl border border-border bg-background space-y-3">
                 <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                  <Apple className="w-4 h-4 text-sky-400" />
+                  <AppleIcon className="w-4 h-4 shrink-0 text-foreground" />
                   2. Apple App Store Connect Entegrasyonu İçin Gerekenler
                 </h4>
                 <ol className="list-decimal pl-5 space-y-1.5">
