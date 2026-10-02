@@ -646,9 +646,9 @@ export default function App() {
     setActiveStepIndex(0);
     setSteps(initialSteps);
     setLogs([
-      `[${new Date().toLocaleTimeString()}] 🚀 Sürüm dağıtım orkestrasyonu başlatıldı...`,
-      `[${new Date().toLocaleTimeString()}] 📦 Hedef Sürüm: ${nextVersion}+${nextBuildNumber}`,
-      `[${new Date().toLocaleTimeString()}] 📂 Proje: ${projectName} (${activeProjectPath})`,
+      `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
+      `[${new Date().toLocaleTimeString()}] Hedef Sürüm: ${nextVersion}+${nextBuildNumber}`,
+      `[${new Date().toLocaleTimeString()}] Proje: ${projectName} (${activeProjectPath})`,
     ]);
 
     const eventSource = new EventSource('/api/release/events');
@@ -688,7 +688,7 @@ export default function App() {
             );
             setLogs((prev) => [
               ...prev,
-              `[${new Date().toLocaleTimeString()}] ❌ HATA: ${ev.error || 'İşlem başarısız oldu'}`
+              `[${new Date().toLocaleTimeString()}] HATA: ${ev.error || 'İşlem başarısız oldu'}`
             ]);
           }
         } else if (payload.type === 'completed') {
@@ -699,7 +699,7 @@ export default function App() {
           setActiveStepIndex(20);
           setLogs((prev) => [
             ...prev,
-            `[${new Date().toLocaleTimeString()}] 🎉 Tüm süreç başarıyla tamamlandı! (Sürüm: ${payload.summary?.version || nextVersion})`
+            `[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${payload.summary?.version || nextVersion})`
           ]);
           void handleSyncStores();
         } else if (payload.type === 'failed') {
@@ -707,7 +707,7 @@ export default function App() {
           setIsReleasing(false);
           setLogs((prev) => [
             ...prev,
-            `[${new Date().toLocaleTimeString()}] ❌ Boru hattı durduruldu: ${payload.error || 'Bilinmeyen hata'}`
+            `[${new Date().toLocaleTimeString()}] Boru hattı durduruldu: ${payload.error || 'Bilinmeyen hata'}`
           ]);
         }
       } catch (err) {
@@ -736,7 +736,7 @@ export default function App() {
       eventSource.close();
       setLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] ❌ Sunucu bağlantı hatası: ${err instanceof Error ? err.message : String(err)}`
+        `[${new Date().toLocaleTimeString()}] Sunucu bağlantı hatası: ${err instanceof Error ? err.message : String(err)}`
       ]);
     }
   };
@@ -840,7 +840,7 @@ export default function App() {
                       ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
                       : 'bg-muted text-muted-foreground border border-border'
                   }`}>
-                    {comp?.badge || '⚪ Bekliyor'}
+                    {comp?.badge || 'Bekliyor'}
                   </span>
                 </div>
 
@@ -1376,8 +1376,9 @@ export default function App() {
                 </button>
 
                 {releaseCompleted && (
-                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs text-center font-medium">
-                    🎉 Sürüm {nextVersion} başarıyla dağıtıldı!
+                  <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs text-center font-medium flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span>Sürüm {nextVersion} başarıyla dağıtıldı!</span>
                   </div>
                 )}
               </div>
@@ -1699,7 +1700,7 @@ export default function App() {
                       ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
-                    {googlePlayInfo.connected ? '✓ Bağlantı Hazır' : '⚪ Bekliyor'}
+                    {googlePlayInfo.connected ? 'Bağlantı Hazır' : 'Bekliyor'}
                   </span>
                 </div>
 
@@ -1738,9 +1739,15 @@ export default function App() {
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
                   }`}>
                     {googleTestResult.success ? (
-                      <div>✓ {googleTestResult.message || 'Google Play Service Account başarıyla bağlandı ve kaydedildi!'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <span>{googleTestResult.message || 'Google Play Service Account başarıyla bağlandı ve kaydedildi!'}</span>
+                      </div>
                     ) : (
-                      <div>✕ {googleTestResult.error || 'Doğrulama başarısız oldu.'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <X className="w-3.5 h-3.5 shrink-0" />
+                        <span>{googleTestResult.error || 'Doğrulama başarısız oldu.'}</span>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1783,7 +1790,7 @@ export default function App() {
                       ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
                       : 'bg-muted text-muted-foreground border-border'
                   }`}>
-                    {appStoreInfo.connected ? '✓ Bağlantı Hazır' : '⚪ Yapılandırılmadı'}
+                    {appStoreInfo.connected ? 'Bağlantı Hazır' : 'Yapılandırılmadı'}
                   </span>
                 </div>
 
@@ -1838,9 +1845,15 @@ export default function App() {
                       : 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
                   }`}>
                     {appleTestResult.success ? (
-                      <div>✓ {appleTestResult.message || 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        <span>{appleTestResult.message || 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!'}</span>
+                      </div>
                     ) : (
-                      <div>✕ {appleTestResult.error || 'Doğrulama başarısız oldu.'}</div>
+                      <div className="flex items-center gap-1.5">
+                        <X className="w-3.5 h-3.5 shrink-0" />
+                        <span>{appleTestResult.error || 'Doğrulama başarısız oldu.'}</span>
+                      </div>
                     )}
                   </div>
                 )}

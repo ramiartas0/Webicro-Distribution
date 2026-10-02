@@ -449,7 +449,7 @@ async function compareProjectWithStores(
     googlePlay: { status: 'not_configured' },
     appStore: { status: 'not_configured' },
     comparisonStatus: 'UNKNOWN',
-    badge: '⚪ Taranıyor',
+    badge: 'Taranıyor',
     summary: 'Mağazalar taranıyor...',
   };
 
@@ -566,17 +566,17 @@ async function compareProjectWithStores(
 
     if (storeIsHigher) {
       comparison.comparisonStatus = 'UPDATE_READY';
-      comparison.badge = '⚠️ Mağaza Daha İleri';
+      comparison.badge = 'Mağaza Daha İleri';
       const rawVer = comparison.appStore.version || (comparison.googlePlay.versionCode ? `#${comparison.googlePlay.versionCode}` : '');
       const storeVer = rawVer.startsWith('v') || rawVer.startsWith('#') ? rawVer : `v${rawVer}`;
       comparison.summary = `Mağazadaki canlı sürüm (${storeVer}), yerel sürümden (v${localVersion} #${localBuildNumber}) daha yüksek!`;
     } else if (storeIsEqual) {
       comparison.comparisonStatus = 'UP_TO_DATE';
-      comparison.badge = '✅ Mağazada Eşit';
+      comparison.badge = 'Mağazada Eşit';
       comparison.summary = `Yerel sürüm (v${localVersion} #${localBuildNumber}) mağazadaki son sürümle senkronize.`;
     } else {
       comparison.comparisonStatus = 'UPDATE_READY';
-      comparison.badge = '🚀 Güncelleme Hazır';
+      comparison.badge = 'Güncelleme Hazır';
       comparison.summary = `Yerel sürüm (v${localVersion} #${localBuildNumber}), mağazadaki mevcut sürümden daha yeni. Dağıtıma hazır.`;
     }
   } else if (
@@ -584,15 +584,15 @@ async function compareProjectWithStores(
     comparison.appStore.status === 'not_found'
   ) {
     comparison.comparisonStatus = 'NEW_APP';
-    comparison.badge = '✨ Mağazada Yeni';
+    comparison.badge = 'Mağazada Yeni';
     comparison.summary = 'Paket mağazalarda henüz bulunmuyor. İlk sürüm dağıtımı yapılacak.';
   } else if (comparison.googlePlay.status === 'auth_error') {
     comparison.comparisonStatus = 'UNKNOWN';
-    comparison.badge = '🔒 Yetki Gerekli';
+    comparison.badge = 'Yetki Gerekli';
     comparison.summary = 'Play Console Service Account izinleri eksik veya doğrulanmadı.';
   } else {
     comparison.comparisonStatus = 'UNKNOWN';
-    comparison.badge = '⚪ Yapılandırılmadı';
+    comparison.badge = 'Yapılandırılmadı';
     comparison.summary = 'Mağaza API anahtarları henüz yapılandırılmadı.';
   }
 
@@ -1572,7 +1572,7 @@ export const uiCommand = new Command('ui')
 
     server.listen(port, () => {
       const url = `http://localhost:${port}`;
-      clack.intro(chalk.bold('🚀 Webicro Distribution - Canlı Web Dashboard'));
+      clack.intro(chalk.bold('Webicro Distribution - Canlı Web Dashboard'));
       clack.log.success(`${chalk.green('Dashboard ve Canlı API Servisi hazır:')} ${chalk.cyan.underline(url)}`);
       clack.log.info(chalk.dim('Durdurmak için Ctrl+C tuşlarına basın.'));
 
