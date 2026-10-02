@@ -124,6 +124,7 @@ export interface ProjectEntry {
   path: string;
   hasPubspec: boolean;
   package?: string;
+  iosBundleId?: string;
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
@@ -213,6 +214,10 @@ export default function App() {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [activeProjectPath, setActiveProjectPath] = useState<string>('');
   const [isSyncingStores, setIsSyncingStores] = useState<boolean>(false);
+  const [isSyncingStoreVersion, setIsSyncingStoreVersion] = useState<boolean>(false);
+  const [syncStoreSuccessMsg, setSyncStoreSuccessMsg] = useState<string | null>(null);
+  const [appleConnectApps, setAppleConnectApps] = useState<Array<{ id: string; name: string; bundleId: string; sku?: string }>>([]);
+  const [isLoadingAppleApps, setIsLoadingAppleApps] = useState<boolean>(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState<boolean>(false);
   const [newProjectPath, setNewProjectPath] = useState<string>('');
   const [newProjectName, setNewProjectName] = useState<string>('');
@@ -752,12 +757,15 @@ export default function App() {
     }
   }, [googlePathInput, appleKeyIdInput, appleIssuerIdInput]);
 
-  // Modal veya sekme açıldığında sağlayıcı modellerini canlı getir
+  // Modal veya sekme açıldığında sağlayıcı modellerini ve bağlı mağaza uygulamalarını getir
   useEffect(() => {
     if (showStoreTestModal && activeStoreTab === 'ai' && aiProvider !== 'conventional') {
       void fetchAiModels(aiProvider);
     }
-  }, [showStoreTestModal, activeStoreTab, aiProvider]);
+    if (showStoreTestModal && activeStoreTab === 'apple' && appStoreInfo.connected) {
+      void fetchAppleApps();
+    }
+  }, [showStoreTestModal, activeStoreTab, aiProvider, appStoreInfo.connected]);
 
   // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
@@ -1096,6 +1104,52 @@ export default function App() {
     }
   };
 
+  // YEREL PUBSPEC.YAML SÜRÜMÜNÜ MAĞAZADAKİ CANLI SÜRÜME EŞİTLE
+  const handleSyncStoreVersion = async () => {
+    const target = activePathRef.current || activeProjectPath;
+    if (!target) return;
+    setIsSyncingStoreVersion(true);
+    setSyncStoreSuccessMsg(null);
+    try {
+      const res = await fetch('/api/project/sync-store-version', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: target }),
+      });
+      if (res.ok) {
+        const data = await res.json() as { success: boolean; formatted?: string; version?: string; buildNumber?: number; message?: string };
+        if (data.success && data.formatted) {
+          setSyncStoreSuccessMsg(data.message || `pubspec.yaml başarıyla v${data.formatted} olarak eşitlendi.`);
+          await fetchProjectDetails(target);
+          await handleSyncStores();
+          setTimeout(() => setSyncStoreSuccessMsg(null), 6000);
+        }
+      }
+    } catch (err) {
+      console.error('Sürüm eşitleme hatası:', err);
+    } finally {
+      setIsSyncingStoreVersion(false);
+    }
+  };
+
+  // APP STORE CONNECT HESABINDAKİ TÜM UYGULAMALARI SORGULA
+  const fetchAppleApps = async () => {
+    setIsLoadingAppleApps(true);
+    try {
+      const res = await fetch('/api/stores/apple-apps');
+      if (res.ok) {
+        const data = await res.json() as { success: boolean; apps?: Array<{ id: string; name: string; bundleId: string; sku?: string }> };
+        if (data.success && data.apps) {
+          setAppleConnectApps(data.apps);
+        }
+      }
+    } catch (err) {
+      console.error('Apple uygulamaları listeleme hatası:', err);
+    } finally {
+      setIsLoadingAppleApps(false);
+    }
+  };
+
   // PROJE DEĞİŞTİR (Sıralamayı bozmadan, anında ve karışıklık olmadan geçiş yap)
   const handleSwitchProject = async (targetPath: string) => {
     if (targetPath === activeProjectPath) return;
@@ -1317,6 +1371,7 @@ export default function App() {
           issuerId: data.issuerId || prev.issuerId,
         }));
         await loadProjectsAndActive();
+        void fetchAppleApps();
       } else {
         setAppleTestResult({
           testing: false,
@@ -2152,17 +2207,34 @@ export default function App() {
                 </p>
               </div>
 
-              <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
-                activeComparison?.comparisonStatus === 'UPDATE_READY'
-                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                  : activeComparison?.comparisonStatus === 'UP_TO_DATE'
-                  ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                  : activeComparison?.comparisonStatus === 'NEW_APP'
-                  ? 'bg-purple-500/10 text-purple-500 border-purple-500/20'
-                  : 'bg-muted text-muted-foreground border-border'
-              }`}>
-                {activeComparison?.badge || 'Durum Belirleniyor'}
-              </span>
+              <div className="flex items-center gap-2">
+                {(activeComparison?.badge === 'Mağaza Daha İleri' || activeComparison?.summary?.includes('daha yüksek')) && (
+                  <button
+                    type="button"
+                    onClick={() => void handleSyncStoreVersion()}
+                    disabled={isSyncingStoreVersion}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                    title="Yerel pubspec.yaml dosyasını mağazadaki canlı sürüme eşitler"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : '⚡ Sürümü Eşitle'}</span>
+                  </button>
+                )}
+
+                <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                  activeComparison?.badge === 'Mağaza Daha İleri'
+                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                    : activeComparison?.comparisonStatus === 'UPDATE_READY'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : activeComparison?.comparisonStatus === 'UP_TO_DATE'
+                    ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                    : activeComparison?.comparisonStatus === 'NEW_APP'
+                    ? 'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                    : 'bg-muted text-muted-foreground border-border'
+                }`}>
+                  {activeComparison?.badge || 'Durum Belirleniyor'}
+                </span>
+              </div>
             </div>
 
             {/* 3 SÜTUNLU KARŞILAŞTIRMA KARTLARI */}
@@ -2285,13 +2357,36 @@ export default function App() {
               </div>
             </div>
 
-            {/* KARŞILAŞTIRMA ÖZET KARARI */}
-            <div className="p-3 rounded-lg bg-secondary/50 border border-border text-xs flex items-center gap-2.5 text-secondary-foreground">
-              <Info className="w-4 h-4 text-primary shrink-0" />
-              <span>
-                <strong>Karşılaştırma Analizi:</strong> {activeComparison?.summary || 'Mağaza ve yerel sürüm durumu analiz ediliyor.'}
-              </span>
+            {/* KARŞILAŞTIRMA ÖZET KARARI VE EŞİTLEME BUTONU */}
+            <div className="p-3.5 rounded-lg bg-secondary/50 border border-border text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-secondary-foreground">
+              <div className="flex items-center gap-2.5">
+                <Info className="w-4 h-4 text-primary shrink-0" />
+                <span>
+                  <strong>Karşılaştırma Analizi:</strong> {activeComparison?.summary || 'Mağaza ve yerel sürüm durumu analiz ediliyor.'}
+                </span>
+              </div>
+
+              {(activeComparison?.badge === 'Mağaza Daha İleri' || activeComparison?.summary?.includes('daha yüksek')) && (
+                <button
+                  type="button"
+                  onClick={() => void handleSyncStoreVersion()}
+                  disabled={isSyncingStoreVersion}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0 self-start sm:self-auto"
+                  title="Yerel pubspec.yaml dosyasını mağazadaki canlı sürüme eşitler"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStoreVersion ? 'animate-spin' : ''}`} />
+                  <span>{isSyncingStoreVersion ? 'Eşitleniyor...' : '⚡ Yerel pubspec.yaml\'ı Mağazaya Eşitle'}</span>
+                </button>
+              )}
             </div>
+
+            {/* EŞİTLEME BAŞARI BİLDİRİMİ */}
+            {syncStoreSuccessMsg && (
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-2 animate-in fade-in duration-200">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span className="font-semibold">{syncStoreSuccessMsg}</span>
+              </div>
+            )}
           </section>
 
           {/* ===================== SÜRÜM DAĞITIM MERKEZİ & FORMU ===================== */}
@@ -3792,6 +3887,76 @@ export default function App() {
                     <span>{isSavingApple ? 'Kaydediliyor & Test Ediliyor...' : 'Kaydet ve Bağlantıyı Doğrula'}</span>
                   </button>
                 </div>
+
+                {/* CANLI APP STORE CONNECT HESAP UYGULAMALARI */}
+                {appStoreInfo.connected && (
+                  <div className="mt-4 pt-3 border-t border-border/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-foreground">App Store Hesabındaki Kayıtlı Uygulamalar:</span>
+                        {appleConnectApps.length > 0 && (
+                          <span className="text-[10px] font-mono bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.5 rounded font-medium">
+                            {appleConnectApps.length} Uygulama Bulundu
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void fetchAppleApps()}
+                        disabled={isLoadingAppleApps}
+                        className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50 font-medium"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLoadingAppleApps ? 'animate-spin' : ''}`} />
+                        <span>{isLoadingAppleApps ? 'Sorgulanıyor...' : 'Listeyi Yenile'}</span>
+                      </button>
+                    </div>
+
+                    {isLoadingAppleApps ? (
+                      <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2 border border-border/60 rounded-lg bg-secondary/20">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
+                        <span>App Store Connect API üzerinden kayıtlı uygulamalar alınıyor...</span>
+                      </div>
+                    ) : appleConnectApps.length > 0 ? (
+                      <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1 border border-border/60 rounded-lg p-2 bg-secondary/10">
+                        {appleConnectApps.map((app) => {
+                          const activeProj = projects.find(p => p.path === activeProjectPath);
+                          const isMatchedWithCurrent = activeProj?.iosBundleId === app.bundleId || activeProj?.package === app.bundleId;
+                          return (
+                            <div
+                              key={app.id}
+                              className={`p-2.5 rounded-md border text-xs flex items-center justify-between transition-colors ${
+                                isMatchedWithCurrent
+                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : 'border-border bg-background/80 hover:bg-secondary/40 text-foreground'
+                              }`}
+                            >
+                              <div className="space-y-0.5 min-w-0 pr-2">
+                                <div className="font-semibold flex items-center gap-1.5 truncate">
+                                  <span>{app.name}</span>
+                                  {isMatchedWithCurrent && (
+                                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono">
+                                      Aktif Proje İle Eşleşti
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] font-mono text-muted-foreground truncate">
+                                  Bundle ID: <span className="text-foreground font-medium">{app.bundleId}</span>
+                                </div>
+                              </div>
+                              <div className="text-[10px] font-mono bg-muted/60 px-2 py-1 rounded text-muted-foreground shrink-0 border border-border/40">
+                                ID: {app.id}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground p-3 border border-dashed border-border rounded-lg bg-secondary/10 text-center">
+                        Hesabınızdaki kayıtlı uygulamaları listelemek için "Listeyi Yenile" butonuna tıklayabilirsiniz.
+                      </div>
+                    )}
+                  </div>
+                )}
               </form>
             )}
 

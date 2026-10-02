@@ -52,6 +52,7 @@ export interface ProjectEntry {
   path: string;
   hasPubspec: boolean;
   package?: string;
+  iosBundleId?: string;
   version?: string;
   buildNumber?: number;
   stores?: StoreComparison;
@@ -118,11 +119,13 @@ export function mapStepNameToStageId(stepName: string): number {
 function detectProjectMetadata(projectPath: string): {
   name: string;
   package: string;
+  iosBundleId?: string;
   version: string;
   buildNumber: number;
 } {
   let name = path.basename(projectPath);
   let pkg = '';
+  let iosBundleId = '';
   let version = '1.0.0';
   let buildNumber = 1;
 
@@ -184,26 +187,29 @@ function detectProjectMetadata(projectPath: string): {
     }
   }
 
-  // 4. iOS Runner project.pbxproj dosyasından PRODUCT_BUNDLE_IDENTIFIER ara
-  if (!pkg) {
-    const pbxPath = path.join(projectPath, 'ios/Runner.xcodeproj/project.pbxproj');
-    if (fs.existsSync(pbxPath)) {
-      try {
-        const pbxContent = fs.readFileSync(pbxPath, 'utf8');
-        const match = pbxContent.match(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/);
-        if (match && match[1]) {
-          const raw = match[1].trim().replace(/["']/g, '');
-          if (raw && !raw.includes('$')) {
-            pkg = raw;
-          }
+  // 4. iOS Runner project.pbxproj dosyasından PRODUCT_BUNDLE_IDENTIFIER oku (Android paket adından bağımsız olarak her zaman oku!)
+  const pbxPath = path.join(projectPath, 'ios/Runner.xcodeproj/project.pbxproj');
+  if (fs.existsSync(pbxPath)) {
+    try {
+      const pbxContent = fs.readFileSync(pbxPath, 'utf8');
+      const matches = pbxContent.matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g);
+      for (const m of matches) {
+        const val = m[1]?.trim().replace(/["']/g, '');
+        if (val && !val.includes('$') && !val.includes('Tests')) {
+          iosBundleId = val;
+          break;
         }
-      } catch {
-        // Sessiz
       }
+    } catch {
+      // Sessiz
     }
   }
 
-  return { name, package: pkg, version, buildNumber };
+  if (!pkg && iosBundleId) {
+    pkg = iosBundleId;
+  }
+
+  return { name, package: pkg, iosBundleId: iosBundleId || undefined, version, buildNumber };
 }
 
 /**
@@ -802,28 +808,64 @@ async function compareProjectWithStores(
   }
 
   // 2. APPLE APP STORE KARŞILAŞTIRMASI
-  // Öncelik A: Resmi Apple iTunes API (Herkes için API anahtarsız canlı mağaza durumu)
-  const itunesRes = await fetchAppleStoreLive(pkgName);
-  if (itunesRes.status === 'live') {
-    comparison.appStore = {
-      status: 'live',
-      version: itunesRes.version,
-      message: `${itunesRes.version.startsWith('v') ? itunesRes.version : 'v' + itunesRes.version} yayında`,
-    };
+  // iOS için bağımsız bundleId tespiti
+  let appleTargetBundleId = pkgName;
+  if (projectDir) {
+    try {
+      const pMeta = detectProjectMetadata(projectDir);
+      if (pMeta.iosBundleId) {
+        appleTargetBundleId = pMeta.iosBundleId;
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  // Öncelik B: App Store Connect API varsa TestFlight / bekleyen build kontrolü
+  // App Store Connect API varsa hesaptaki kayıtlı uygulamalarla akıllı eşleştirme yap
+  let connectApps: Array<{ id: string; name: string; bundleId: string; sku?: string }> = [];
   if (creds.appStore && creds.appStore.keyId && creds.appStore.issuerId && (creds.appStore.privateKeyPath || creds.appStore.privateKey)) {
     try {
       const adapter = new AppStoreAdapter({
         keyId: creds.appStore.keyId,
         issuerId: creds.appStore.issuerId,
-        bundleId: pkgName,
+        bundleId: appleTargetBundleId,
         privateKeyPath: creds.appStore.privateKeyPath,
         privateKeyContent: creds.appStore.privateKey,
       });
 
-      const latestBuild = await adapter.getLatestBuild().catch(() => null);
+      connectApps = await adapter.listAllApps().catch(() => []);
+
+      // 1. Tam eşleşme ara
+      const directMatch = connectApps.find(a =>
+        a.bundleId.toLowerCase() === appleTargetBundleId.toLowerCase() ||
+        a.bundleId.toLowerCase() === pkgName.toLowerCase()
+      );
+
+      if (directMatch) {
+        appleTargetBundleId = directMatch.bundleId;
+      } else {
+        // 2. Proje adı ve bundle benzerliği ile eşleştir (örn. partner_mobile -> com.piyyuu.partnerMobile)
+        const projBase = (projectDir ? path.basename(projectDir) : '').replace(/[-_]/g, '').toLowerCase();
+        const fuzzyMatch = connectApps.find(a => {
+          const normBundle = a.bundleId.replace(/[-_.]/g, '').toLowerCase();
+          const normName = a.name.replace(/[\s-_]/g, '').toLowerCase();
+          return (projBase && normBundle.includes(projBase)) || (projBase && normName.includes(projBase));
+        });
+        if (fuzzyMatch) {
+          appleTargetBundleId = fuzzyMatch.bundleId;
+        }
+      }
+
+      // App Store Connect'ten en son build'i sorgula
+      const targetAdapter = new AppStoreAdapter({
+        keyId: creds.appStore.keyId,
+        issuerId: creds.appStore.issuerId,
+        bundleId: appleTargetBundleId,
+        privateKeyPath: creds.appStore.privateKeyPath,
+        privateKeyContent: creds.appStore.privateKey,
+      });
+
+      const latestBuild = await targetAdapter.getLatestBuild().catch(() => null);
       if (latestBuild) {
         comparison.appStore = {
           status: 'live',
@@ -833,11 +875,20 @@ async function compareProjectWithStores(
         };
       }
     } catch {
-      // Connect API hatası olursa iTunes sonucu korunur
+      // Connect API hatası olursa iTunes sonucu denenir
     }
   }
 
-  if (comparison.appStore.status !== 'live' && itunesRes.status === 'not_found') {
+  // Öncelik A: Resmi Apple iTunes API (Canlı mağaza sürümü sorgusu)
+  const itunesRes = await fetchAppleStoreLive(appleTargetBundleId);
+  if (itunesRes.status === 'live') {
+    comparison.appStore = {
+      status: 'live',
+      version: itunesRes.version,
+      message: `${itunesRes.version.startsWith('v') ? itunesRes.version : 'v' + itunesRes.version} yayında`,
+      buildNumber: comparison.appStore.buildNumber,
+    };
+  } else if (comparison.appStore.status !== 'live' && itunesRes.status === 'not_found') {
     comparison.appStore = {
       status: 'not_found',
       message: 'App Store\'da henüz yayınlanmamış',
@@ -1334,6 +1385,135 @@ export const uiCommand = new Command('ui')
             res.end(JSON.stringify({ error: String(err) }));
           }
         });
+        return;
+      }
+
+      // 3.2 POST /api/project/sync-store-version - Yerel pubspec.yaml sürümünü mağazadaki sürüme eşitleme
+      if (req.method === 'POST' && pathname === '/api/project/sync-store-version') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as { projectPath?: string };
+            const targetDir = payload.projectPath && fs.existsSync(payload.projectPath)
+              ? path.resolve(payload.projectPath)
+              : path.resolve(activeProjectDir);
+
+            const meta = detectProjectMetadata(targetDir);
+            const comparison = await compareProjectWithStores(
+              meta.package,
+              meta.buildNumber,
+              meta.version,
+              targetDir,
+              true
+            );
+
+            // Mağazadaki en yüksek sürüm ve build numarasını hesapla
+            let targetVersion = meta.version;
+            let targetBuildNumber = meta.buildNumber;
+
+            // Google Play kontrolü
+            if (comparison.googlePlay.status === 'live') {
+              if (comparison.googlePlay.version) {
+                const cmp = compareSemver(targetVersion, comparison.googlePlay.version);
+                if (cmp < 0) {
+                  targetVersion = comparison.googlePlay.version.replace(/^v/, '');
+                }
+              }
+              if (comparison.googlePlay.versionCode && comparison.googlePlay.versionCode > targetBuildNumber) {
+                targetBuildNumber = comparison.googlePlay.versionCode;
+              }
+            }
+
+            // Apple App Store kontrolü
+            if (comparison.appStore.status === 'live') {
+              if (comparison.appStore.version) {
+                const cleanAppVer = comparison.appStore.version.replace(/^v/, '');
+                const semverAppVer = cleanAppVer.split('.').length === 2 ? `${cleanAppVer}.0` : cleanAppVer;
+                const cmp = compareSemver(targetVersion, semverAppVer);
+                if (cmp < 0) {
+                  targetVersion = semverAppVer;
+                }
+              }
+              if (comparison.appStore.buildNumber) {
+                const parsedB = parseInt(comparison.appStore.buildNumber, 10);
+                if (!isNaN(parsedB) && parsedB > targetBuildNumber) {
+                  targetBuildNumber = parsedB;
+                }
+              }
+            }
+
+            const formatted = `${targetVersion}+${targetBuildNumber}`;
+
+            // pubspec.yaml dosyasını güncelle
+            const pubspecPath = path.join(targetDir, 'pubspec.yaml');
+            if (fs.existsSync(pubspecPath)) {
+              let content = fs.readFileSync(pubspecPath, 'utf8');
+              if (/^version:\s*.+$/m.test(content)) {
+                content = content.replace(/^version:\s*.+$/m, `version: ${formatted}`);
+              } else {
+                content = `version: ${formatted}\n` + content;
+              }
+              fs.writeFileSync(pubspecPath, content, 'utf8');
+            }
+
+            // Projeler listesini güncelle
+            const currentList = getStoredProjects();
+            const projItem = currentList.find(p => path.resolve(p.path) === targetDir);
+            if (projItem) {
+              projItem.version = targetVersion;
+              projItem.buildNumber = targetBuildNumber;
+              projItem.stores = await compareProjectWithStores(
+                projItem.package || meta.package,
+                targetBuildNumber,
+                targetVersion,
+                targetDir,
+                true
+              );
+              saveStoredProjects(currentList);
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              version: targetVersion,
+              buildNumber: targetBuildNumber,
+              formatted,
+              message: `pubspec.yaml başarıyla v${formatted} olarak eşitlendi.`,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      // 3.3 GET /api/stores/apple-apps - App Store Connect Hesabındaki Tüm Uygulamalar
+      if (req.method === 'GET' && pathname === '/api/stores/apple-apps') {
+        try {
+          const creds = getStoreCredentials(activeProjectDir);
+          if (!creds.appStore || !creds.appStore.keyId || !creds.appStore.issuerId || (!creds.appStore.privateKey && !creds.appStore.privateKeyPath)) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, apps: [], error: 'App Store Connect API anahtarları henüz yapılandırılmadı.' }));
+            return;
+          }
+
+          const adapter = new AppStoreAdapter({
+            keyId: creds.appStore.keyId,
+            issuerId: creds.appStore.issuerId,
+            bundleId: 'com.test.test',
+            privateKeyPath: creds.appStore.privateKeyPath,
+            privateKeyContent: creds.appStore.privateKey,
+          });
+
+          const apps = await adapter.listAllApps();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, count: apps.length, apps }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
         return;
       }
 
