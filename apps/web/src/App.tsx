@@ -286,6 +286,7 @@ export default function App() {
   const [activeStepIndex, setActiveStepIndex] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
   const [releaseCompleted, setReleaseCompleted] = useState<boolean>(false);
+  const [distributedVersion, setDistributedVersion] = useState<string>('');
   const [activePipelineProject, setActivePipelineProject] = useState<string>('');
 
   // Geçmiş ve Denetim Kayıtları
@@ -554,6 +555,7 @@ export default function App() {
           pipeline?: {
             projectPath: string;
             projectName: string;
+            targetVersion?: string;
             isReleasing: boolean;
             completed: boolean;
             failed: boolean;
@@ -565,6 +567,7 @@ export default function App() {
           status?: {
             projectPath: string;
             projectName: string;
+            targetVersion?: string;
             isReleasing: boolean;
             completed: boolean;
             failed: boolean;
@@ -578,6 +581,9 @@ export default function App() {
         if (st) {
           setIsReleasing(st.isReleasing);
           setReleaseCompleted(st.completed);
+          if (st.targetVersion) {
+            setDistributedVersion(st.targetVersion);
+          }
           setActivePipelineProject(st.projectPath);
           setActiveStepIndex(st.currentStageId);
           if (st.stages && st.stages.length > 0) {
@@ -607,6 +613,7 @@ export default function App() {
           pipeline?: {
             projectPath: string;
             projectName: string;
+            targetVersion?: string;
             isReleasing: boolean;
             completed: boolean;
             failed: boolean;
@@ -625,6 +632,7 @@ export default function App() {
           const p = payload.pipeline;
           setIsReleasing(p.isReleasing);
           setReleaseCompleted(p.completed);
+          if (p.targetVersion) setDistributedVersion(p.targetVersion);
           setActivePipelineProject(p.projectPath);
           setActiveStepIndex(p.currentStageId);
           if (p.stages && p.stages.length > 0) setSteps(p.stages);
@@ -656,6 +664,7 @@ export default function App() {
           const p = payload.pipeline;
           setIsReleasing(p.isReleasing);
           setReleaseCompleted(p.completed);
+          if (p.targetVersion) setDistributedVersion(p.targetVersion);
           setActivePipelineProject(p.projectPath);
           setActiveStepIndex(p.currentStageId);
           if (p.stages && p.stages.length > 0) setSteps(p.stages);
@@ -672,6 +681,7 @@ export default function App() {
           const p = payload.pipeline;
           setIsReleasing(false);
           setReleaseCompleted(true);
+          if (p.targetVersion) setDistributedVersion(p.targetVersion);
           setActiveStepIndex(6);
           if (p.stages && p.stages.length > 0) setSteps(p.stages);
           if (p.logs && p.logs.length > 0) setLogs(p.logs);
@@ -755,6 +765,10 @@ export default function App() {
     setCommits([]);
     setReleaseNotesTR('');
     setReleaseNotesEN('');
+    if (activePipelineProject !== targetPath) {
+      setReleaseCompleted(false);
+      setDistributedVersion('');
+    }
 
     // 4. Arka plandan taze detayları ve kimlik bilgilerini çek
     await fetchProjectDetails(targetPath);
@@ -1106,6 +1120,7 @@ export default function App() {
 
     setIsReleasing(true);
     setReleaseCompleted(false);
+    setDistributedVersion(nextVersion);
     setActiveStepIndex(1);
     setActivePipelineProject(activeProjectPath);
     setSteps(initialStages.map((s, idx) => (idx === 0 ? { ...s, status: 'running' } : { ...s, status: 'pending' })));
@@ -1991,7 +2006,7 @@ export default function App() {
                 {releaseCompleted && (
                   <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs text-center font-medium flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <span>Sürüm {nextVersion} başarıyla dağıtıldı!</span>
+                    <span>Sürüm {distributedVersion || currentVersion} başarıyla dağıtıldı!</span>
                   </div>
                 )}
               </div>
