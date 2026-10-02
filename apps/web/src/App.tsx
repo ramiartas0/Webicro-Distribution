@@ -313,6 +313,7 @@ export default function App() {
   const [commits, setCommits] = useState<CommitItem[]>([]);
   const [hasPubspec, setHasPubspec] = useState<boolean>(false);
   const [isGitClean, setIsGitClean] = useState<boolean>(true);
+  const [uncommittedFiles, setUncommittedFiles] = useState<string[]>([]);
   const [activeComparison, setActiveComparison] = useState<StoreComparison | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState<boolean>(false);
 
@@ -841,6 +842,7 @@ export default function App() {
           suggestedVersion: string;
           branch: string;
           isClean: boolean;
+          uncommittedFiles?: string[];
           hasPubspec: boolean;
           configuredTrack?: string;
         };
@@ -848,6 +850,7 @@ export default function App() {
           isRepository: boolean;
           currentBranch: string;
           isClean: boolean;
+          uncommittedFiles?: string[];
           lastTag: string | null;
           changedFilesCount: number;
           hasNativeChanges: boolean;
@@ -882,6 +885,7 @@ export default function App() {
         setCurrentBuildNumber(data.project.currentBuildNumber || 0);
         setGitBranch(data.project.branch || '');
         setIsGitClean(data.project.isClean ?? true);
+        setUncommittedFiles(data.project.uncommittedFiles || data.git?.uncommittedFiles || []);
         setHasPubspec(data.project.hasPubspec ?? false);
       }
 
@@ -2144,13 +2148,42 @@ export default function App() {
                     Flutter
                   </span>
                 )}
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                  isGitClean
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                }`}>
-                  {isGitClean ? 'Git Temiz' : 'Değişiklikler Var'}
-                </span>
+                <div className="relative group">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-default flex items-center gap-1 ${
+                    isGitClean
+                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                  }`}>
+                    {isGitClean ? (
+                      <>
+                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        <span>Git Temiz</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span>{uncommittedFiles.length > 0 ? `${uncommittedFiles.length} Değişiklik Var` : 'Değişiklikler Var'}</span>
+                      </>
+                    )}
+                  </span>
+
+                  {/* Değişen Dosyaların Tooltip/Popover Listesi */}
+                  {!isGitClean && uncommittedFiles.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1.5 hidden group-hover:block z-50 min-w-56 max-w-sm p-2.5 rounded-lg bg-popover/95 backdrop-blur border border-border shadow-xl text-[11px] animate-in fade-in-50 zoom-in-95">
+                      <div className="font-semibold text-foreground mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
+                        <span>Commit Edilmemiş Dosyalar ({uncommittedFiles.length})</span>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1 font-mono text-[10px] text-muted-foreground">
+                        {uncommittedFiles.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5 truncate text-foreground hover:text-amber-500">
+                            <span className="text-amber-500 font-bold">•</span>
+                            <span className="truncate" title={file}>{file}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate max-w-xl">
                 {activeProjectPath ? (

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type { GitAnalysis, ParsedCommit } from './types.js';
 import { parseConventionalCommit, determineVersionBump } from './commit-parser.js';
@@ -5,9 +6,39 @@ import { detectNativeChanges } from './change-detector.js';
 
 export class GitAnalyzer {
   private git: SimpleGit;
+  private targetDir: string;
 
   constructor(repoPath?: string) {
-    this.git = simpleGit(repoPath || process.cwd());
+    this.targetDir = path.resolve(repoPath || process.cwd());
+    this.git = simpleGit(this.targetDir);
+  }
+
+  private async getRelPath(): Promise<string> {
+    try {
+      const topLevel = await this.git.revparse(['--show-toplevel']);
+      const trimmed = topLevel.trim();
+      const rel = path.relative(trimmed, this.targetDir);
+      return (rel && rel !== '.') ? rel.replace(/\\/g, '/') : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async getUncommittedFiles(): Promise<string[]> {
+    try {
+      const rel = await this.getRelPath();
+      const status = await this.git.status();
+      const files = status.files.map(f => f.path);
+      if (!rel) {
+        return files;
+      }
+      const prefix = rel.endsWith('/') ? rel : `${rel}/`;
+      return files
+        .filter(f => f.startsWith(prefix) || f === rel)
+        .map(f => f.startsWith(prefix) ? f.slice(prefix.length) : f);
+    } catch {
+      return [];
+    }
   }
 
   async analyze(): Promise<GitAnalysis> {
@@ -17,7 +48,8 @@ export class GitAnalyzer {
     }
 
     const currentBranch = await this.getCurrentBranch();
-    const clean = await this.isClean();
+    const uncommittedFiles = await this.getUncommittedFiles();
+    const clean = uncommittedFiles.length === 0;
     const lastTag = await this.getLastTag();
 
     const commitsSinceLastTag = await this.getCommitsSince(lastTag || 'HEAD');
@@ -30,6 +62,7 @@ export class GitAnalyzer {
       isRepository,
       currentBranch,
       isClean: clean,
+      uncommittedFiles,
       lastTag,
       commitsSinceLastTag,
       changedFiles,
@@ -75,8 +108,8 @@ export class GitAnalyzer {
 
   async isClean(): Promise<boolean> {
     try {
-      const status = await this.git.status();
-      return status.isClean();
+      const uncommitted = await this.getUncommittedFiles();
+      return uncommitted.length === 0;
     } catch (error: unknown) {
       return false;
     }

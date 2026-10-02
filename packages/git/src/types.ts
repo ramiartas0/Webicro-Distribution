@@ -16,6 +16,7 @@ export interface GitAnalysis {
   isRepository: boolean;
   currentBranch: string;
   isClean: boolean;
+  uncommittedFiles?: string[];
   lastTag: string | null;
   commitsSinceLastTag: ParsedCommit[];
   changedFiles: string[];
