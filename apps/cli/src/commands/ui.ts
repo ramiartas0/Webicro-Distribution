@@ -130,6 +130,117 @@ function detectProjectMetadata(projectPath: string): {
   return { name, package: pkg, version, buildNumber };
 }
 
+/**
+ * Herhangi bir makinede/ortamda Flutter projelerini (pubspec.yaml içeren) otomatik keşfeder.
+ * Asla hardcoded kişisel klasör yolu içermez; kullanıcının ev dizini, masaüstü, projeler
+ * ve çalışma alanı kardeş dizinlerini standart olarak tarar.
+ */
+export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] {
+  const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
+  
+  let roots: string[] = [];
+
+  if (customRoots && customRoots.length > 0) {
+    roots = customRoots.filter(r => fs.existsSync(r));
+  } else {
+    // 1. Çalışma dizini ve üst dizini (mevcut monorepo / kardeş dizinler)
+    roots.push(process.cwd());
+    const parentDir = path.resolve(process.cwd(), '..');
+    if (fs.existsSync(parentDir)) {
+      roots.push(parentDir);
+    }
+
+    // 2. Standart kullanıcı proje klasörleri (varsa dinamik ekle)
+    if (home && fs.existsSync(home)) {
+      const standardDevDirs = [
+        'Projects',
+        'Workspace',
+        'Desktop',
+        'Development',
+        'Code',
+        'Sites',
+        'apps',
+        'repos',
+        'src',
+      ];
+      for (const d of standardDevDirs) {
+        const full = path.join(home, d);
+        if (fs.existsSync(full)) {
+          roots.push(full);
+        }
+      }
+    }
+  }
+
+  const foundPaths = new Set<string>();
+  const results: ProjectEntry[] = [];
+
+  const ignoreDirs = new Set([
+    'node_modules',
+    '.git',
+    '.dart_tool',
+    'build',
+    'Pods',
+    'dist',
+    'vendor',
+    'DerivedData',
+    '.gradle',
+    '.idea',
+    '.vscode',
+    'Library',
+    'Applications',
+    'Music',
+    'Movies',
+    'Pictures',
+    'webicro_distribution',
+  ]);
+
+  function scan(dir: string, depth: number): void {
+    if (depth > 4) return;
+    if (!fs.existsSync(dir)) return;
+
+    try {
+      const pubspecPath = path.join(dir, 'pubspec.yaml');
+      if (fs.existsSync(pubspecPath) && path.resolve(dir) !== path.resolve(process.cwd())) {
+        foundPaths.add(path.resolve(dir));
+        return; // Flutter projesinin alt klasörlerini ayrıca taramaya gerek yok
+      }
+
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (entry.name.startsWith('.') && entry.name !== '.release') continue;
+          if (ignoreDirs.has(entry.name)) continue;
+          scan(path.join(dir, entry.name), depth + 1);
+        }
+      }
+    } catch {
+      // Hata oluşursa atla
+    }
+  }
+
+  for (const root of roots) {
+    if (fs.existsSync(root)) {
+      scan(root, 0);
+    }
+  }
+
+  for (const fPath of foundPaths) {
+    const meta = detectProjectMetadata(fPath);
+    results.push({
+      id: fPath.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+      name: meta.name,
+      path: fPath,
+      hasPubspec: true,
+      package: meta.package,
+      version: meta.version,
+      buildNumber: meta.buildNumber,
+    });
+  }
+
+  return results;
+}
+
 export interface StoreCredentials {
   googlePlay?: {
     serviceAccountEmail?: string;
@@ -234,6 +345,97 @@ export function saveStoreCredentials(creds: StoreCredentials, projectDir?: strin
   fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf8');
 }
 
+function cleanSemver(v: string): number[] {
+  const cleaned = v.replace(/^[^\d]*/i, '').trim();
+  const parts = cleaned.split(/[.+]/).map(p => {
+    const num = parseInt(p, 10);
+    return isNaN(num) ? 0 : num;
+  });
+  while (parts.length < 3) parts.push(0);
+  return parts.slice(0, 3);
+}
+
+function compareSemver(v1: string, v2: string): number {
+  const p1 = cleanSemver(v1);
+  const p2 = cleanSemver(v2);
+  for (let i = 0; i < 3; i++) {
+    const n1 = p1[i] ?? 0;
+    const n2 = p2[i] ?? 0;
+    if (n1 > n2) return 1;
+    if (n1 < n2) return -1;
+  }
+  return 0;
+}
+
+interface AppleLookupResult {
+  status: 'live' | 'not_found' | 'error';
+  version?: string;
+  trackName?: string;
+  trackViewUrl?: string;
+  message?: string;
+}
+
+async function fetchAppleStoreLive(bundleId: string): Promise<AppleLookupResult> {
+  try {
+    const res = await fetch(`https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) {
+      return { status: 'error', message: `iTunes API HTTP ${res.status}` };
+    }
+    const data = await res.json() as {
+      resultCount?: number;
+      results?: Array<{
+        version?: string;
+        trackName?: string;
+        trackViewUrl?: string;
+      }>;
+    };
+    if (data.resultCount && data.results && data.results.length > 0 && data.results[0]) {
+      const app = data.results[0];
+      return {
+        status: 'live',
+        version: app.version || '1.0.0',
+        trackName: app.trackName,
+        trackViewUrl: app.trackViewUrl,
+        message: `${app.version} yayında`,
+      };
+    }
+    return { status: 'not_found', message: 'App Store\'da henüz yayınlanmamış' };
+  } catch (err: unknown) {
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+interface GooglePlayWebResult {
+  status: 'live' | 'not_found' | 'error';
+  title?: string;
+  version?: string;
+  message?: string;
+}
+
+async function fetchGooglePlayWebLive(packageName: string): Promise<GooglePlayWebResult> {
+  try {
+    const res = await fetch(`https://play.google.com/store/apps/details?id=${encodeURIComponent(packageName)}&hl=tr`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.status === 200) {
+      return {
+        status: 'live',
+        message: 'Play Store\'da yayında',
+      };
+    } else if (res.status === 404) {
+      return { status: 'not_found', message: 'Play Store\'da kayıtlı değil' };
+    }
+    return { status: 'error', message: `Play Store HTTP ${res.status}` };
+  } catch (err: unknown) {
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /**
  * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
  */
@@ -247,13 +449,14 @@ async function compareProjectWithStores(
     googlePlay: { status: 'not_configured' },
     appStore: { status: 'not_configured' },
     comparisonStatus: 'UNKNOWN',
-    badge: '⚪ Yapılandırılmadı',
-    summary: 'Mağaza API anahtarları yapılandırılmadı.',
+    badge: '⚪ Taranıyor',
+    summary: 'Mağazalar taranıyor...',
   };
 
   const creds = getStoreCredentials(projectDir);
 
-  // 1. Google Play Canlı Karşılaştırması
+  // 1. GOOGLE PLAY KARŞILAŞTIRMASI
+  let googleFound = false;
   if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
     try {
       const adapter = new GooglePlayAdapter({
@@ -267,33 +470,48 @@ async function compareProjectWithStores(
           status: 'live',
           versionCode: res.versionCode,
           track: 'production',
-          message: res.versionCode ? `v${res.versionCode} yayında` : 'Sürüm kodu tespit edilemedi',
+          message: res.versionCode ? `v${res.versionCode} yayında` : 'Yayında',
         };
-      } else if (res.status === 'not_found') {
-        comparison.googlePlay = {
-          status: 'not_found',
-          message: 'Play Console hesabında henüz bu paket kayıtlı değil',
-        };
+        googleFound = true;
       } else if (res.status === 'auth_error') {
         comparison.googlePlay = {
           status: 'auth_error',
           message: res.message || 'Play Console API yetki hatası',
         };
-      } else {
-        comparison.googlePlay = {
-          status: 'not_found',
-          message: res.message,
-        };
       }
-    } catch (err: unknown) {
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Web Fallback: Service Account yoksa veya hata verdiyse Play Store sayfasından doğrula
+  if (!googleFound && comparison.googlePlay.status !== 'live') {
+    const webRes = await fetchGooglePlayWebLive(pkgName);
+    if (webRes.status === 'live') {
+      comparison.googlePlay = {
+        status: 'live',
+        message: 'Play Store\'da yayında',
+      };
+    } else if (webRes.status === 'not_found') {
       comparison.googlePlay = {
         status: 'not_found',
-        message: err instanceof Error ? err.message : String(err),
+        message: 'Play Store\'da henüz yayınlanmamış',
       };
     }
   }
 
-  // 2. Apple App Store Canlı Karşılaştırması
+  // 2. APPLE APP STORE KARŞILAŞTIRMASI
+  // Öncelik A: Resmi Apple iTunes API (Herkes için API anahtarsız canlı mağaza durumu)
+  const itunesRes = await fetchAppleStoreLive(pkgName);
+  if (itunesRes.status === 'live') {
+    comparison.appStore = {
+      status: 'live',
+      version: itunesRes.version,
+      message: `${itunesRes.version} yayında`,
+    };
+  }
+
+  // Öncelik B: App Store Connect API varsa TestFlight / bekleyen build kontrolü
   if (creds.appStore && creds.appStore.keyId && creds.appStore.issuerId && (creds.appStore.privateKeyPath || creds.appStore.privateKey)) {
     try {
       const adapter = new AppStoreAdapter({
@@ -308,44 +526,58 @@ async function compareProjectWithStores(
       if (latestBuild) {
         comparison.appStore = {
           status: 'live',
-          version: latestBuild.version !== 'unknown' ? latestBuild.version : undefined,
+          version: latestBuild.version !== 'unknown' ? latestBuild.version : comparison.appStore.version,
           buildNumber: latestBuild.buildNumber,
           message: `v${latestBuild.buildNumber} yayında`,
         };
-      } else {
-        comparison.appStore = {
-          status: 'not_found',
-          message: 'App Store Connect hesabında paket bulunamadı veya henüz build yüklenmedi',
-        };
       }
-    } catch (err: unknown) {
-      comparison.appStore = {
-        status: 'not_found',
-        message: err instanceof Error ? err.message : String(err),
-      };
+    } catch {
+      // Connect API hatası olursa iTunes sonucu korunur
     }
   }
 
-  // 3. Karşılaştırma Kararı
-  const playCode = comparison.googlePlay.versionCode || 0;
-  const appleBuild = comparison.appStore.buildNumber ? parseInt(comparison.appStore.buildNumber, 10) : 0;
-  const maxStoreBuild = Math.max(playCode, appleBuild);
+  if (comparison.appStore.status !== 'live' && itunesRes.status === 'not_found') {
+    comparison.appStore = {
+      status: 'not_found',
+      message: 'App Store\'da henüz yayınlanmamış',
+    };
+  }
 
-  const hasLiveStore = comparison.googlePlay.status === 'live' || comparison.appStore.status === 'live';
+  // 3. KARŞILAŞTIRMA KARARI
+  const playLive = comparison.googlePlay.status === 'live';
+  const appleLive = comparison.appStore.status === 'live';
 
-  if (hasLiveStore) {
-    if (localBuildNumber > maxStoreBuild) {
-      comparison.comparisonStatus = 'UPDATE_READY';
-      comparison.badge = '🚀 Güncelleme Hazır';
-      comparison.summary = `Yerel sürüm (${localVersion} #${localBuildNumber}), mağazadaki en son sürümden (#${maxStoreBuild}) daha yeni.`;
-    } else if (localBuildNumber === maxStoreBuild) {
-      comparison.comparisonStatus = 'UP_TO_DATE';
-      comparison.badge = '✅ Mağazada Eşit';
-      comparison.summary = `Yerel sürüm (${localVersion} #${localBuildNumber}) mağazadaki son sürümle senkronize.`;
-    } else {
+  if (playLive || appleLive) {
+    let storeIsHigher = false;
+    let storeIsEqual = false;
+
+    // Apple sürümü ile karşılaştır
+    if (appleLive && comparison.appStore.version) {
+      const cmp = compareSemver(localVersion, comparison.appStore.version);
+      if (cmp < 0) storeIsHigher = true;
+      else if (cmp === 0) storeIsEqual = true;
+    }
+
+    // Google Play build numarası ile karşılaştır
+    if (playLive && comparison.googlePlay.versionCode) {
+      if (comparison.googlePlay.versionCode > localBuildNumber) storeIsHigher = true;
+      else if (comparison.googlePlay.versionCode === localBuildNumber) storeIsEqual = true;
+    }
+
+    if (storeIsHigher) {
       comparison.comparisonStatus = 'UPDATE_READY';
       comparison.badge = '⚠️ Mağaza Daha İleri';
-      comparison.summary = `Mağazadaki sürüm (#${maxStoreBuild}), yerel sürümden (#${localBuildNumber}) daha yüksek!`;
+      const rawVer = comparison.appStore.version || (comparison.googlePlay.versionCode ? `#${comparison.googlePlay.versionCode}` : '');
+      const storeVer = rawVer.startsWith('v') || rawVer.startsWith('#') ? rawVer : `v${rawVer}`;
+      comparison.summary = `Mağazadaki canlı sürüm (${storeVer}), yerel sürümden (v${localVersion} #${localBuildNumber}) daha yüksek!`;
+    } else if (storeIsEqual) {
+      comparison.comparisonStatus = 'UP_TO_DATE';
+      comparison.badge = '✅ Mağazada Eşit';
+      comparison.summary = `Yerel sürüm (v${localVersion} #${localBuildNumber}) mağazadaki son sürümle senkronize.`;
+    } else {
+      comparison.comparisonStatus = 'UPDATE_READY';
+      comparison.badge = '🚀 Güncelleme Hazır';
+      comparison.summary = `Yerel sürüm (v${localVersion} #${localBuildNumber}), mağazadaki mevcut sürümden daha yeni. Dağıtıma hazır.`;
     }
   } else if (
     comparison.googlePlay.status === 'not_found' &&
@@ -358,10 +590,10 @@ async function compareProjectWithStores(
     comparison.comparisonStatus = 'UNKNOWN';
     comparison.badge = '🔒 Yetki Gerekli';
     comparison.summary = 'Play Console Service Account izinleri eksik veya doğrulanmadı.';
-  } else if (creds.googlePlay?.verified || creds.appStore?.verified) {
-    comparison.comparisonStatus = 'NEW_APP';
-    comparison.badge = '🟢 API Bağlı';
-    comparison.summary = 'Mağaza API anahtarları doğrulandı ve bağlı.';
+  } else {
+    comparison.comparisonStatus = 'UNKNOWN';
+    comparison.badge = '⚪ Yapılandırılmadı';
+    comparison.summary = 'Mağaza API anahtarları henüz yapılandırılmadı.';
   }
 
   return comparison;
@@ -418,6 +650,24 @@ export const uiCommand = new Command('ui')
         // Hata
       }
 
+      // Eğer liste boşsa veya listede hiç gerçek Flutter projesi yoksa otomatik keşfet
+      const hasRealFlutterApp = list.some(p => p.hasPubspec && p.path !== process.cwd());
+      if (!hasRealFlutterApp) {
+        const discovered = discoverFlutterProjects();
+        if (discovered.length > 0) {
+          const existingPaths = new Set(list.map(p => path.resolve(p.path)));
+          for (const d of discovered) {
+            if (!existingPaths.has(path.resolve(d.path))) {
+              list.push(d);
+              existingPaths.add(path.resolve(d.path));
+            }
+          }
+          if (activeProjectDir === process.cwd() && discovered[0]) {
+            activeProjectDir = discovered[0].path;
+          }
+        }
+      }
+
       if (list.length === 0) {
         const rootMeta = detectProjectMetadata(process.cwd());
         list = [
@@ -431,7 +681,6 @@ export const uiCommand = new Command('ui')
             buildNumber: rootMeta.buildNumber,
           }
         ];
-        saveStoredProjects(list);
       }
 
       // Metadata'ları her zaman güncel tut
@@ -444,6 +693,11 @@ export const uiCommand = new Command('ui')
           p.buildNumber = meta.buildNumber;
           p.hasPubspec = fs.existsSync(path.join(p.path, 'pubspec.yaml'));
         }
+      }
+
+      // Eğer gerçek Flutter projeleri varsa, dağıtım aracının kendi kök dizinini listeden çıkar
+      if (list.some(p => p.hasPubspec && path.resolve(p.path) !== path.resolve(process.cwd()))) {
+        list = list.filter(p => path.resolve(p.path) !== path.resolve(process.cwd()));
       }
 
       return list;
@@ -517,8 +771,11 @@ export const uiCommand = new Command('ui')
         // Eğer herhangi bir projede stores verisi yoksa hafifçe karşılaştır
         for (const p of list) {
           if (!p.stores && p.package) {
-            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0');
+            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
           }
+        }
+        if (!list.some(p => path.resolve(p.path) === path.resolve(activeProjectDir)) && list[0]) {
+          activeProjectDir = list[0].path;
         }
         saveStoredProjects(list);
 
@@ -535,7 +792,7 @@ export const uiCommand = new Command('ui')
         const list = getStoredProjects();
         for (const p of list) {
           if (p.package) {
-            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0');
+            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
           }
         }
         saveStoredProjects(list);
@@ -546,6 +803,60 @@ export const uiCommand = new Command('ui')
           activePath: activeProjectDir,
           projects: list,
         }));
+        return;
+      }
+
+      // 1.2 POST /api/projects/auto-discover - Çevredeki veya Belirtilen Dizindeki Flutter Projelerini Tara
+      if (req.method === 'POST' && pathname === '/api/projects/auto-discover') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as { scanPath?: string };
+            const customRoots = payload.scanPath && fs.existsSync(payload.scanPath) ? [payload.scanPath] : undefined;
+            const discovered = discoverFlutterProjects(customRoots);
+            const currentList = getStoredProjects();
+            const existingPaths = new Set(currentList.map(p => path.resolve(p.path)));
+            let addedCount = 0;
+
+            for (const d of discovered) {
+              if (!existingPaths.has(path.resolve(d.path))) {
+                currentList.push(d);
+                existingPaths.add(path.resolve(d.path));
+                addedCount++;
+              }
+            }
+
+            // Eğer tek proje varsa ve o da webicro_distribution ise, ilk gerçek Flutter projesini aktif yap
+            if (currentList.length > 1 && activeProjectDir === process.cwd()) {
+              const firstReal = currentList.find(p => p.hasPubspec && p.path !== process.cwd());
+              if (firstReal) {
+                activeProjectDir = firstReal.path;
+              }
+            }
+
+            // Tüm projeler için mağaza canlı karşılaştırmalarını yenile
+            for (const p of currentList) {
+              if (p.package) {
+                p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
+              }
+            }
+
+            saveStoredProjects(currentList);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              addedCount,
+              totalCount: currentList.length,
+              activePath: activeProjectDir,
+              projects: currentList,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
         return;
       }
 

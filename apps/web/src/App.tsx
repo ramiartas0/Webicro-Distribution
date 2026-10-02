@@ -25,7 +25,8 @@ import {
   Code2,
   X,
   Info,
-  Save
+  Save,
+  Compass
 } from 'lucide-react';
 
 interface CommitItem {
@@ -110,6 +111,9 @@ export default function App() {
   const [newProjectPath, setNewProjectPath] = useState<string>('');
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [isAddingProject, setIsAddingProject] = useState<boolean>(false);
+  const [isDiscovering, setIsDiscovering] = useState<boolean>(false);
+  const [showScanModal, setShowScanModal] = useState<boolean>(false);
+  const [scanPathInput, setScanPathInput] = useState<string>('');
 
   // Modallar
   const [showStoreTestModal, setShowStoreTestModal] = useState<boolean>(false);
@@ -420,6 +424,27 @@ export default function App() {
       }
     } catch (err) {
       console.error('Proje değiştirme hatası:', err);
+    }
+  };
+
+  // TÜM FLUTTER PROJELERİNİ OTOMATİK KEŞFET VEYA BELİRTİLEN DİZİNİ TARA
+  const handleAutoDiscover = async (customPath?: string) => {
+    setIsDiscovering(true);
+    try {
+      const res = await fetch('/api/projects/auto-discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scanPath: customPath || undefined }),
+      });
+      if (res.ok) {
+        setShowScanModal(false);
+        setScanPathInput('');
+        await loadProjectsAndActive();
+      }
+    } catch (err) {
+      console.error('Proje tarama hatası:', err);
+    } finally {
+      setIsDiscovering(false);
     }
   };
 
@@ -744,25 +769,35 @@ export default function App() {
             </button>
           </div>
 
-          {/* EYLEMLER: MAĞAZA SENKRONİZE ET & PROJE EKLE */}
-          <div className="flex items-center gap-2">
+          {/* EYLEMLER: PROJELERİ TARA & MAĞAZALARI TARA & MANUEL EKLE */}
+          <div className="grid grid-cols-3 gap-1.5">
             <button
-              onClick={() => void handleSyncStores()}
-              disabled={isSyncingStores}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
-              title="Google Play ve App Store API'lerini sorgula ve sürümleri karşılaştır"
+              onClick={() => void handleAutoDiscover()}
+              disabled={isDiscovering}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
+              title="Sistemdeki ve çalışma dizinindeki tüm Flutter projelerini otomatik tara"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
-              <span>{isSyncingStores ? 'Taranıyor...' : 'Mağazaları Tara'}</span>
+              <Compass className={`w-3 h-3 ${isDiscovering ? 'animate-spin text-primary' : 'text-primary'}`} />
+              <span className="truncate">{isDiscovering ? 'Aranıyor...' : 'Projeleri Tara'}</span>
             </button>
 
             <button
-              onClick={() => setShowAddProjectModal(true)}
-              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-all shadow-sm cursor-pointer"
-              title="Sistemden Yeni Proje Dizini Ekle"
+              onClick={() => void handleSyncStores()}
+              disabled={isSyncingStores}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-medium hover:bg-secondary/80 transition-all border border-border cursor-pointer disabled:opacity-60"
+              title="Google Play ve App Store API'lerini sorgula ve sürümleri karşılaştır"
             >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>Ekle</span>
+              <RefreshCw className={`w-3 h-3 ${isSyncingStores ? 'animate-spin text-primary' : ''}`} />
+              <span className="truncate">{isSyncingStores ? 'Taranıyor...' : 'Mağazalar'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowScanModal(true)}
+              className="flex items-center justify-center gap-1 px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] font-medium hover:opacity-90 transition-all shadow-sm cursor-pointer"
+              title="Özel Klasör Tara veya Proje Ekle"
+            >
+              <FolderPlus className="w-3 h-3" />
+              <span>Dizin Tara</span>
             </button>
           </div>
         </div>
@@ -827,15 +862,15 @@ export default function App() {
                   {/* GOOGLE PLAY */}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1 text-muted-foreground">
-                      <Smartphone className="w-2.5 h-2.5 text-emerald-500" /> Play Console:
+                      <Smartphone className="w-2.5 h-2.5 text-emerald-500" /> Play Store:
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.googlePlay?.status === 'live' ? (
-                        <span className="text-emerald-500 font-semibold">v{comp.googlePlay.versionCode}</span>
+                        <span className="text-emerald-500 font-semibold">{comp.googlePlay.versionCode ? `v${comp.googlePlay.versionCode}` : 'Yayında'}</span>
                       ) : comp?.googlePlay?.status === 'not_found' ? (
                         <span className="text-muted-foreground">Kayıtlı Değil</span>
                       ) : comp?.googlePlay?.status === 'auth_error' ? (
-                        <span className="text-rose-500">Yetki Hatası</span>
+                        <span className="text-amber-500">Yetki Bekliyor</span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
@@ -849,7 +884,7 @@ export default function App() {
                     </span>
                     <span className="font-mono font-medium">
                       {comp?.appStore?.status === 'live' ? (
-                        <span className="text-sky-400 font-semibold">v{comp.appStore.buildNumber}</span>
+                        <span className="text-sky-400 font-semibold">{comp.appStore.version || (comp.appStore.buildNumber ? `v${comp.appStore.buildNumber}` : 'Yayında')}</span>
                       ) : comp?.appStore?.status === 'not_found' ? (
                         <span className="text-muted-foreground">Kayıtlı Değil</span>
                       ) : (
@@ -1493,6 +1528,107 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: DİZİN / KLASÖR TARA (AUTO-DISCOVER) ===================== */}
+      {showScanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl max-w-lg w-full p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-sm flex items-center gap-2 text-foreground">
+                <Compass className="w-4 h-4 text-primary" />
+                Ortamdaki Flutter Projelerini Tara ve İçe Aktar
+              </h3>
+              <button
+                onClick={() => setShowScanModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <p className="text-muted-foreground leading-relaxed">
+                Webicro Distribution, belirttiğiniz dizin veya genel geliştirici klasörlerinizdeki tüm Flutter (<code>pubspec.yaml</code> içeren) uygulamalarını otomatik olarak tespit eder, paket kimliklerini çıkartır ve mağaza durumlarıyla eşleştirir.
+              </p>
+
+              {/* HIZLI OTOMATİK TARAMA */}
+              <div className="p-3.5 rounded-lg bg-secondary/50 border border-border space-y-2">
+                <div className="font-semibold text-foreground flex items-center justify-between">
+                  <span>1. Genel Çalışma Alanını Otomatik Tara</span>
+                  <span className="text-[10px] text-muted-foreground font-mono">Desktop, Workspace, Projects</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Ev dizininizdeki standart proje klasörlerini ve mevcut deponun kardeş dizinlerini derinlemesine tarar.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void handleAutoDiscover()}
+                  disabled={isDiscovering}
+                  className="w-full py-2 rounded-lg bg-primary text-primary-foreground font-semibold text-xs shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Compass className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin' : ''}`} />
+                  <span>{isDiscovering ? 'Sistem Taranıyor...' : 'Tüm Standart Dizinleri Otomatik Tara'}</span>
+                </button>
+              </div>
+
+              {/* ÖZEL BİR KLASÖR YOLU GİREREK TARAMA */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (scanPathInput.trim()) {
+                    void handleAutoDiscover(scanPathInput.trim());
+                  }
+                }}
+                className="p-3.5 rounded-lg border border-border bg-background space-y-2.5"
+              >
+                <div className="font-semibold text-foreground">
+                  2. Özel Bir Klasör Dizinini Tara
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={scanPathInput}
+                    onChange={(e) => setScanPathInput(e.target.value)}
+                    placeholder="örneğin: /Users/adiniz/Desktop/Projelerim veya C:\Projeler"
+                    className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <span className="text-[10px] text-muted-foreground mt-1 block">
+                    Bu klasörün altındaki tüm alt dizinler taranır ve bulunan tüm Flutter projeleri listeye eklenir.
+                  </span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isDiscovering || !scanPathInput.trim()}
+                  className="w-full py-2 rounded-lg bg-secondary text-secondary-foreground font-semibold text-xs border border-border hover:bg-secondary/80 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isDiscovering ? 'animate-spin text-primary' : ''}`} />
+                  <span>{isDiscovering ? 'Dizin Taranıyor...' : 'Bu Klasörü Tara ve Projeleri Getir'}</span>
+                </button>
+              </form>
+            </div>
+
+            <div className="flex justify-between items-center pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowScanModal(false);
+                  setShowAddProjectModal(true);
+                }}
+                className="text-xs text-primary hover:underline cursor-pointer"
+              >
+                + Tek bir projeyi doğrudan dosya yoluyla ekle
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScanModal(false)}
+                className="px-3 py-1.5 rounded-md border border-border text-xs text-muted-foreground hover:bg-secondary cursor-pointer"
+              >
+                Kapat
+              </button>
+            </div>
           </div>
         </div>
       )}
