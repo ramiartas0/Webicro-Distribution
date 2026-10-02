@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Rocket,
   CheckCircle2,
@@ -30,7 +30,9 @@ import {
   EyeOff,
   Cpu,
   Bot,
-  Wrench
+  Wrench,
+  Search,
+  FileText
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 
@@ -222,7 +224,6 @@ export default function App() {
   // Modallar
   const [showStoreTestModal, setShowStoreTestModal] = useState<boolean>(false);
   const [showWikiModal, setShowWikiModal] = useState<boolean>(false);
-  const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
 
   // API Bağlantı Formları (Kendi API'ne Bağlan)
   const [activeStoreTab, setActiveStoreTab] = useState<'google' | 'apple' | 'ai'>('google');
@@ -394,9 +395,235 @@ export default function App() {
   const isCurrentCompleted = Boolean(currentPipeline?.completed);
   const currentDistributedVersion = currentPipeline?.targetVersion || '';
 
+  // Ana Sekme Görünümü (Dashboard / Ferah Sayfa Geçmişi)
+  const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'history'>('dashboard');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
+  const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
+
   // Geçmiş ve Denetim Kayıtları
   const [historyReleases, setHistoryReleases] = useState<ReleaseHistoryItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
+
+  // Türkçe Durum ve Eylem Çeviri Fonksiyonları
+  const getReleaseStatusBadge = useCallback((status: string) => {
+    switch (status) {
+      case 'RELEASED':
+        return {
+          label: 'Başarıyla Dağıtıldı',
+          sublabel: 'Canlı Yayında',
+          className: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+        };
+      case 'FAILED':
+        return {
+          label: 'Dağıtım Başarısız',
+          sublabel: 'Hata Alındı',
+          className: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+        };
+      case 'BUILDING':
+        return {
+          label: 'Derleme Aşamasında',
+          sublabel: 'AAB / IPA Paketleniyor',
+          className: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+        };
+      case 'UPLOADING':
+        return {
+          label: 'Mağazaya Yükleniyor',
+          sublabel: 'API Gönderimi',
+          className: 'bg-sky-500/10 text-sky-500 border-sky-500/20',
+        };
+      case 'ARTIFACT_READY':
+        return {
+          label: 'Paket Hazır',
+          sublabel: 'Doğrulandı',
+          className: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+        };
+      case 'SUBMITTED':
+        return {
+          label: 'İncelemeye Sunuldu',
+          sublabel: 'Mağaza Onayı Bekleniyor',
+          className: 'bg-teal-500/10 text-teal-500 border-teal-500/20',
+        };
+      default:
+        return {
+          label: 'Hazırlık / Analiz',
+          sublabel: status,
+          className: 'bg-primary/10 text-primary border-primary/20',
+        };
+    }
+  }, []);
+
+  const getAuditActionInfo = useCallback((action: string) => {
+    switch (action) {
+      case 'RELEASE_STARTED':
+        return {
+          title: 'Dağıtım Başlatıldı',
+          desc: 'Sürüm orkestrasyon zinciri ve ortam denetimleri devreye alındı.',
+          color: 'text-primary',
+        };
+      case 'RELEASE_COMPLETED':
+        return {
+          title: 'Dağıtım Tamamlandı',
+          desc: 'Tüm derleme ve mağaza yükleme adımları başarıyla tamamlandı.',
+          color: 'text-emerald-500',
+        };
+      case 'RELEASE_FAILED':
+        return {
+          title: 'Dağıtım Hatası',
+          desc: 'Derleme veya mağaza API aktarımında bir sorun tespit edildi.',
+          color: 'text-rose-500',
+        };
+      case 'STORE_SUBMITTED':
+        return {
+          title: 'Mağazaya İletildi',
+          desc: 'Uygulama paketi ilgili mağazanın test veya üretim kanalına teslim edildi.',
+          color: 'text-sky-500',
+        };
+      case 'ROLLBACK':
+        return {
+          title: 'Geri Alma İşlemi',
+          desc: 'Sürüm durumu önceki kararlı sürüme geri çekildi.',
+          color: 'text-amber-500',
+        };
+      default:
+        return {
+          title: action,
+          desc: 'Sistem operasyonu denetim günlüğüne işlendi.',
+          color: 'text-foreground',
+        };
+    }
+  }, []);
+
+  const getAuditResultBadge = useCallback((result: string) => {
+    switch (result) {
+      case 'SUCCESS':
+        return { label: 'Başarılı', className: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' };
+      case 'FAILURE':
+        return { label: 'Hata', className: 'text-rose-500 bg-rose-500/10 border-rose-500/20' };
+      case 'SKIPPED':
+        return { label: 'Atlandı', className: 'text-muted-foreground bg-muted border-border' };
+      case 'WARNING':
+        return { label: 'Uyarı', className: 'text-amber-500 bg-amber-500/10 border-amber-500/20' };
+      default:
+        return { label: result, className: 'text-muted-foreground bg-muted border-border' };
+    }
+  }, []);
+
+  // Merkezi veritabanındaki 1.0.0 kayıtlarını ve detayları akıllı çözümle
+  const getResolvedReleaseInfo = useCallback((rel: ReleaseHistoryItem) => {
+    let ver = rel.version;
+    let bNum = rel.buildNumber;
+    let proj = rel.project;
+
+    const relatedLog = auditLogs.find(l => l.releaseId === rel.releaseId && l.details);
+    if (relatedLog?.details) {
+      try {
+        const parsed = JSON.parse(relatedLog.details) as { version?: string; build?: number; project?: string };
+        if (parsed.version && ver === '1.0.0') {
+          ver = parsed.version;
+        }
+        if (parsed.build && bNum === 1) {
+          bNum = parsed.build;
+        }
+        if (parsed.project && proj === 'Piyyuu') {
+          proj = parsed.project;
+        }
+      } catch {
+        // Sessiz
+      }
+    }
+    return { version: ver, buildNumber: bNum, project: proj };
+  }, [auditLogs]);
+
+  // Denetim Günlüğü Detaylarını Türkçe ve Kullanıcı Dostu Render Et
+  const renderAuditDetails = useCallback((rawDetails: string | null) => {
+    if (!rawDetails) return null;
+    try {
+      const parsed = JSON.parse(rawDetails) as Record<string, unknown>;
+      if (parsed.error && typeof parsed.error === 'string') {
+        const err = parsed.error;
+        let userFriendly = err;
+        if (err.includes('photo and video permissions')) {
+          userFriendly = 'Google Play Politikası: Uygulama fotoğraf/video izinleri beyanı eksik. Google Play Console -> "Uygulama İçeriği" altından ilgili form doldurulmalı.';
+        } else if (err.includes('edit has expired')) {
+          userFriendly = 'Google Play Oturum Hatası: Düzenleme oturumu zaman aşımına uğramış. Dağıtım yeniden başlatılmalıdır.';
+        } else if (err.includes('IPHONEOS_DEPLOYMENT_TARGET')) {
+          userFriendly = 'iOS Xcode Hatası: Pods projesinde minimum iOS sürüm hedefi uyumsuzluğu tespit edildi.';
+        } else if (err.includes('Hiçbir platform')) {
+          userFriendly = 'Platform Hatası: Hem Android hem iOS derlemesi atlanmış veya derlenemedi.';
+        }
+        return (
+          <div className="mt-1.5 p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400 space-y-1">
+            <div className="font-semibold flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Hata Nedeni:</span>
+            </div>
+            <p className="text-[11px] leading-relaxed break-words">{userFriendly}</p>
+          </div>
+        );
+      }
+
+      if (parsed.version || parsed.googlePlayStatus || parsed.project) {
+        return (
+          <div className="mt-1.5 p-2 rounded-md bg-secondary/50 border border-border text-[11px] space-y-0.5 font-mono text-muted-foreground">
+            {parsed.project ? <div>Proje: <strong className="text-foreground">{String(parsed.project)}</strong></div> : null}
+            {parsed.version ? <div>Sürüm: <strong className="text-emerald-500">v{String(parsed.version)} #{String(parsed.build || '')}</strong></div> : null}
+            {parsed.googlePlayStatus ? <div>Google Play Durumu: <span className="text-foreground">{String(parsed.googlePlayStatus)}</span></div> : null}
+            {parsed.appStoreStatus ? <div>App Store Durumu: <span className="text-foreground">{String(parsed.appStoreStatus)}</span></div> : null}
+          </div>
+        );
+      }
+    } catch {
+      if (rawDetails.includes('Google Play API Hatası') || rawDetails.includes('Hata')) {
+        return (
+          <div className="mt-1.5 p-2.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-xs text-rose-600 dark:text-rose-400">
+            <p className="text-[11px] leading-relaxed">{rawDetails}</p>
+          </div>
+        );
+      }
+    }
+    return (
+      <div className="mt-1 text-[10px] font-mono text-muted-foreground/70 truncate max-w-xl">
+        {rawDetails}
+      </div>
+    );
+  }, []);
+
+  // Filtrelenmiş Dağıtım Listesi (Arama ve Durum Filtreleri)
+  const filteredReleases = useMemo(() => {
+    return historyReleases.filter((rel) => {
+      if (historyStatusFilter === 'success' && rel.status !== 'RELEASED') return false;
+      if (historyStatusFilter === 'failed' && rel.status !== 'FAILED') return false;
+
+      if (historySearchQuery.trim()) {
+        const query = historySearchQuery.toLowerCase();
+        const resolved = getResolvedReleaseInfo(rel);
+        const matchVer = (resolved.version || '').toLowerCase().includes(query);
+        const matchProj = (resolved.project || '').toLowerCase().includes(query);
+        const matchId = (rel.releaseId || '').toLowerCase().includes(query);
+        const matchBuild = String(resolved.buildNumber || '').includes(query);
+        return matchVer || matchProj || matchId || matchBuild;
+      }
+      return true;
+    });
+  }, [historyReleases, historyStatusFilter, historySearchQuery, getResolvedReleaseInfo]);
+
+  // Filtrelenmiş Denetim Günlüğü Listesi (Arama ve Durum Filtreleri)
+  const filteredAuditLogs = useMemo(() => {
+    return auditLogs.filter((log) => {
+      if (historyStatusFilter === 'success' && log.result !== 'SUCCESS') return false;
+      if (historyStatusFilter === 'failed' && log.result !== 'FAILURE') return false;
+
+      if (historySearchQuery.trim()) {
+        const query = historySearchQuery.toLowerCase();
+        const matchAction = log.action.toLowerCase().includes(query);
+        const matchActor = log.actor.toLowerCase().includes(query);
+        const matchId = log.releaseId ? log.releaseId.toLowerCase().includes(query) : false;
+        const matchDetails = log.details ? log.details.toLowerCase().includes(query) : false;
+        return matchAction || matchActor || matchId || matchDetails;
+      }
+      return true;
+    });
+  }, [auditLogs, historyStatusFilter, historySearchQuery]);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -1784,14 +2011,18 @@ export default function App() {
 
           <button
             onClick={() => {
-              void loadHistory();
-              setShowHistoryModal(true);
+              setActiveMainTab('history');
+              void loadHistory('all');
             }}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-all cursor-pointer border border-transparent hover:border-border"
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer border ${
+              activeMainTab === 'history'
+                ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground border-transparent hover:border-border'
+            }`}
           >
             <div className="flex items-center gap-2">
-              <History className="w-3.5 h-3.5 text-primary" />
-              <span>Geçmiş Sürümler & Denetim</span>
+              <History className={`w-3.5 h-3.5 ${activeMainTab === 'history' ? 'text-primary-foreground' : 'text-primary'}`} />
+              <span>Sürüm Geçmişi & Denetim</span>
             </div>
             <ChevronRight className="w-3 h-3 opacity-60" />
           </button>
@@ -1811,8 +2042,8 @@ export default function App() {
 
       {/* ===================== SAĞ PANEL (AKTİF PROJE YÖNETİMİ & DAĞITIM BORU HATTI) ===================== */}
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-        {/* ÜST BAŞLIK & PROJE ÖZETİ */}
-        <header className="px-6 py-4 border-b border-border bg-card/60 backdrop-blur sticky top-0 z-10 flex items-center justify-between">
+        {/* ÜST BAŞLIK & PROJE ÖZETİ & ANA SEKME BUTONLARI */}
+        <header className="px-6 py-3.5 border-b border-border bg-card/60 backdrop-blur sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <ProjectAppIcon path={activeProjectPath} name={projectName || 'Proje'} className="w-10 h-10 rounded-xl shadow-sm border border-border" />
             <div>
@@ -1846,6 +2077,43 @@ export default function App() {
             </div>
           </div>
 
+          {/* ORTA BÖLÜM: ANA SEKME DEĞİŞTİRİCİ (Dashboard vs Sürüm Geçmişi) */}
+          <div className="flex items-center p-1 bg-secondary/80 rounded-xl border border-border shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveMainTab('dashboard')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeMainTab === 'dashboard'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Rocket className="w-3.5 h-3.5 text-primary" />
+              <span>Dağıtım Merkezi</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveMainTab('history');
+                void loadHistory('all');
+              }}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                activeMainTab === 'history'
+                  ? 'bg-background text-foreground shadow-xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 text-primary" />
+              <span>Sürüm Geçmişi & SQLite Günlüğü</span>
+              {historyReleases.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-mono font-bold">
+                  {historyReleases.length}
+                </span>
+              )}
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowStoreTestModal(true)}
@@ -1866,7 +2134,8 @@ export default function App() {
           </div>
         </header>
 
-        <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+        {activeMainTab === 'dashboard' ? (
+          <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
           {/* ===================== CANLI STORE KARŞILAŞTIRMA MATRİSİ ===================== */}
           <section className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
@@ -2777,6 +3046,324 @@ export default function App() {
             </div>
           </section>
         </div>
+        ) : (
+          /* ===================== TAM SAYFA: SÜRÜM DAĞITIM GEÇMİŞİ & SQLITE DENETİM GÜNLÜĞÜ ===================== */
+          <div className="p-6 space-y-6 max-w-7xl mx-auto w-full animate-in fade-in duration-200">
+            {/* ÜST BAŞLIK VE KONTROLLER */}
+            <div className="bg-card border border-border rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  <History className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <span>Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-semibold">
+                      SQLite Canlı Kayıtlar
+                    </span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Tüm projelerin yerel derleme, mağaza aktarımı, onay ve hata kayıtları SQLite veritabanından filtrelenebilir ve denetlenebilir.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => void loadHistory(historyFilter)}
+                  disabled={isLoadingHistory}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-50 shadow-2xs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHistory ? 'animate-spin text-primary' : ''}`} />
+                  <span>{isLoadingHistory ? 'Yenileniyor...' : 'Veritabanını Yenile'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 KPI / İSTATİSTİK KARTI */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Toplam Dağıtım</span>
+                  <Rocket className="w-4 h-4 text-primary" />
+                </div>
+                <div className="text-2xl font-extrabold font-mono text-foreground">
+                  {historyReleases.length}
+                </div>
+                <div className="text-[11px] text-muted-foreground">Kayıtlı sürüm paketi</div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center justify-between">
+                  <span>Başarılı Dağıtımlar</span>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div className="text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                  {historyReleases.filter(r => r.status === 'RELEASED').length}
+                </div>
+                <div className="text-[11px] text-emerald-600/70 dark:text-emerald-400/70">Mağazalara teslim edildi</div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-rose-600 dark:text-rose-400 flex items-center justify-between">
+                  <span>Hata Alan Dağıtımlar</span>
+                  <AlertCircle className="w-4 h-4 text-rose-500" />
+                </div>
+                <div className="text-2xl font-extrabold font-mono text-rose-600 dark:text-rose-400">
+                  {historyReleases.filter(r => r.status === 'FAILED').length}
+                </div>
+                <div className="text-[11px] text-rose-600/70 dark:text-rose-400/70">Düzeltme ve yeniden deneme</div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-1">
+                <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
+                  <span>Denetim Kayıtları</span>
+                  <FileText className="w-4 h-4 text-sky-500" />
+                </div>
+                <div className="text-2xl font-extrabold font-mono text-foreground">
+                  {auditLogs.length}
+                </div>
+                <div className="text-[11px] text-muted-foreground">SQLite işlem günlüğü</div>
+              </div>
+            </div>
+
+            {/* FİLTRELEME VE ARAMA ÇUBUĞU */}
+            <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Proje Filtresi */}
+                <div className="flex items-center p-0.5 bg-secondary rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryFilter('all');
+                      void loadHistory('all');
+                    }}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      historyFilter === 'all'
+                        ? 'bg-background text-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Tüm Projeler
+                  </button>
+                  {projectName && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryFilter('current');
+                        void loadHistory('current');
+                      }}
+                      className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                        historyFilter === 'current'
+                          ? 'bg-background text-foreground shadow-2xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {projectName}
+                    </button>
+                  )}
+                </div>
+
+                {/* Durum Filtresi */}
+                <div className="flex items-center p-0.5 bg-secondary rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryStatusFilter('all')}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      historyStatusFilter === 'all'
+                        ? 'bg-background text-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Tüm Durumlar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryStatusFilter('success')}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      historyStatusFilter === 'success'
+                        ? 'bg-background text-emerald-500 shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Yalnızca Başarılı
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryStatusFilter('failed')}
+                    className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer ${
+                      historyStatusFilter === 'failed'
+                        ? 'bg-background text-rose-500 shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Yalnızca Hatalı
+                  </button>
+                </div>
+              </div>
+
+              {/* Arama Inputu */}
+              <div className="relative min-w-[240px]">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  placeholder="Sürüm, ID veya proje ara..."
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                />
+                {historySearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setHistorySearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* İKİ SÜTUNLU GENİŞ FERAH GÖRÜNÜM */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* SOL SÜTUN: KAYITLI DAĞITIMLAR (5 Kolon) */}
+              <div className="lg:col-span-5 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <Rocket className="w-4 h-4 text-primary" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Kayıtlı Dağıtımlar ({filteredReleases.length})
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">SQLite: releases</span>
+                </div>
+
+                {filteredReleases.length === 0 ? (
+                  <div className="p-8 rounded-xl bg-card border border-border text-center space-y-2">
+                    <History className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+                    <p className="text-xs font-semibold text-foreground">Kayıtlı Dağıtım Bulunamadı</p>
+                    <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                      Seçilen filtre ve arama kriterlerine uygun sürüm kaydı bulunmamaktadır.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredReleases.map((rel) => {
+                      const resolved = getResolvedReleaseInfo(rel);
+                      const badge = getReleaseStatusBadge(rel.status);
+                      return (
+                        <div
+                          key={rel.id}
+                          className="p-4 rounded-xl border border-border bg-card hover:border-primary/50 transition-all space-y-3 shadow-2xs"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">
+                                  {resolved.project}
+                                </span>
+                                <span className="font-extrabold font-mono text-base text-foreground tracking-tight">
+                                  v{resolved.version}
+                                </span>
+                                <span className="text-xs font-mono text-muted-foreground font-semibold">
+                                  #{resolved.buildNumber}
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-mono text-muted-foreground flex items-center gap-2">
+                                <span>ID: <strong className="text-foreground">{rel.releaseId}</strong></span>
+                                <span>•</span>
+                                <span>{rel.createdAt}</span>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 text-right space-y-0.5">
+                              <span className={`inline-block px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                              <div className="text-[10px] text-muted-foreground">
+                                {badge.sublabel}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* SAĞ SÜTUN: SQLITE DENETİM GÜNLÜKLERİ (7 Kolon) */}
+              <div className="lg:col-span-7 space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Denetim Günlükleri ({filteredAuditLogs.length})
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground">SQLite: audit_logs</span>
+                </div>
+
+                {filteredAuditLogs.length === 0 ? (
+                  <div className="p-8 rounded-xl bg-card border border-border text-center space-y-2">
+                    <FileText className="w-8 h-8 text-muted-foreground/50 mx-auto" />
+                    <p className="text-xs font-semibold text-foreground">Denetim Günlüğü Bulunamadı</p>
+                    <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                      Seçilen kriterlerle eşleşen SQLite denetim kaydı bulunamadı.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredAuditLogs.map((log) => {
+                      const actionInfo = getAuditActionInfo(log.action);
+                      const resultBadge = getAuditResultBadge(log.result);
+                      return (
+                        <div
+                          key={log.id}
+                          className="p-4 rounded-xl border border-border bg-card hover:border-border/80 transition-all space-y-2 shadow-2xs"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold text-xs ${actionInfo.color}`}>
+                                  {actionInfo.title}
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-secondary text-muted-foreground">
+                                  Operatör: {log.actor}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground leading-snug">
+                                {actionInfo.desc}
+                              </p>
+                            </div>
+
+                            <div className="shrink-0 text-right space-y-1">
+                              <span className={`inline-block text-[10px] font-bold font-mono px-2 py-0.5 rounded border ${resultBadge.className}`}>
+                                {resultBadge.label}
+                              </span>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {log.timestamp}
+                              </div>
+                            </div>
+                          </div>
+
+                          {log.releaseId && (
+                            <div className="text-[10px] font-mono text-muted-foreground/80 pt-1 border-t border-border/40">
+                              İlişkili Dağıtım ID: <span className="text-foreground">{log.releaseId}</span>
+                            </div>
+                          )}
+
+                          {renderAuditDetails(log.details)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* ===================== MODAL: YENİ PROJE EKLE ===================== */}
@@ -3528,180 +4115,6 @@ export default function App() {
                 </div>
               </form>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ===================== MODAL: GEÇMİŞ SÜRÜMLER & DENETİM ===================== */}
-      {showHistoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-card border border-border rounded-xl shadow-xl max-w-3xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2">
-                <History className="w-5 h-5 text-primary" />
-                <div>
-                  <h3 className="font-bold text-base text-foreground">
-                    Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    SQLite veritabanına kaydedilen tüm gerçek dağıtım adımları ve denetim kayıtları.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void loadHistory(historyFilter)}
-                  disabled={isLoadingHistory}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-50"
-                  title="Veritabanından verileri canlı yenile"
-                >
-                  <RefreshCw className={`w-3 h-3 ${isLoadingHistory ? 'animate-spin text-primary' : ''}`} />
-                  <span>Yenile</span>
-                </button>
-                <button
-                  onClick={() => setShowHistoryModal(false)}
-                  className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* FİLTRELEME BUTONLARI */}
-            <div className="flex items-center gap-2 border-b border-border pb-2 text-xs">
-              <span className="text-muted-foreground font-medium">Görünüm:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setHistoryFilter('all');
-                  void loadHistory('all');
-                }}
-                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
-                  historyFilter === 'all'
-                    ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                    : 'bg-background text-muted-foreground border-border hover:bg-secondary'
-                }`}
-              >
-                Tüm Projelerin Dağıtımları
-              </button>
-              {projectName && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistoryFilter('current');
-                    void loadHistory('current');
-                  }}
-                  className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
-                    historyFilter === 'current'
-                      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                      : 'bg-background text-muted-foreground border-border hover:bg-secondary'
-                  }`}
-                >
-                  Yalnızca {projectName}
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Kayıtlı Dağıtımlar ({historyReleases.length})
-                  </h4>
-                  <span className="text-[10px] text-muted-foreground font-mono">SQLite (releases tablosu)</span>
-                </div>
-
-                {historyReleases.length === 0 ? (
-                  <div className="p-5 rounded-lg bg-background border border-border text-xs text-muted-foreground text-center space-y-1">
-                    <p className="font-semibold text-foreground">Henüz bu filtre için kayıtlı bir sürüm bulunmuyor.</p>
-                    <p className="text-[11px]">Dağıtım başlattığınızda oluşturulan tüm sürümler SQLite veritabanına kalıcı olarak yazılır.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {historyReleases.map((rel) => {
-                      const isSuccess = rel.status === 'RELEASED';
-                      const isFailed = rel.status === 'FAILED';
-                      return (
-                        <div key={rel.id} className="p-3 rounded-lg border border-border bg-background hover:border-border/80 transition-all flex items-center justify-between text-xs shadow-2xs">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              {rel.project && (
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
-                                  {rel.project}
-                                </span>
-                              )}
-                              <span className="font-bold font-mono text-sm text-foreground">
-                                v{rel.version}
-                              </span>
-                              <span className="text-muted-foreground font-mono text-xs">
-                                #{rel.buildNumber}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
-                              <span>ID: {rel.releaseId}</span>
-                              <span>•</span>
-                              <span>{rel.createdAt}</span>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 pl-2">
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border ${
-                              isSuccess
-                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                : isFailed
-                                ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-                                : 'bg-primary/10 text-primary border-primary/20'
-                            }`}>
-                              {rel.status}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Denetim Günlükleri (Audit Logs - {auditLogs.length})
-                  </h4>
-                  <span className="text-[10px] text-muted-foreground font-mono">SQLite (audit_logs tablosu)</span>
-                </div>
-
-                {auditLogs.length === 0 ? (
-                  <div className="p-4 rounded-lg bg-background border border-border text-xs text-muted-foreground text-center">
-                    Kayıtlı denetim günlüğü yok.
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                    {auditLogs.map((log) => (
-                      <div key={log.id} className="p-2.5 rounded-lg border border-border bg-background text-[11px] flex items-center justify-between hover:bg-secondary/30 transition-all">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-foreground">{log.action}</span>
-                            <span className="text-[10px] text-muted-foreground font-mono">aktör: {log.actor}</span>
-                          </div>
-                          <div className="text-[10px] text-muted-foreground font-mono">
-                            {log.timestamp} {log.releaseId ? `• ${log.releaseId}` : ''}
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border ${
-                          log.result === 'SUCCESS'
-                            ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
-                            : 'text-rose-500 bg-rose-500/10 border-rose-500/20'
-                        }`}>
-                          {log.result}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
