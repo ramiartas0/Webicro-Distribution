@@ -15,19 +15,252 @@ import { ReleaseOrchestrator } from '@webicro/core';
 import { AIController, MockAIProvider, GeminiProvider } from '@webicro/ai';
 import { ReleaseNotesValidator } from '@webicro/validation';
 import { PubspecVersionUpdater } from '@webicro/flutter';
-import { createGoogleAuth } from '@webicro/google-play';
-import { generateAppStoreToken } from '@webicro/app-store';
+import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
+import { generateAppStoreToken, AppStoreAdapter } from '@webicro/app-store';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-interface ProjectEntry {
+export interface StoreComparison {
+  googlePlay: {
+    status: 'live' | 'not_found' | 'auth_error' | 'not_configured';
+    versionCode?: number;
+    track?: string;
+    message?: string;
+  };
+  appStore: {
+    status: 'live' | 'not_found' | 'auth_error' | 'not_configured';
+    version?: string;
+    buildNumber?: string;
+    message?: string;
+  };
+  comparisonStatus: 'UPDATE_READY' | 'UP_TO_DATE' | 'NEW_APP' | 'UNKNOWN';
+  badge: string;
+  summary: string;
+}
+
+export interface ProjectEntry {
   id: string;
   name: string;
   path: string;
   hasPubspec: boolean;
   package?: string;
   version?: string;
+  buildNumber?: number;
+  stores?: StoreComparison;
+}
+
+/**
+ * Proje dizininden paket adını ve versiyonunu otomatik tespit eder
+ */
+function detectProjectMetadata(projectPath: string): {
+  name: string;
+  package: string;
+  version: string;
+  buildNumber: number;
+} {
+  let name = path.basename(projectPath);
+  let pkg = '';
+  let version = '1.0.0';
+  let buildNumber = 1;
+
+  // 1. release.config.yaml'dan bak
+  try {
+    const configPath = path.join(projectPath, 'release.config.yaml');
+    if (fs.existsSync(configPath)) {
+      const cfg = ConfigLoader.loadFromFile(configPath);
+      if (cfg.project?.name) name = cfg.project.name;
+      if (cfg.project?.package) pkg = cfg.project.package;
+    }
+  } catch {
+    // Sessiz devam
+  }
+
+  // 2. pubspec.yaml'dan bak
+  try {
+    const pubspecPath = path.join(projectPath, 'pubspec.yaml');
+    if (fs.existsSync(pubspecPath)) {
+      const content = fs.readFileSync(pubspecPath, 'utf8');
+      const nameMatch = content.match(/^name:\s*([^\s#]+)/m);
+      if (nameMatch && nameMatch[1]) name = nameMatch[1];
+      const verMatch = content.match(/^version:\s*([^\s#]+)/m);
+      if (verMatch && verMatch[1]) {
+        const full = verMatch[1].trim();
+        const [v, b] = full.split('+');
+        version = v || '1.0.0';
+        buildNumber = b ? parseInt(b, 10) : 1;
+      }
+    }
+  } catch {
+    // Sessiz devam
+  }
+
+  // 3. Android build.gradle dosyasından applicationId veya namespace ara
+  if (!pkg) {
+    const gradlePaths = [
+      path.join(projectPath, 'android/app/build.gradle'),
+      path.join(projectPath, 'android/app/build.gradle.kts'),
+    ];
+    for (const gp of gradlePaths) {
+      if (fs.existsSync(gp)) {
+        try {
+          const content = fs.readFileSync(gp, 'utf8');
+          const appMatch = content.match(/applicationId\s*=?\s*["']([^"']+)["']/);
+          if (appMatch && appMatch[1]) {
+            pkg = appMatch[1];
+            break;
+          }
+          const nsMatch = content.match(/namespace\s*=?\s*["']([^"']+)["']/);
+          if (nsMatch && nsMatch[1]) {
+            pkg = nsMatch[1];
+            break;
+          }
+        } catch {
+          // Sessiz
+        }
+      }
+    }
+  }
+
+  if (!pkg) {
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    pkg = `com.webicro.${cleanName || 'app'}`;
+  }
+
+  return { name, package: pkg, version, buildNumber };
+}
+
+/**
+ * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
+ */
+async function compareProjectWithStores(
+  pkgName: string,
+  localBuildNumber: number,
+  localVersion: string
+): Promise<StoreComparison> {
+  const comparison: StoreComparison = {
+    googlePlay: { status: 'not_configured' },
+    appStore: { status: 'not_configured' },
+    comparisonStatus: 'UNKNOWN',
+    badge: '⚪ Yapılandırılmadı',
+    summary: 'Mağaza API anahtarları yapılandırılmadı.',
+  };
+
+  // 1. Google Play Canlı Karşılaştırması
+  const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
+  const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
+
+  if (fs.existsSync(googleKeyPath)) {
+    try {
+      const adapter = new GooglePlayAdapter({
+        packageName: pkgName,
+        serviceAccountJsonPath: googleKeyPath,
+      });
+      const res = await adapter.getSafeLatestVersionCode();
+      if (res.status === 'found') {
+        comparison.googlePlay = {
+          status: 'live',
+          versionCode: res.versionCode,
+          track: 'production',
+          message: res.versionCode ? `v${res.versionCode} yayında` : 'Sürüm kodu tespit edilemedi',
+        };
+      } else if (res.status === 'not_found') {
+        comparison.googlePlay = {
+          status: 'not_found',
+          message: 'Play Console hesabında henüz bu paket kayıtlı değil',
+        };
+      } else if (res.status === 'auth_error') {
+        comparison.googlePlay = {
+          status: 'auth_error',
+          message: res.message || 'Play Console API yetki hatası',
+        };
+      } else {
+        comparison.googlePlay = {
+          status: 'not_found',
+          message: res.message,
+        };
+      }
+    } catch (err: unknown) {
+      comparison.googlePlay = {
+        status: 'not_found',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // 2. Apple App Store Canlı Karşılaştırması
+  const appStoreKeyId = process.env['APPSTORE_KEY_ID'] || '';
+  const appStoreIssuerId = process.env['APPSTORE_ISSUER_ID'] || '';
+  const appStoreKeyPath = process.env['APPSTORE_PRIVATE_KEY_PATH'] || '';
+  const appStoreKeyContent = process.env['APPSTORE_PRIVATE_KEY'] || '';
+
+  if (appStoreKeyId && appStoreIssuerId && (appStoreKeyPath || appStoreKeyContent)) {
+    try {
+      const adapter = new AppStoreAdapter({
+        keyId: appStoreKeyId,
+        issuerId: appStoreIssuerId,
+        bundleId: pkgName,
+        privateKeyPath: appStoreKeyPath || undefined,
+        privateKeyContent: appStoreKeyContent || undefined,
+      });
+
+      const latestBuild = await adapter.getLatestBuild().catch(() => null);
+      if (latestBuild) {
+        comparison.appStore = {
+          status: 'live',
+          version: latestBuild.version !== 'unknown' ? latestBuild.version : undefined,
+          buildNumber: latestBuild.buildNumber,
+          message: `v${latestBuild.buildNumber} yayında`,
+        };
+      } else {
+        comparison.appStore = {
+          status: 'not_found',
+          message: 'App Store Connect hesabında paket bulunamadı veya henüz build yüklenmedi',
+        };
+      }
+    } catch (err: unknown) {
+      comparison.appStore = {
+        status: 'not_found',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // 3. Karşılaştırma Kararı
+  const playCode = comparison.googlePlay.versionCode || 0;
+  const appleBuild = comparison.appStore.buildNumber ? parseInt(comparison.appStore.buildNumber, 10) : 0;
+  const maxStoreBuild = Math.max(playCode, appleBuild);
+
+  const hasLiveStore = comparison.googlePlay.status === 'live' || comparison.appStore.status === 'live';
+
+  if (hasLiveStore) {
+    if (localBuildNumber > maxStoreBuild) {
+      comparison.comparisonStatus = 'UPDATE_READY';
+      comparison.badge = '🚀 Güncelleme Hazır';
+      comparison.summary = `Yerel sürüm (${localVersion} #${localBuildNumber}), mağazadaki en son sürümden (#${maxStoreBuild}) daha yeni.`;
+    } else if (localBuildNumber === maxStoreBuild) {
+      comparison.comparisonStatus = 'UP_TO_DATE';
+      comparison.badge = '✅ Mağazada Eşit';
+      comparison.summary = `Yerel sürüm (${localVersion} #${localBuildNumber}) mağazadaki son sürümle senkronize.`;
+    } else {
+      comparison.comparisonStatus = 'UPDATE_READY';
+      comparison.badge = '⚠️ Mağaza Daha İleri';
+      comparison.summary = `Mağazadaki sürüm (#${maxStoreBuild}), yerel sürümden (#${localBuildNumber}) daha yüksek!`;
+    }
+  } else if (
+    comparison.googlePlay.status === 'not_found' &&
+    comparison.appStore.status === 'not_found'
+  ) {
+    comparison.comparisonStatus = 'NEW_APP';
+    comparison.badge = '✨ Mağazada Yeni';
+    comparison.summary = 'Paket mağazalarda henüz bulunmuyor. İlk sürüm dağıtımı yapılacak.';
+  } else if (comparison.googlePlay.status === 'auth_error') {
+    comparison.comparisonStatus = 'UNKNOWN';
+    comparison.badge = '🔒 Yetki Gerekli';
+    comparison.summary = 'Play Console Service Account izinleri eksik veya doğrulanmadı.';
+  }
+
+  return comparison;
 }
 
 /**
@@ -72,21 +305,44 @@ export const uiCommand = new Command('ui')
     const projectsFile = path.resolve(process.cwd(), '.release/projects.json');
 
     const getStoredProjects = (): ProjectEntry[] => {
+      let list: ProjectEntry[] = [];
       try {
         if (fs.existsSync(projectsFile)) {
-          return JSON.parse(fs.readFileSync(projectsFile, 'utf8')) as ProjectEntry[];
+          list = JSON.parse(fs.readFileSync(projectsFile, 'utf8')) as ProjectEntry[];
         }
       } catch {
-        // Hata durumunda varsayılan
+        // Hata
       }
-      return [
-        {
-          id: 'default',
-          name: 'Webicro Distribution',
-          path: process.cwd(),
-          hasPubspec: fs.existsSync(path.join(process.cwd(), 'pubspec.yaml')),
+
+      if (list.length === 0) {
+        const rootMeta = detectProjectMetadata(process.cwd());
+        list = [
+          {
+            id: 'default',
+            name: rootMeta.name || 'Webicro Distribution',
+            path: process.cwd(),
+            hasPubspec: fs.existsSync(path.join(process.cwd(), 'pubspec.yaml')),
+            package: rootMeta.package,
+            version: rootMeta.version,
+            buildNumber: rootMeta.buildNumber,
+          }
+        ];
+        saveStoredProjects(list);
+      }
+
+      // Metadata'ları her zaman güncel tut
+      for (const p of list) {
+        if (fs.existsSync(p.path)) {
+          const meta = detectProjectMetadata(p.path);
+          p.name = meta.name;
+          p.package = meta.package;
+          p.version = meta.version;
+          p.buildNumber = meta.buildNumber;
+          p.hasPubspec = fs.existsSync(path.join(p.path, 'pubspec.yaml'));
         }
-      ];
+      }
+
+      return list;
     };
 
     const saveStoredProjects = (projects: ProjectEntry[]) => {
@@ -151,11 +407,38 @@ export const uiCommand = new Command('ui')
 
       // ======================== API ENDPOINTS ========================
 
-      // 1. GET /api/projects - Proje Listesi ve Aktif Proje
+      // 1. GET /api/projects - Proje Listesi, Aktif Proje ve Mağaza Karşılaştırmaları
       if (req.method === 'GET' && pathname === '/api/projects') {
         const list = getStoredProjects();
+        // Eğer herhangi bir projede stores verisi yoksa hafifçe karşılaştır
+        for (const p of list) {
+          if (!p.stores && p.package) {
+            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0');
+          }
+        }
+        saveStoredProjects(list);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
+          activePath: activeProjectDir,
+          projects: list,
+        }));
+        return;
+      }
+
+      // 1.1 POST /api/projects/sync-stores - Mağazalardan Canlı Karşılaştırmayı Yenile
+      if (req.method === 'POST' && pathname === '/api/projects/sync-stores') {
+        const list = getStoredProjects();
+        for (const p of list) {
+          if (p.package) {
+            p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0');
+          }
+        }
+        saveStoredProjects(list);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
           activePath: activeProjectDir,
           projects: list,
         }));
@@ -200,32 +483,25 @@ export const uiCommand = new Command('ui')
 
             const resolvedPath = path.resolve(payload.path);
             const hasPub = fs.existsSync(path.join(resolvedPath, 'pubspec.yaml'));
-            let detectedName = payload.name;
-            let detectedVersion = '1.0.0+1';
-
-            if (hasPub) {
-              const updater = new PubspecVersionUpdater();
-              try {
-                const info = await updater.readPubspec(resolvedPath);
-                if (!detectedName) detectedName = info.name;
-                detectedVersion = info.version;
-              } catch {
-                // Sessiz
-              }
-            }
+            const meta = detectProjectMetadata(resolvedPath);
+            const nameToUse = payload.name || meta.name;
 
             const currentList = getStoredProjects();
-            const existing = currentList.find(p => p.path === resolvedPath);
+            let existing = currentList.find(p => p.path === resolvedPath);
             if (!existing) {
               const newEntry: ProjectEntry = {
                 id: `proj_${Date.now()}`,
-                name: detectedName || path.basename(resolvedPath),
+                name: nameToUse,
                 path: resolvedPath,
                 hasPubspec: hasPub,
-                version: detectedVersion,
+                package: meta.package,
+                version: meta.version,
+                buildNumber: meta.buildNumber,
               };
+              newEntry.stores = await compareProjectWithStores(meta.package, meta.buildNumber, meta.version);
               currentList.push(newEntry);
               saveStoredProjects(currentList);
+              existing = newEntry;
             }
 
             activeProjectDir = resolvedPath;
@@ -347,11 +623,17 @@ export const uiCommand = new Command('ui')
               suggestedVersion,
               suggestedBuildNumber: suggestedBuild,
               suggestedBump,
+              package: detectProjectMetadata(currentTarget).package,
               branch: gitAnalysis.currentBranch || 'main',
               isClean: gitAnalysis.isClean,
               hasPubspec: Boolean(pubspecInfo),
             },
             commits: gitAnalysis.commitsSinceLastTag,
+            comparison: await compareProjectWithStores(
+              detectProjectMetadata(currentTarget).package,
+              currentBuildNumber,
+              verStr
+            ),
             stores: {
               googlePlay: {
                 connected: googlePlayConnected,

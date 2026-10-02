@@ -46,6 +46,26 @@ export class AppStoreAdapter {
     return res.json();
   }
 
+  public async listAllApps(): Promise<Array<{ id: string; name: string; bundleId: string; sku?: string }>> {
+    try {
+      const data = await this.fetchApi('/apps') as {
+        data?: Array<{
+          id: string;
+          attributes: { name: string; bundleId: string; sku?: string };
+        }>;
+      };
+      if (!data?.data) return [];
+      return data.data.map((app) => ({
+        id: app.id,
+        name: app.attributes.name,
+        bundleId: app.attributes.bundleId,
+        sku: app.attributes.sku,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   public async getAppId(): Promise<string> {
     const data = await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`) as { data: Array<{ id: string }> };
     if (!data.data || data.data.length === 0) {

@@ -66,6 +66,59 @@ export class GooglePlayAdapter {
     }
   }
 
+  public async getSafeLatestVersionCode(): Promise<{
+    status: 'found' | 'not_found' | 'auth_error' | 'error';
+    versionCode?: number;
+    message?: string;
+  }> {
+    let editId = '';
+    try {
+      const edit = await this.publisher.edits.insert({
+        packageName: this.packageName,
+      });
+      editId = edit.data.id ?? '';
+
+      const tracks = await this.publisher.edits.tracks.list({
+        editId,
+        packageName: this.packageName,
+      });
+
+      let latestVersionCode = 0;
+      if (tracks.data.tracks) {
+        for (const track of tracks.data.tracks) {
+          const releases = track.releases ?? [];
+          for (const release of releases) {
+            const versionCodes = release.versionCodes ?? [];
+            for (const vCodeStr of versionCodes) {
+              const vCode = parseInt(vCodeStr, 10);
+              if (!isNaN(vCode) && vCode > latestVersionCode) {
+                latestVersionCode = vCode;
+              }
+            }
+          }
+        }
+      }
+
+      await this.publisher.edits.delete({ editId, packageName: this.packageName });
+      if (latestVersionCode > 0) {
+        return { status: 'found', versionCode: latestVersionCode };
+      }
+      return { status: 'found', versionCode: 0, message: 'Henüz sürüm yayınlanmamış' };
+    } catch (err: unknown) {
+      if (editId) {
+        await this.publisher.edits.delete({ editId, packageName: this.packageName }).catch(() => {});
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('404') || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('package not found')) {
+        return { status: 'not_found', message: 'Paket Play Console hesabında bulunamadı' };
+      }
+      if (msg.includes('401') || msg.includes('403') || msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('unauthorized')) {
+        return { status: 'auth_error', message: 'Erişim yetkisi yetersiz veya hesap eklenmemiş' };
+      }
+      return { status: 'error', message: msg };
+    }
+  }
+
   public async createEdit(): Promise<string> {
     try {
       const res = await this.publisher.edits.insert({
