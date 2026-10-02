@@ -104,6 +104,9 @@ importers:
       '@webicro/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@webicro/app-store':
+        specifier: workspace:*
+        version: link:../../packages/app-store
       '@webicro/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -122,6 +125,9 @@ importers:
       '@webicro/git':
         specifier: workspace:*
         version: link:../../packages/git
+      '@webicro/google-play':
+        specifier: workspace:*
+        version: link:../../packages/google-play
       '@webicro/shared':
         specifier: workspace:*
         version: link:../../packages/shared

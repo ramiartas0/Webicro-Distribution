@@ -22,6 +22,8 @@
     "@webicro/ai": "workspace:*",
     "@webicro/validation": "workspace:*",
     "@webicro/flutter": "workspace:*",
+    "@webicro/google-play": "workspace:*",
+    "@webicro/app-store": "workspace:*",
     "@webicro/core": "workspace:*",
     "commander": "catalog:",
     "@clack/prompts": "catalog:",
