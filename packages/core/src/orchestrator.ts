@@ -75,25 +75,51 @@ export class ReleaseOrchestrator {
     const artifactRepo = new ArtifactRepository(dbConn.getDb());
     const storeSubmissionRepo = new StoreSubmissionRepository(dbConn.getDb());
 
+    // Merkezi Dağıtım Veritabanı (Web Dashboard için)
+    let globalReleaseRepo: ReleaseRepository | null = null;
+    let globalStepRepo: ReleaseStepRepository | null = null;
+    let globalAuditRepo: AuditLogRepository | null = null;
+
+    if (path.resolve(targetDir) !== path.resolve(process.cwd())) {
+      try {
+        const centralDbDir = path.join(process.cwd(), '.release');
+        if (!fs.existsSync(centralDbDir)) {
+          fs.mkdirSync(centralDbDir, { recursive: true });
+        }
+        const centralConn = new DatabaseConnection(path.join(centralDbDir, 'release.db'));
+        centralConn.runMigrations();
+        globalReleaseRepo = new ReleaseRepository(centralConn.getDb());
+        globalStepRepo = new ReleaseStepRepository(centralConn.getDb());
+        globalAuditRepo = new AuditLogRepository(centralConn.getDb());
+      } catch {
+        // Merkezi db sessiz
+      }
+    }
+
     const emitAndRecord = (step: string, status: 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'SKIPPED', message?: string, error?: string) => {
       this.emit({ step, status, message, error });
       try {
         if (status === 'IN_PROGRESS') {
-          stepRepo.create({
+          const stepData = {
             releaseId,
             step,
-            status: 'RUNNING',
+            status: 'RUNNING' as const,
             startedAt: new Date().toISOString(),
             completedAt: null,
             error: null,
             metadata: message || null,
-          });
+          };
+          stepRepo.create(stepData);
+          globalStepRepo?.create(stepData);
         } else if (status === 'SUCCESS') {
           stepRepo.updateStatus(releaseId, step, 'COMPLETED');
+          globalStepRepo?.updateStatus(releaseId, step, 'COMPLETED');
         } else if (status === 'FAILED') {
           stepRepo.updateStatus(releaseId, step, 'FAILED', error);
+          globalStepRepo?.updateStatus(releaseId, step, 'FAILED', error);
         } else if (status === 'SKIPPED') {
           stepRepo.updateStatus(releaseId, step, 'SKIPPED');
+          globalStepRepo?.updateStatus(releaseId, step, 'SKIPPED');
         }
       } catch {
         // DB adımı hata verse de akış kesilmez
@@ -118,23 +144,29 @@ export class ReleaseOrchestrator {
       emitAndRecord('Database Init', 'SUCCESS', 'SQLite bağlantısı ve şema hazır');
 
       // 3. Release ID generation (or resume existing)
+      const projectName = config?.project?.name || (targetDir ? path.basename(targetDir) : 'Project');
       let currentRecord = releaseRepo.findByReleaseId(releaseId);
       if (!currentRecord) {
-        currentRecord = releaseRepo.create({
+        const releasePayload = {
           releaseId,
-          project: config?.project?.name || path.basename(targetDir),
-          version: '1.0.0',
+          project: projectName,
+          version: options.manualVersion || '1.0.0',
           buildNumber: 1,
-          status: 'ANALYZING',
+          status: 'ANALYZING' as const,
           configSnapshot: config ? JSON.stringify(config) : null,
-        });
-        auditRepo.create({
+        };
+        currentRecord = releaseRepo.create(releasePayload);
+        globalReleaseRepo?.create(releasePayload);
+
+        const auditPayload = {
           releaseId,
           action: 'RELEASE_STARTED',
           actor: process.env['USER'] || 'system',
-          result: 'SUCCESS',
-          details: JSON.stringify({ isResume: Boolean(existingReleaseId) }),
-        });
+          result: 'SUCCESS' as const,
+          details: JSON.stringify({ project: projectName, targetDir, isResume: Boolean(existingReleaseId) }),
+        };
+        auditRepo.create(auditPayload);
+        globalAuditRepo?.create(auditPayload);
       }
 
       // 4. Git Analysis
@@ -177,7 +209,11 @@ export class ReleaseOrchestrator {
         };
       }
 
+      releaseRepo.updateVersionAndBuildNumber(releaseId, resolution.versionString, resolution.next.buildNumber);
+      globalReleaseRepo?.updateVersionAndBuildNumber(releaseId, resolution.versionString, resolution.next.buildNumber);
+
       releaseRepo.updateStatus(releaseId, 'PLANNED');
+      globalReleaseRepo?.updateStatus(releaseId, 'PLANNED');
       emitAndRecord('Version Resolution', 'SUCCESS', `Hedef Sürüm: ${resolution.formatted}`);
 
       this.stateMachine.transitionTo('PLANNED');
@@ -555,21 +591,25 @@ export class ReleaseOrchestrator {
 
       this.stateMachine.transitionTo('RELEASED');
       releaseRepo.updateStatus(releaseId, 'RELEASED');
+      globalReleaseRepo?.updateStatus(releaseId, 'RELEASED');
 
       // 20. Audit log completion & Notifications
       emitAndRecord('Audit & Notify', 'IN_PROGRESS');
-      auditRepo.create({
+      const completionAudit = {
         releaseId,
         action: 'RELEASE_COMPLETED',
         actor: process.env['USER'] || 'system',
-        result: 'SUCCESS',
+        result: 'SUCCESS' as const,
         details: JSON.stringify({
+          project: projectName,
           version: resolution.versionString,
           build: resolution.next.buildNumber,
           googlePlayStatus,
           appStoreStatus,
         }),
-      });
+      };
+      auditRepo.create(completionAudit);
+      globalAuditRepo?.create(completionAudit);
 
       try {
         const notifier = new ReleaseNotifier();
@@ -601,15 +641,18 @@ export class ReleaseOrchestrator {
     } catch (error) {
       this.stateMachine.transitionTo('FAILED');
       releaseRepo.updateStatus(releaseId, 'FAILED');
+      globalReleaseRepo?.updateStatus(releaseId, 'FAILED');
       const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       emitAndRecord('Execution Failed', 'FAILED', undefined, errorMessage);
-      auditRepo.create({
+      const failAudit = {
         releaseId,
         action: 'RELEASE_FAILED',
         actor: process.env['USER'] || 'system',
-        result: 'FAILURE',
+        result: 'FAILURE' as const,
         details: JSON.stringify({ error: errorMessage }),
-      });
+      };
+      auditRepo.create(failAudit);
+      globalAuditRepo?.create(failAudit);
       throw error;
     }
   }

@@ -2352,13 +2352,85 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 8. GET /api/history - Gerçek SQLite Veritabanı Geçmişi
+      // 8. GET /api/history - Gerçek SQLite Veritabanı Geçmişi (Tüm Projeler veya Seçili Proje)
       if (req.method === 'GET' && pathname === '/api/history') {
         try {
-          const releases = releaseRepo.findAll(30);
-          const auditLogs = auditRepo.findAll(50);
+          const queryProj = url.searchParams.get('projectPath');
+          const targetDir = queryProj ? path.resolve(queryProj) : (activeProjectDir ? path.resolve(activeProjectDir) : null);
+
+          // Toplanacak release ve audit log havuzları
+          const allReleasesMap = new Map<string, import('@webicro/database').ReleaseRecord>();
+          const allAuditLogs: import('@webicro/database').AuditLogRecord[] = [];
+
+          // 1. Merkezi veritabanındaki kayıtları ekle
+          try {
+            const centralReleases = releaseRepo.findAll(100);
+            for (const r of centralReleases) {
+              allReleasesMap.set(r.releaseId, r);
+            }
+            const centralLogs = auditRepo.findAll(100);
+            allAuditLogs.push(...centralLogs);
+          } catch {
+            // Merkezi db okuma hatası sessiz
+          }
+
+          // 2. Hedef proje ve kayıtlı tüm projelerin .release/release.db dosyalarını da tara
+          const candidateDirs: string[] = [];
+          if (targetDir) {
+            candidateDirs.push(targetDir);
+          }
+          const storedList = getStoredProjects();
+          for (const sp of storedList) {
+            if (sp.path && !candidateDirs.includes(path.resolve(sp.path))) {
+              candidateDirs.push(path.resolve(sp.path));
+            }
+          }
+
+          for (const cDir of candidateDirs) {
+            const pDbFile = path.join(cDir, '.release/release.db');
+            if (fs.existsSync(pDbFile)) {
+              try {
+                const pConn = new DatabaseConnection(pDbFile);
+                const pRelRepo = new ReleaseRepository(pConn.getDb());
+                const pAuditRepo = new AuditLogRepository(pConn.getDb());
+                const pReleases = pRelRepo.findAll(100);
+                const pLogs = pAuditRepo.findAll(100);
+
+                for (const r of pReleases) {
+                  const existing = allReleasesMap.get(r.releaseId);
+                  if (!existing || (r.updatedAt && (!existing.updatedAt || r.updatedAt > existing.updatedAt))) {
+                    allReleasesMap.set(r.releaseId, r);
+                  }
+                }
+
+                allAuditLogs.push(...pLogs);
+                pConn.close();
+              } catch {
+                // Proje db okuma hatası sessiz
+              }
+            }
+          }
+
+          // Tüm kayıtları listele (tarihe göre en yeni en üstte)
+          const finalReleases = Array.from(allReleasesMap.values());
+          finalReleases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+          // Audit logları tekilleştir ve sırala
+          const seenAudit = new Set<string>();
+          const dedupedLogs = allAuditLogs.filter(log => {
+            const key = `${log.releaseId}_${log.action}_${log.timestamp}`;
+            if (seenAudit.has(key)) return false;
+            seenAudit.add(key);
+            return true;
+          });
+          dedupedLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ releases, auditLogs }));
+          res.end(JSON.stringify({
+            releases: finalReleases.slice(0, 50),
+            auditLogs: dedupedLogs.slice(0, 50),
+            projectPath: targetDir,
+          }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));

@@ -52,6 +52,7 @@ interface PipelineStep {
 interface ReleaseHistoryItem {
   id: number;
   releaseId: string;
+  project?: string;
   version: string;
   buildNumber: number;
   status: string;
@@ -909,10 +910,16 @@ export default function App() {
     }
   };
 
-  // GEÇMİŞ SÜRÜMLERİ YÜKLE
-  const loadHistory = async () => {
+  // GEÇMİŞ SÜRÜMLERİ YÜKLE (Aktif Proje veya Tüm Sistem)
+  const [historyFilter, setHistoryFilter] = useState<'current' | 'all'>('all');
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+
+  const loadHistory = async (filter: 'current' | 'all' = historyFilter, targetPath?: string) => {
+    setIsLoadingHistory(true);
     try {
-      const res = await fetch('/api/history');
+      const pPath = filter === 'current' ? (targetPath || activeProjectPath) : '';
+      const url = pPath ? `/api/history?projectPath=${encodeURIComponent(pPath)}` : '/api/history';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json() as { releases?: ReleaseHistoryItem[]; auditLogs?: AuditLogItem[] };
         setHistoryReleases(data.releases || []);
@@ -920,6 +927,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Geçmiş yüklenemedi:', err);
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
 
@@ -3266,64 +3275,162 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-card border border-border rounded-xl shadow-xl max-w-3xl w-full p-6 space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
+              <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-primary" />
-                Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü
-              </h3>
+                <div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    SQLite veritabanına kaydedilen tüm gerçek dağıtım adımları ve denetim kayıtları.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadHistory(historyFilter)}
+                  disabled={isLoadingHistory}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-border bg-secondary hover:bg-secondary/80 text-foreground transition-all cursor-pointer disabled:opacity-50"
+                  title="Veritabanından verileri canlı yenile"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingHistory ? 'animate-spin text-primary' : ''}`} />
+                  <span>Yenile</span>
+                </button>
+                <button
+                  onClick={() => setShowHistoryModal(false)}
+                  className="text-muted-foreground hover:text-foreground cursor-pointer p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* FİLTRELEME BUTONLARI */}
+            <div className="flex items-center gap-2 border-b border-border pb-2 text-xs">
+              <span className="text-muted-foreground font-medium">Görünüm:</span>
               <button
-                onClick={() => setShowHistoryModal(false)}
-                className="text-muted-foreground hover:text-foreground cursor-pointer"
+                type="button"
+                onClick={() => {
+                  setHistoryFilter('all');
+                  void loadHistory('all');
+                }}
+                className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
+                  historyFilter === 'all'
+                    ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                    : 'bg-background text-muted-foreground border-border hover:bg-secondary'
+                }`}
               >
-                <X className="w-4 h-4" />
+                Tüm Projelerin Dağıtımları
               </button>
+              {projectName && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryFilter('current');
+                    void loadHistory('current');
+                  }}
+                  className={`px-3 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
+                    historyFilter === 'current'
+                      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                      : 'bg-background text-muted-foreground border-border hover:bg-secondary'
+                  }`}
+                >
+                  Yalnızca {projectName}
+                </button>
+              )}
             </div>
 
             <div className="space-y-4">
               <div>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Son Dağıtımlar ({historyReleases.length})
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Kayıtlı Dağıtımlar ({historyReleases.length})
+                  </h4>
+                  <span className="text-[10px] text-muted-foreground font-mono">SQLite (releases tablosu)</span>
+                </div>
+
                 {historyReleases.length === 0 ? (
-                  <div className="p-4 rounded-lg bg-background border border-border text-xs text-muted-foreground text-center">
-                    Henüz veritabanına kayıtlı bir sürüm bulunmuyor.
+                  <div className="p-5 rounded-lg bg-background border border-border text-xs text-muted-foreground text-center space-y-1">
+                    <p className="font-semibold text-foreground">Henüz bu filtre için kayıtlı bir sürüm bulunmuyor.</p>
+                    <p className="text-[11px]">Dağıtım başlattığınızda oluşturulan tüm sürümler SQLite veritabanına kalıcı olarak yazılır.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {historyReleases.map((rel) => (
-                      <div key={rel.id} className="p-3 rounded-lg border border-border bg-background flex items-center justify-between text-xs">
-                        <div>
-                          <div className="font-bold font-mono text-foreground">
-                            {rel.version} <span className="text-muted-foreground font-normal">#{rel.buildNumber}</span>
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {historyReleases.map((rel) => {
+                      const isSuccess = rel.status === 'RELEASED';
+                      const isFailed = rel.status === 'FAILED';
+                      return (
+                        <div key={rel.id} className="p-3 rounded-lg border border-border bg-background hover:border-border/80 transition-all flex items-center justify-between text-xs shadow-2xs">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              {rel.project && (
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
+                                  {rel.project}
+                                </span>
+                              )}
+                              <span className="font-bold font-mono text-sm text-foreground">
+                                v{rel.version}
+                              </span>
+                              <span className="text-muted-foreground font-mono text-xs">
+                                #{rel.buildNumber}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-2">
+                              <span>ID: {rel.releaseId}</span>
+                              <span>•</span>
+                              <span>{rel.createdAt}</span>
+                            </div>
                           </div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{rel.releaseId} • {rel.createdAt}</div>
+
+                          <div className="shrink-0 pl-2">
+                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase border ${
+                              isSuccess
+                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                : isFailed
+                                ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                : 'bg-primary/10 text-primary border-primary/20'
+                            }`}>
+                              {rel.status}
+                            </span>
+                          </div>
                         </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                          {rel.status}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
               <div>
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Denetim Günlükleri (Audit Logs - {auditLogs.length})
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Denetim Günlükleri (Audit Logs - {auditLogs.length})
+                  </h4>
+                  <span className="text-[10px] text-muted-foreground font-mono">SQLite (audit_logs tablosu)</span>
+                </div>
+
                 {auditLogs.length === 0 ? (
                   <div className="p-4 rounded-lg bg-background border border-border text-xs text-muted-foreground text-center">
                     Kayıtlı denetim günlüğü yok.
                   </div>
                 ) : (
-                  <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
                     {auditLogs.map((log) => (
-                      <div key={log.id} className="p-2 rounded border border-border bg-background text-[11px] flex items-center justify-between">
-                        <div>
-                          <span className="font-semibold text-foreground">{log.action}</span>
-                          <span className="text-muted-foreground ml-2">aktör: {log.actor}</span>
+                      <div key={log.id} className="p-2.5 rounded-lg border border-border bg-background text-[11px] flex items-center justify-between hover:bg-secondary/30 transition-all">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground">{log.action}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">aktör: {log.actor}</span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono">
+                            {log.timestamp} {log.releaseId ? `• ${log.releaseId}` : ''}
+                          </div>
                         </div>
-                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                          log.result === 'SUCCESS' ? 'text-emerald-500 bg-emerald-500/10' : 'text-rose-500 bg-rose-500/10'
+                        <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border ${
+                          log.result === 'SUCCESS'
+                            ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+                            : 'text-rose-500 bg-rose-500/10 border-rose-500/20'
                         }`}>
                           {log.result}
                         </span>

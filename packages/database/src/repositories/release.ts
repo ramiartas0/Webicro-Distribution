@@ -67,6 +67,15 @@ export class ReleaseRepository {
     stmt.run(status, releaseId);
   }
 
+  public updateVersionAndBuildNumber(releaseId: string, version: string, buildNumber: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE releases 
+      SET version = ?, build_number = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE release_id = ?
+    `);
+    stmt.run(version, buildNumber, releaseId);
+  }
+
   public findAll(limit: number = 100): ReleaseRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
