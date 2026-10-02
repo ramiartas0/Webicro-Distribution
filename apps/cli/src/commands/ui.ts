@@ -1504,7 +1504,7 @@ export const uiCommand = new Command('ui')
             creds.ai = {
               provider: payload.provider ?? currentAi.provider ?? 'conventional',
               geminiApiKey: payload.geminiApiKey !== undefined ? payload.geminiApiKey.trim() : currentAi.geminiApiKey,
-              geminiModel: payload.geminiModel ?? currentAi.geminiModel ?? 'gemini-1.5-flash',
+              geminiModel: payload.geminiModel ?? currentAi.geminiModel ?? 'gemini-2.5-flash',
               openaiApiKey: payload.openaiApiKey !== undefined ? payload.openaiApiKey.trim() : currentAi.openaiApiKey,
               openaiModel: payload.openaiModel ?? currentAi.openaiModel ?? 'gpt-4o-mini',
               anthropicApiKey: payload.anthropicApiKey !== undefined ? payload.anthropicApiKey.trim() : currentAi.anthropicApiKey,
@@ -1614,6 +1614,145 @@ export const uiCommand = new Command('ui')
               success: false,
               error: testErr instanceof Error ? testErr.message : String(testErr),
             }));
+          }
+        });
+        return;
+      }
+
+      // 5.0.2 POST /api/ai/models - Sağlayıcı API Anahtarına Göre Desteklenen Modelleri Dinamik Listele
+      if (req.method === 'POST' && pathname === '/api/ai/models') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              provider?: AIProviderType;
+              apiKey?: string;
+            };
+
+            const creds = getStoreCredentials(activeProjectDir);
+            const providerType: AIProviderType = payload.provider || creds.ai?.provider || 'gemini';
+            let key = payload.apiKey?.trim();
+
+            if (!key) {
+              if (providerType === 'gemini') key = creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'];
+              if (providerType === 'openai') key = creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY'];
+              if (providerType === 'anthropic') key = creds.ai?.anthropicApiKey || process.env['ANTHROPIC_API_KEY'];
+            }
+
+            interface ModelItem {
+              id: string;
+              name: string;
+              recommended?: boolean;
+            }
+
+            let models: ModelItem[] = [];
+            let defaultModel = '';
+
+            if (providerType === 'gemini') {
+              defaultModel = 'gemini-3.5-flash';
+              if (key) {
+                try {
+                  const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+                    signal: AbortSignal.timeout(6000),
+                  });
+                  if (gRes.ok) {
+                    const gData = await gRes.json() as {
+                      models?: Array<{
+                        name?: string;
+                        displayName?: string;
+                        supportedGenerationMethods?: string[];
+                      }>;
+                    };
+                    const fetched = (gData.models || [])
+                      .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+                      .map(m => {
+                        const cleanId = (m.name || '').replace(/^models\//, '');
+                        return {
+                          id: cleanId,
+                          name: m.displayName ? `${m.displayName} (${cleanId})` : cleanId,
+                          recommended: cleanId === 'gemini-3.5-flash' || cleanId === 'gemini-3.1-flash-lite' || cleanId === 'gemini-3.8-flash',
+                        };
+                      });
+                    if (fetched.length > 0) {
+                      // Önerilen modelleri en başa al
+                      fetched.sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
+                      models = fetched;
+                    }
+                  }
+                } catch {
+                  // Fallback listesine devam et
+                }
+              }
+
+              if (models.length === 0) {
+                models = [
+                  { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Önerilen & Hızlı)', recommended: true },
+                  { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Hızlı & Kararlı)', recommended: true },
+                  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Yeni Nesil)' },
+                  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+                  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+                ];
+              }
+            } else if (providerType === 'openai') {
+              defaultModel = 'gpt-4o-mini';
+              if (key) {
+                try {
+                  const oRes = await fetch('https://api.openai.com/v1/models', {
+                    headers: { Authorization: `Bearer ${key}` },
+                    signal: AbortSignal.timeout(6000),
+                  });
+                  if (oRes.ok) {
+                    const oData = await oRes.json() as { data?: Array<{ id: string }> };
+                    const chatModels = (oData.data || [])
+                      .map(m => m.id)
+                      .filter(id => id.startsWith('gpt-4') || id.startsWith('o1') || id.startsWith('o3'))
+                      .sort()
+                      .map(id => ({
+                        id,
+                        name: id,
+                        recommended: id === 'gpt-4o-mini' || id === 'gpt-4o',
+                      }));
+                    if (chatModels.length > 0) {
+                      chatModels.sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0));
+                      models = chatModels;
+                    }
+                  }
+                } catch {
+                  // Fallback
+                }
+              }
+
+              if (models.length === 0) {
+                models = [
+                  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Önerilen & Hızlı)', recommended: true },
+                  { id: 'gpt-4o', name: 'GPT-4o (Tam Kapasite)' },
+                  { id: 'o3-mini', name: 'o3-mini (Akıl Yürütme)' },
+                  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+                ];
+              }
+            } else if (providerType === 'anthropic') {
+              defaultModel = 'claude-3-5-sonnet-20241022';
+              models = [
+                { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Önerilen & Güçlü)', recommended: true },
+                { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Ultra Hızlı)' },
+                { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
+                { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+              ];
+            } else {
+              models = [{ id: 'conventional', name: 'Konvansiyonel Çözücü (Çevrimdışı)' }];
+            }
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              provider: providerType,
+              defaultModel,
+              models,
+            }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
           }
         });
         return;
@@ -2002,7 +2141,7 @@ export const uiCommand = new Command('ui')
             if (!apiKey) {
               if (requestedProvider === 'gemini') {
                 apiKey = creds.ai?.geminiApiKey || process.env['GEMINI_API_KEY'];
-                model = model || creds.ai?.geminiModel || 'gemini-1.5-flash';
+                model = model || creds.ai?.geminiModel || 'gemini-2.5-flash';
               } else if (requestedProvider === 'openai') {
                 apiKey = creds.ai?.openaiApiKey || process.env['OPENAI_API_KEY'];
                 model = model || creds.ai?.openaiModel || 'gpt-4o-mini';

@@ -14,22 +14,41 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
       throw new Error('Gemini API key is required');
     }
     this.ai = new GoogleGenerativeAI(config.apiKey);
-    this.modelName = config.model ?? 'gemini-1.5-pro';
+    this.modelName = config.model ?? 'gemini-3.5-flash';
+    if (this.modelName.startsWith('gemini-1.5') || this.modelName === 'gemini-2.5-flash') {
+      this.modelName = 'gemini-3.5-flash';
+    }
   }
 
   public async generateReleaseNotes(context: AIContext): Promise<ReleaseNotesMap> {
-    const model = this.ai.getGenerativeModel({
-      model: this.modelName,
-      systemInstruction: SYSTEM_PROMPT,
-      generationConfig: {
-        responseMimeType: 'application/json',
-      }
-    });
-
     const prompt = this.buildPrompt(context);
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
 
-    return this.parseJsonSafely(text) as ReleaseNotesMap;
+    const candidateModels = [this.modelName, 'gemini-3.5-flash', 'gemini-3.1-flash-lite'];
+    const uniqueCandidates = Array.from(new Set(candidateModels));
+
+    let lastError: unknown;
+    for (const candidate of uniqueCandidates) {
+      try {
+        const model = this.ai.getGenerativeModel({
+          model: candidate,
+          systemInstruction: SYSTEM_PROMPT,
+          generationConfig: {
+            responseMimeType: 'application/json',
+          }
+        });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        return this.parseJsonSafely(text) as ReleaseNotesMap;
+      } catch (err: unknown) {
+        lastError = err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        // Eğer hata 404 (model not found / deprecated) veya 503 (high demand) ise sonraki modele geç
+        if (errMsg.includes('404') || errMsg.includes('503') || errMsg.includes('not found') || errMsg.includes('high demand')) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError;
   }
 }

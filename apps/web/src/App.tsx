@@ -157,6 +157,12 @@ function getGoogleTrackLabel(track: 'internal' | 'alpha' | 'beta' | 'production'
   }
 }
 
+export interface AIModelOption {
+  id: string;
+  name: string;
+  recommended?: boolean;
+}
+
 export default function App() {
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -201,11 +207,30 @@ export default function App() {
   // Yapay Zeka (AI) Motoru State'leri
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | 'anthropic' | 'conventional'>('gemini');
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState<string>('');
-  const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-1.5-flash');
+  const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-3.5-flash');
   const [openaiApiKeyInput, setOpenaiApiKeyInput] = useState<string>('');
   const [openaiModelInput, setOpenaiModelInput] = useState<string>('gpt-4o-mini');
   const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState<string>('');
   const [anthropicModelInput, setAnthropicModelInput] = useState<string>('claude-3-5-sonnet-20241022');
+  const [geminiModelList, setGeminiModelList] = useState<AIModelOption[]>([
+    { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (Önerilen & Hızlı)', recommended: true },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Hızlı & Kararlı)', recommended: true },
+    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Yeni Nesil)' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+  ]);
+  const [openaiModelList, setOpenaiModelList] = useState<AIModelOption[]>([
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Önerilen & Hızlı)', recommended: true },
+    { id: 'gpt-4o', name: 'GPT-4o (Tam Kapasite)' },
+    { id: 'o3-mini', name: 'o3-mini (Akıl Yürütme)' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+  ]);
+  const [anthropicModelList, setAnthropicModelList] = useState<AIModelOption[]>([
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet (Önerilen & Güçlü)', recommended: true },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku (Ultra Hızlı)' },
+    { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet' },
+  ]);
+  const [isLoadingAiModels, setIsLoadingAiModels] = useState<boolean>(false);
   const [aiConfiguredInfo, setAiConfiguredInfo] = useState<{
     geminiConfigured?: boolean;
     geminiMaskedKey?: string;
@@ -414,7 +439,7 @@ export default function App() {
           if (data.ai.provider) {
             setAiProvider(data.ai.provider);
           }
-          if (data.ai.geminiModel) setGeminiModelInput(data.ai.geminiModel);
+          if (data.ai.geminiModel) setGeminiModelInput(data.ai.geminiModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : data.ai.geminiModel);
           if (data.ai.openaiModel) setOpenaiModelInput(data.ai.openaiModel);
           if (data.ai.anthropicModel) setAnthropicModelInput(data.ai.anthropicModel);
           setAiConfiguredInfo({
@@ -431,6 +456,13 @@ export default function App() {
       console.error('Kimlik bilgileri yüklenemedi:', err);
     }
   }, [googlePathInput, appleKeyIdInput, appleIssuerIdInput]);
+
+  // Modal veya sekme açıldığında sağlayıcı modellerini canlı getir
+  useEffect(() => {
+    if (showStoreTestModal && activeStoreTab === 'ai' && aiProvider !== 'conventional') {
+      void fetchAiModels(aiProvider);
+    }
+  }, [showStoreTestModal, activeStoreTab, aiProvider]);
 
   // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
@@ -1019,6 +1051,57 @@ export default function App() {
       console.error('AI notları üretilemedi:', err);
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  // SAĞLAYICIDAN MODELLERİ DİNAMİK LİSTELE
+  const fetchAiModels = async (provider: 'gemini' | 'openai' | 'anthropic', customKey?: string) => {
+    setIsLoadingAiModels(true);
+    try {
+      let key = customKey?.trim();
+      if (!key) {
+        if (provider === 'gemini') key = geminiApiKeyInput.trim();
+        if (provider === 'openai') key = openaiApiKeyInput.trim();
+        if (provider === 'anthropic') key = anthropicApiKeyInput.trim();
+      }
+
+      const res = await fetch('/api/ai/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey: key || undefined }),
+      });
+
+      if (res.ok) {
+        const data = await res.json() as {
+          success?: boolean;
+          provider?: string;
+          defaultModel?: string;
+          models?: AIModelOption[];
+        };
+
+        if (data.models && data.models.length > 0) {
+          if (provider === 'gemini') {
+            setGeminiModelList(data.models);
+            if (!geminiModelInput || geminiModelInput === 'gemini-1.5-flash' || !data.models.some(m => m.id === geminiModelInput)) {
+              setGeminiModelInput(data.defaultModel || data.models[0]?.id || 'gemini-2.5-flash');
+            }
+          } else if (provider === 'openai') {
+            setOpenaiModelList(data.models);
+            if (!openaiModelInput || !data.models.some(m => m.id === openaiModelInput)) {
+              setOpenaiModelInput(data.defaultModel || data.models[0]?.id || 'gpt-4o-mini');
+            }
+          } else if (provider === 'anthropic') {
+            setAnthropicModelList(data.models);
+            if (!anthropicModelInput || !data.models.some(m => m.id === anthropicModelInput)) {
+              setAnthropicModelInput(data.defaultModel || data.models[0]?.id || 'claude-3-5-sonnet-20241022');
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Modeller getirilemedi:', err);
+    } finally {
+      setIsLoadingAiModels(false);
     }
   };
 
@@ -2625,7 +2708,13 @@ export default function App() {
                         <input
                           type={showAiKey ? 'text' : 'password'}
                           value={geminiApiKeyInput}
-                          onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setGeminiApiKeyInput(val);
+                            if (val.trim().length > 15) {
+                              void fetchAiModels('gemini', val);
+                            }
+                          }}
                           placeholder={aiConfiguredInfo.geminiConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'AIzaSy...'}
                           className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         />
@@ -2640,14 +2729,33 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground block">Model:</label>
-                      <input
-                        type="text"
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-foreground">Desteklenen Gemini Modeli:</label>
+                        <button
+                          type="button"
+                          onClick={() => void fetchAiModels('gemini', geminiApiKeyInput)}
+                          disabled={isLoadingAiModels}
+                          className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="API anahtarına ait modelleri canlı sorgula"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isLoadingAiModels ? 'animate-spin' : ''}`} />
+                          <span>{isLoadingAiModels ? 'Modeller Alınıyor...' : 'API\'den Modelleri Getir'}</span>
+                        </button>
+                      </div>
+                      <select
                         value={geminiModelInput}
                         onChange={(e) => setGeminiModelInput(e.target.value)}
-                        placeholder="gemini-1.5-flash"
-                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      >
+                        {geminiModelList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} {m.recommended ? '(Önerilen)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-muted-foreground">
+                        API anahtarınızın desteklediği modeller otomatik taranır. Google Gemini 2.5 ve 3.x serisi tam desteklenir.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -2666,7 +2774,13 @@ export default function App() {
                         <input
                           type={showAiKey ? 'text' : 'password'}
                           value={openaiApiKeyInput}
-                          onChange={(e) => setOpenaiApiKeyInput(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setOpenaiApiKeyInput(val);
+                            if (val.trim().length > 15) {
+                              void fetchAiModels('openai', val);
+                            }
+                          }}
                           placeholder={aiConfiguredInfo.openaiConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'sk-proj-...'}
                           className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         />
@@ -2681,14 +2795,30 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground block">Model:</label>
-                      <input
-                        type="text"
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="font-semibold text-foreground">Desteklenen OpenAI Modeli:</label>
+                        <button
+                          type="button"
+                          onClick={() => void fetchAiModels('openai', openaiApiKeyInput)}
+                          disabled={isLoadingAiModels}
+                          className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="OpenAI modellerini canlı sorgula"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isLoadingAiModels ? 'animate-spin' : ''}`} />
+                          <span>{isLoadingAiModels ? 'Modeller Alınıyor...' : 'API\'den Modelleri Getir'}</span>
+                        </button>
+                      </div>
+                      <select
                         value={openaiModelInput}
                         onChange={(e) => setOpenaiModelInput(e.target.value)}
-                        placeholder="gpt-4o-mini"
-                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      >
+                        {openaiModelList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} {m.recommended ? '(Önerilen)' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -2707,7 +2837,13 @@ export default function App() {
                         <input
                           type={showAiKey ? 'text' : 'password'}
                           value={anthropicApiKeyInput}
-                          onChange={(e) => setAnthropicApiKeyInput(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAnthropicApiKeyInput(val);
+                            if (val.trim().length > 15) {
+                              void fetchAiModels('anthropic', val);
+                            }
+                          }}
                           placeholder={aiConfiguredInfo.anthropicConfigured ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)' : 'sk-ant-api03-...'}
                           className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         />
@@ -2722,14 +2858,18 @@ export default function App() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-foreground block">Model:</label>
-                      <input
-                        type="text"
+                      <label className="text-xs font-semibold text-foreground block">Claude Modeli:</label>
+                      <select
                         value={anthropicModelInput}
                         onChange={(e) => setAnthropicModelInput(e.target.value)}
-                        placeholder="claude-3-5-sonnet-20241022"
-                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
+                        className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      >
+                        {anthropicModelList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name} {m.recommended ? '(Önerilen)' : ''}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
