@@ -1800,7 +1800,7 @@ export const uiCommand = new Command('ui')
                 comparison.googlePlay.versionCode !==
                   parseInt(comparison.appStore.buildNumber || '0', 10))
             ) {
-              storeDifferenceNote = `Google Play (v${comparison.googlePlay.version || '?'} #${comparison.googlePlay.versionCode || '?'}) ile Apple App Store (v${comparison.appStore.version || '?'} #${comparison.appStore.buildNumber || '?'}) sürümleri birbirinden farklıdır. Dağıtım yaparken mağazaları eşitlemeden bağımsız sürümleme ile gönderebilirsiniz.`;
+              storeDifferenceNote = `Google Play (v${comparison.googlePlay.version || '?'} #${comparison.googlePlay.versionCode || '?'}) ile Apple App Store (v${comparison.appStore.version || '?'} #${comparison.appStore.buildNumber || '?'}) sürümleri birbirinden farklıdır. pubspec.yaml yerel sürümü v${formatted} olarak eşitlendi. Dağıtım yaparken mağazaları ortak sürümde eşitleyerek gönderebilir (önerilen) veya opsiyonel olarak bağımsız sürümleme ile gönderebilirsiniz.`;
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });

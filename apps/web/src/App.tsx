@@ -292,7 +292,7 @@ export default function App() {
   const [isSyncingStoreVersion, setIsSyncingStoreVersion] = useState<boolean>(false);
   const [syncStoreSuccessMsg, setSyncStoreSuccessMsg] = useState<string | null>(null);
   const [syncStorePersistentNote, setSyncStorePersistentNote] = useState<string | null>(null);
-  const [isDecoupledVersions, setIsDecoupledVersions] = useState<boolean>(true);
+  const [isDecoupledVersions, setIsDecoupledVersions] = useState<boolean>(false);
   const [customAndroidVersion, setCustomAndroidVersion] = useState<string>('');
   const [customAndroidBuildNumber, setCustomAndroidBuildNumber] = useState<number | ''>('');
   const [customIosVersion, setCustomIosVersion] = useState<string>('');
@@ -830,9 +830,28 @@ export default function App() {
     }
   }, [isDark]);
 
+  // Mağazalar ve yerel kod arasındaki en yüksek baz sürüm ve derleme numarası (Eşitleme için)
+  const unifiedBaseVer = useMemo(() => {
+    let base = currentVersion ? currentVersion.replace(/^v/, '') : '1.0.0';
+    const gVer = activeComparison?.googlePlay?.version?.replace(/^v/, '');
+    const aVer = activeComparison?.appStore?.version?.replace(/^v/, '');
+    if (gVer && compareSemver(base, gVer) < 0) base = gVer;
+    if (aVer && compareSemver(base, aVer) < 0) base = aVer;
+    return base;
+  }, [currentVersion, activeComparison]);
+
+  const unifiedBaseBuild = useMemo(() => {
+    const gCode = activeComparison?.googlePlay?.versionCode || 0;
+    const aCode = activeComparison?.appStore?.buildNumber
+      ? parseInt(activeComparison.appStore.buildNumber, 10) || 0
+      : 0;
+    return Math.max(currentBuildNumber || 1, gCode, aCode);
+  }, [currentBuildNumber, activeComparison]);
+
   const calculateNextVersion = useCallback(() => {
     if (bumpType === 'custom' && customVersion) return customVersion;
-    const parts = currentVersion.split('.').map((p) => parseInt(p, 10) || 0);
+    const baseToUse = unifiedBaseVer || currentVersion || '1.0.0';
+    const parts = baseToUse.split('.').map((p) => parseInt(p, 10) || 0);
     const major = parts[0] ?? 1;
     const minor = parts[1] ?? 0;
     const patch = parts[2] ?? 0;
@@ -840,10 +859,10 @@ export default function App() {
     if (bumpType === 'major') return `${major + 1}.0.0`;
     if (bumpType === 'minor') return `${major}.${minor + 1}.0`;
     return `${major}.${minor}.${patch + 1}`;
-  }, [bumpType, customVersion, currentVersion]);
+  }, [bumpType, customVersion, unifiedBaseVer, currentVersion]);
 
   const nextVersion = calculateNextVersion();
-  const nextBuildNumber = currentBuildNumber + 1;
+  const nextBuildNumber = unifiedBaseBuild + 1;
 
   const androidBaseVer = activeComparison?.googlePlay?.version
     ? activeComparison.googlePlay.version.replace(/^v/, '')
@@ -1424,8 +1443,8 @@ export default function App() {
           const diffNote =
             (data as { storeDifferenceNote?: string }).storeDifferenceNote ||
             (language === 'tr'
-              ? `pubspec.yaml yerel sürümü v${data.formatted} olarak eşitlendi. Google Play ve App Store mağaza sürümleri farklıysa, dağıtım sırasında "Bağımsız Platform Sürümleme" seçeneğiyle her mağazayı kendi sürümünden eşitlemeden gönderebilirsiniz.`
-              : `pubspec.yaml synced to v${data.formatted}. You can use decoupled platform versioning during release to avoid forcing the same version across different stores.`);
+              ? `pubspec.yaml yerel sürümü v${data.formatted} olarak eşitlendi. Dağıtım sırasında mağazaları ortak sürümde eşitleyerek gönderebilir (önerilen) veya opsiyonel olarak bağımsız sürümleme seçeneğiyle ayrı ayrı gönderebilirsiniz.`
+              : `pubspec.yaml synced to v${data.formatted}. You can release with unified equalized versions across stores (recommended) or optionally choose decoupled release.`);
           setSyncStorePersistentNote(diffNote);
 
           toast.success(successMsg, language === 'tr' ? 'Sürüm Eşitlendi' : 'Version Synced');
@@ -2304,7 +2323,7 @@ export default function App() {
           iosBuildNumber: isDecoupledVersions ? effectiveIosBuildNumber : nextBuildNumber,
           decoupledVersions: isDecoupledVersions,
           bump: bumpType === 'custom' ? undefined : bumpType,
-          manualVersion: bumpType === 'custom' ? customVersion : undefined,
+          manualVersion: bumpType === 'custom' ? customVersion : nextVersion,
           targetPlatform: platformMode,
           targetAndroid,
           targetIos,
@@ -3400,8 +3419,8 @@ export default function App() {
                             <Info className="w-4 h-4 text-primary shrink-0" />
                             <span>
                               {language === 'tr'
-                                ? 'Sürüm Senkronizasyonu & Bağımsız Dağıtım Notu'
-                                : 'Version Synchronization & Decoupled Release Note'}
+                                ? 'Sürüm Senkronizasyonu & Dağıtım Seçenekleri'
+                                : 'Version Synchronization & Release Options'}
                             </span>
                           </div>
                           {syncStorePersistentNote && (
@@ -3418,8 +3437,8 @@ export default function App() {
                         <p className="text-muted-foreground leading-relaxed">
                           {syncStorePersistentNote ||
                             (language === 'tr'
-                              ? `Google Play (v${googleVer || '-'} #${googleCode || '-'}) ile Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) sürümleri birbirinden farklıdır. pubspec.yaml yerel sürümü en yüksek mağaza doğrultusunda güncellendi. Dağıtım yaparken aşağıdaki "Bağımsız Platform Sürümleme" seçeneğiyle her iki mağazanın sürümlerini birbirine eşitlemeden kendi geçmişlerine göre artırarak gönderebilirsiniz.`
-                              : `Google Play (v${googleVer || '-'} #${googleCode || '-'}) and Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) versions differ. You can use Decoupled Platform Versioning below to release them without forcing the same version.`)}
+                              ? `Google Play (v${googleVer || '-'} #${googleCode || '-'}) ile Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) sürümleri birbirinden farklıdır. pubspec.yaml yerel sürümü en yüksek mağaza (v${highestVersion} #${highestBuildNumber}) doğrultusunda güncellendi. Dağıtım yaparken mağazaları ortak sürüme eşitleyebilir (önerilen) veya aşağıdaki opsiyonel bağımsız dağıtım seçeneğini kullanabilirsiniz.`
+                              : `Google Play (v${googleVer || '-'} #${googleCode || '-'}) and Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) versions differ. pubspec.yaml was synced to the highest store version (v${highestVersion} #${highestBuildNumber}). You can release both stores with a unified equalized version (recommended) or choose the optional decoupled mode below.`)}
                         </p>
                         {!areAllInSync && hasAnyStoreLive && (
                           <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -3533,37 +3552,103 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* BAĞIMSIZ PLATFORM SÜRÜMLEME (MAĞAZALARI EŞİTLEMEYEREK GÖNDER) */}
-                  <div className="pt-3 border-t border-border/60 space-y-3">
+                  {/* MAĞAZA SÜRÜM DAĞITIM STRATEJİSİ (EŞİTLEME VEYA BAĞIMSIZ DAĞITIM) */}
+                  <div className="pt-4 border-t border-border/60 space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs select-none">
-                        <input
-                          type="checkbox"
-                          checked={isDecoupledVersions}
-                          onChange={(e) => setIsDecoupledVersions(e.target.checked)}
-                          className="rounded border-border text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-                        />
-                        <span className="font-bold text-foreground">
+                      <div className="text-xs font-bold text-foreground flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-primary" />
+                        <span>
                           {language === 'tr'
-                            ? 'Mağaza Sürümlerini Eşitlemeyerek Gönder (Bağımsız Dağıtım)'
-                            : 'Release Without Syncing Store Versions (Decoupled Mode)'}
+                            ? 'Mağaza Sürüm Dağıtım Stratejisi'
+                            : 'Store Release Versioning Strategy'}
                         </span>
-                      </label>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full border border-border bg-secondary font-mono text-muted-foreground">
-                        {isDecoupledVersions
-                          ? (language === 'tr' ? 'Bağımsız Aktif' : 'Decoupled Active')
-                          : (language === 'tr' ? 'Ortak Sürüm' : 'Unified Version')}
+                      </div>
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full border border-border bg-secondary font-mono text-foreground font-semibold">
+                        {!isDecoupledVersions
+                          ? (language === 'tr' ? 'Ortak Eşitleme (Önerilen)' : 'Unified Sync (Recommended)')
+                          : (language === 'tr' ? 'Bağımsız Dağıtım (Opsiyonel)' : 'Decoupled (Optional)')}
                       </span>
                     </div>
 
-                    <p className="text-[11px] text-muted-foreground leading-normal">
-                      {language === 'tr'
-                        ? 'Google Play ve Apple App Store mevcut sürümleri farklıysa, her iki mağazayı birbirine zorla eşitlemeden kendi sürüm geçmişlerine göre bağımsız artışla derleyip gönderir.'
-                        : 'If Google Play and App Store have different versions, compiles and releases each store independently based on its own version history.'}
-                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* SEÇENEK 1: SÜRÜMLERİ EŞİTLE (ORTAK SÜRÜMLE DAĞIT) */}
+                      <button
+                        type="button"
+                        onClick={() => setIsDecoupledVersions(false)}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
+                          !isDecoupledVersions
+                            ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/20'
+                            : 'bg-secondary/30 border-border hover:bg-secondary/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="versionStrategy"
+                              checked={!isDecoupledVersions}
+                              onChange={() => setIsDecoupledVersions(false)}
+                              className="text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                            />
+                            <span className="font-bold text-xs text-foreground">
+                              {language === 'tr' ? 'Sürümleri Eşitle (Ortak Sürüm)' : 'Sync Versions (Unified)'}
+                            </span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                            {language === 'tr' ? 'Önerilen' : 'Recommended'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                          {language === 'tr'
+                            ? `Her iki mağaza da en yüksek sürüm baz alınarak ortak v${nextVersion}+${nextBuildNumber} sürümüne eşitlenir.`
+                            : `Both stores will be synced to unified v${nextVersion}+${nextBuildNumber} based on highest version.`}
+                        </p>
+                        <div className="mt-2 text-[10px] font-mono text-foreground/80 bg-background/80 px-2 py-1 rounded border border-border/50 truncate">
+                          Google Play & App Store: v{nextVersion}+{nextBuildNumber}
+                        </div>
+                      </button>
 
+                      {/* SEÇENEK 2: BAĞIMSIZ DAĞITIM (OPSİYONEL) */}
+                      <button
+                        type="button"
+                        onClick={() => setIsDecoupledVersions(true)}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer relative ${
+                          isDecoupledVersions
+                            ? 'bg-primary/5 border-primary shadow-xs ring-1 ring-primary/20'
+                            : 'bg-secondary/30 border-border hover:bg-secondary/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="versionStrategy"
+                              checked={isDecoupledVersions}
+                              onChange={() => setIsDecoupledVersions(true)}
+                              className="text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                            />
+                            <span className="font-bold text-xs text-foreground">
+                              {language === 'tr' ? 'Bağımsız Dağıtım (Opsiyonel)' : 'Decoupled Release (Optional)'}
+                            </span>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground font-semibold">
+                            {language === 'tr' ? 'Opsiyonel' : 'Optional'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                          {language === 'tr'
+                            ? 'Mağazalar birbirine eşitlenmez; her iki mağaza kendi geçmişine göre bağımsız artar.'
+                            : 'Stores are not unified; each store increments independently according to its own history.'}
+                        </p>
+                        <div className="mt-2 text-[10px] font-mono text-foreground/80 bg-background/80 px-2 py-1 rounded border border-border/50 truncate">
+                          GP: v{effectiveAndroidVersion}+{effectiveAndroidBuildNumber} • iOS: v{effectiveIosVersion}+{effectiveIosBuildNumber}
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* BAĞIMSIZ MOD AKTİFSE ÖZEL GİRİŞ ALANLARI */}
                     {isDecoupledVersions && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                         {/* ANDROID (GOOGLE PLAY) HEDEFİ */}
                         <div className="p-3 rounded-lg bg-secondary/40 border border-border space-y-2">
                           <div className="flex items-center justify-between text-xs">
@@ -4147,11 +4232,19 @@ export default function App() {
                           <div className="text-muted-foreground font-semibold">
                             iOS: v{effectiveIosVersion}+{effectiveIosBuildNumber}
                           </div>
+                          <span className="text-[10px] text-muted-foreground block font-sans">
+                            {language === 'tr' ? '(Bağımsız Dağıtım)' : '(Decoupled Mode)'}
+                          </span>
                         </div>
                       ) : (
-                        <span className="font-mono font-bold text-foreground">
-                          {nextVersion}+{nextBuildNumber}
-                        </span>
+                        <div className="text-right">
+                          <span className="font-mono font-bold text-foreground block">
+                            {nextVersion}+{nextBuildNumber}
+                          </span>
+                          <span className="text-[10px] text-primary font-semibold block font-sans">
+                            {language === 'tr' ? '(Her İki Mağaza Eşitlendi)' : '(Stores Equalized)'}
+                          </span>
+                        </div>
                       )}
                     </div>
                     <div className="flex justify-between items-center">
