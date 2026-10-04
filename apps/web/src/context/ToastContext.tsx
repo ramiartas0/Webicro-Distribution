@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { CheckCircle2, AlertCircle, AlertTriangle, Info, Bell, X } from 'lucide-react';
+import { useTranslation } from '../i18n/index.js';
 
 export type ToastType = 'default' | 'success' | 'error' | 'warning' | 'info';
 
@@ -35,6 +36,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const dismiss = useCallback((id: string) => {
@@ -59,16 +61,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const toast = useMemo(() => {
     const fn = (options: ToastOptions) => addToast(options);
-    fn.success = (description: React.ReactNode, title = 'İşlem Başarılı') =>
+    fn.success = (description: React.ReactNode, title = t('toast.success')) =>
       addToast({ title, description, type: 'success' });
-    fn.error = (description: React.ReactNode, title = 'Hata Oluştu') =>
+    fn.error = (description: React.ReactNode, title = t('toast.error')) =>
       addToast({ title, description, type: 'error' });
-    fn.warning = (description: React.ReactNode, title = 'Dikkat') =>
+    fn.warning = (description: React.ReactNode, title = t('toast.warning')) =>
       addToast({ title, description, type: 'warning' });
-    fn.info = (description: React.ReactNode, title = 'Bilgilendirme') =>
+    fn.info = (description: React.ReactNode, title = t('toast.info')) =>
       addToast({ title, description, type: 'info' });
     return fn as ToastFn;
-  }, [addToast]);
+  }, [addToast, t]);
 
   return (
     <ToastContext.Provider value={{ toast, dismiss, toasts }}>
@@ -76,14 +78,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       { }
       <div
         aria-live="polite"
-        aria-label="Bildirimler"
+        aria-label={t('toast.notifications')}
         className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none"
       >
-        {toasts.map((t) => {
-          const isError = t.type === 'error';
+        {toasts.map((toastItem) => {
+          const isError = toastItem.type === 'error';
           return (
             <div
-              key={t.id}
+              key={toastItem.id}
               role="alert"
               className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl bg-card text-card-foreground backdrop-blur-md transition-all duration-200 animate-in slide-in-from-bottom-3 ${
                 isError ? 'border-destructive/40 shadow-destructive/5' : 'border-border shadow-black/5'
@@ -91,31 +93,31 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             >
               { }
               <div className="shrink-0 mt-0.5">
-                {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-foreground" />}
-                {t.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
-                {t.type === 'warning' && <AlertTriangle className="w-4 h-4 text-foreground" />}
-                {t.type === 'info' && <Info className="w-4 h-4 text-foreground" />}
-                {t.type === 'default' && <Bell className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'success' && <CheckCircle2 className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
+                {toastItem.type === 'warning' && <AlertTriangle className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'info' && <Info className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'default' && <Bell className="w-4 h-4 text-foreground" />}
               </div>
 
               { }
               <div className="flex-1 min-w-0 pr-1">
-                {t.title && (
+                {toastItem.title && (
                   <h4 className={`text-xs font-semibold leading-tight mb-1 truncate ${isError ? 'text-destructive' : 'text-foreground'}`}>
-                    {t.title}
+                    {toastItem.title}
                   </h4>
                 )}
                 <div className="text-xs text-muted-foreground leading-relaxed break-words">
-                  {t.description}
+                  {toastItem.description}
                 </div>
               </div>
 
               { }
               <button
                 type="button"
-                onClick={() => dismiss(t.id)}
+                onClick={() => dismiss(toastItem.id)}
                 className="shrink-0 p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors cursor-pointer -mr-1 -mt-1"
-                aria-label="Kapat"
+                aria-label={t('common.close')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
