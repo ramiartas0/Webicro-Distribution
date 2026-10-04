@@ -47,7 +47,19 @@ export class AppStoreAdapter {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
-      throw new AppStoreError(`API request failed: ${res.statusText} ${errText}`);
+      let parsedDetail = '';
+      try {
+        const errorJson = JSON.parse(errText) as {
+          errors?: { code?: string; title?: string; detail?: string; source?: { pointer?: string } }[];
+        };
+        if (errorJson.errors && errorJson.errors.length > 0) {
+          parsedDetail = errorJson.errors
+            .map((e) => `[${e.code || 'ERROR'}] ${e.detail || e.title || ''}${e.source?.pointer ? ` (pointer: ${e.source.pointer})` : ''}`)
+            .join('; ');
+        }
+      } catch {}
+      const fullError = parsedDetail ? `${res.statusText} (${res.status}): ${parsedDetail}` : `${res.statusText} ${errText}`;
+      throw new AppStoreError(`API request failed: ${fullError}`);
     }
 
     if (res.status === 204) {
@@ -223,8 +235,85 @@ export class AppStoreAdapter {
     });
   }
 
-  public async submitForReview(versionId: string): Promise<void> {
-    const payload = {
+  public async submitForReview(versionId: string, appId?: string): Promise<void> {
+    const targetAppId = appId || (await this.getAppId());
+    try {
+      // Modern Apple API akışı: reviewSubmissions -> reviewSubmissionItems -> PATCH submitted=true
+      const submissionPayload = {
+        data: {
+          type: 'reviewSubmissions',
+          attributes: {
+            platform: 'IOS',
+          },
+          relationships: {
+            app: {
+              data: {
+                type: 'apps',
+                id: targetAppId,
+              },
+            },
+          },
+        },
+      };
+
+      const submissionRes = (await this.fetchApi('/reviewSubmissions', {
+        method: 'POST',
+        body: JSON.stringify(submissionPayload),
+      })) as { data?: { id: string } };
+
+      const submissionId = submissionRes?.data?.id;
+      if (submissionId) {
+        // İnceleme gönderimine versiyon öğesini bağla
+        const itemPayload = {
+          data: {
+            type: 'reviewSubmissionItems',
+            relationships: {
+              reviewSubmission: {
+                data: {
+                  type: 'reviewSubmissions',
+                  id: submissionId,
+                },
+              },
+              appStoreVersion: {
+                data: {
+                  type: 'appStoreVersions',
+                  id: versionId,
+                },
+              },
+            },
+          },
+        };
+
+        await this.fetchApi('/reviewSubmissionItems', {
+          method: 'POST',
+          body: JSON.stringify(itemPayload),
+        });
+
+        // İncelemeye resmi olarak teslim et
+        const patchPayload = {
+          data: {
+            type: 'reviewSubmissions',
+            id: submissionId,
+            attributes: {
+              submitted: true,
+            },
+          },
+        };
+
+        await this.fetchApi(`/reviewSubmissions/${submissionId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patchPayload),
+        });
+        return;
+      }
+    } catch (modernErr: unknown) {
+      console.warn(
+        `[AppStoreAdapter] Modern reviewSubmissions başarısız oldu, klasik appStoreVersionSubmissions deneniyor: ${modernErr instanceof Error ? modernErr.message : String(modernErr)}`,
+      );
+    }
+
+    // Fallback: Eski appStoreVersionSubmissions API
+    const fallbackPayload = {
       data: {
         type: 'appStoreVersionSubmissions',
         relationships: {
@@ -239,7 +328,7 @@ export class AppStoreAdapter {
     };
     await this.fetchApi('/appStoreVersionSubmissions', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(fallbackPayload),
     });
   }
 
@@ -389,7 +478,7 @@ export class AppStoreAdapter {
 
     let submitted = false;
     if (submitReview) {
-      await this.submitForReview(versionId);
+      await this.submitForReview(versionId, appId);
       submitted = true;
     }
 

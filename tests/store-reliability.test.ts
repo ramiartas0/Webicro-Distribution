@@ -263,6 +263,83 @@ describe('Store Adapters Reliability & Isolation', () => {
     ).resolves.toBeUndefined();
     expect(patchCalled).toBe(true);
   });
+
+  it('AppStoreAdapter modern reviewSubmissions API akışını başarıyla yürütmeli', async () => {
+    const { AppStoreAdapter } = await import('../packages/app-store/src/adapter.js');
+
+    const calledPaths: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, options?: RequestInit) => {
+      const urlStr = String(url);
+      calledPaths.push(`${options?.method || 'GET'} ${urlStr}`);
+      if (urlStr.endsWith('/reviewSubmissions') && options?.method === 'POST') {
+        return new Response(JSON.stringify({ data: { id: 'submission-999' } }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (urlStr.endsWith('/reviewSubmissionItems') && options?.method === 'POST') {
+        return new Response(JSON.stringify({ data: { id: 'item-111' } }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (urlStr.includes('/reviewSubmissions/submission-999') && options?.method === 'PATCH') {
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    await expect(adapter.submitForReview('version-123', 'app-456')).resolves.toBeUndefined();
+    expect(calledPaths.some((p) => p.includes('POST') && p.includes('/reviewSubmissions'))).toBe(true);
+    expect(calledPaths.some((p) => p.includes('POST') && p.includes('/reviewSubmissionItems'))).toBe(true);
+    expect(calledPaths.some((p) => p.includes('PATCH') && p.includes('/reviewSubmissions/submission-999'))).toBe(true);
+  });
+
+  it('AppStoreAdapter Apple JSON API formatındaki hataları anlaşılır ayrıştırmalı', async () => {
+    const { AppStoreAdapter, AppStoreError } = await import('../packages/app-store/src/adapter.js');
+
+    vi.stubGlobal('fetch', async () => {
+      const appleErrorPayload = {
+        errors: [
+          {
+            code: 'ENTITY_ERROR.ATTRIBUTE.REQUIRED',
+            title: 'An attribute is required',
+            detail: "You must provide a value for the attribute 'platform'",
+            source: { pointer: '/data/attributes/platform' },
+          },
+        ],
+      };
+      return new Response(JSON.stringify(appleErrorPayload), {
+        status: 409,
+        statusText: 'Conflict',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    await expect(adapter.createAppStoreVersion('app-1', '1.0.0')).rejects.toThrow(AppStoreError);
+    await expect(adapter.createAppStoreVersion('app-1', '1.0.0')).rejects.toThrow(
+      "ENTITY_ERROR.ATTRIBUTE.REQUIRED",
+    );
+    await expect(adapter.createAppStoreVersion('app-1', '1.0.0')).rejects.toThrow(
+      "/data/attributes/platform",
+    );
+  });
 });
 
 
