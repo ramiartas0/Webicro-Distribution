@@ -146,6 +146,9 @@ export interface ProjectEntry {
   appStoreAppName?: string;
   version?: string;
   buildNumber?: number;
+  projectType?: 'flutter' | 'react-native' | 'expo' | 'android-native' | 'ios-native' | 'kmp' | 'capacitor' | 'unknown';
+  projectTypeLabel?: string;
+  isDirectlySupported?: boolean;
   stores?: StoreComparison;
   releasing?: boolean;
   currentStageId?: number;
@@ -2401,10 +2404,15 @@ export default function App() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">
                       <div
-                        className="font-semibold text-xs text-foreground tracking-tight truncate"
+                        className="font-semibold text-xs text-foreground tracking-tight truncate flex items-center gap-1.5"
                         title={p.name}
                       >
-                        {p.name}
+                        <span className="truncate">{p.name}</span>
+                        {p.projectTypeLabel && (
+                          <span className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-secondary text-secondary-foreground border border-border shrink-0">
+                            {p.projectTypeLabel}
+                          </span>
+                        )}
                       </div>
                       <button
                         type="button"

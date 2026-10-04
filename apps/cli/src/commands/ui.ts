@@ -73,6 +73,10 @@ import { ReleaseNotesValidator, type ReleaseNotesMap } from '@webicro/validation
 import { PubspecVersionUpdater } from '@webicro/flutter';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
 import { generateAppStoreToken, AppStoreAdapter } from '@webicro/app-store';
+import {
+  scanDirectoriesForMobileProjects,
+  type MobileProjectType,
+} from '../discovery/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,6 +114,9 @@ export interface ProjectEntry {
   appStoreAppName?: string;
   version?: string;
   buildNumber?: number;
+  projectType?: MobileProjectType;
+  projectTypeLabel?: string;
+  isDirectlySupported?: boolean;
   stores?: StoreComparison;
   releasing?: boolean;
   currentStageId?: number;
@@ -278,109 +285,22 @@ function detectProjectMetadata(projectPath: string): {
 }
 
 export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] {
-  const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
-
-  let roots: string[] = [];
-
-  if (customRoots && customRoots.length > 0) {
-    roots = customRoots.filter((r) => fs.existsSync(r));
-  } else {
-    roots.push(process.cwd());
-    const parentDir = path.resolve(process.cwd(), '..');
-    if (fs.existsSync(parentDir)) {
-      roots.push(parentDir);
-    }
-
-    if (home && fs.existsSync(home)) {
-      const standardDevDirs = [
-        'Projects',
-        'Workspace',
-        'Desktop',
-        'Desktop/DEV',
-        'DEV',
-        'Development',
-        'Code',
-        'Sites',
-        'apps',
-        'repos',
-        'src',
-        'Documents',
-      ];
-      for (const d of standardDevDirs) {
-        const full = path.join(home, d);
-        if (fs.existsSync(full)) {
-          roots.push(full);
-        }
-      }
-    }
-  }
-
-  const foundPaths = new Set<string>();
+  const discovered = scanDirectoriesForMobileProjects(customRoots);
   const results: ProjectEntry[] = [];
 
-  const ignoreDirs = new Set([
-    'node_modules',
-    '.git',
-    '.dart_tool',
-    'build',
-    'Pods',
-    'dist',
-    'vendor',
-    'DerivedData',
-    '.gradle',
-    '.idea',
-    '.vscode',
-    'Library',
-    'Applications',
-    'Music',
-    'Movies',
-    'Pictures',
-    'webicro_distribution',
-    '.pub-cache',
-    '.sdk',
-    'engine',
-    'SourcePackages',
-    'checkouts',
-  ]);
-
-  function scan(dir: string, depth: number): void {
-    if (depth > 8) return;
-    if (!fs.existsSync(dir)) return;
-
-    try {
-      const pubspecPath = path.join(dir, 'pubspec.yaml');
-      if (fs.existsSync(pubspecPath) && !path.resolve(dir).endsWith('webicro_distribution')) {
-        foundPaths.add(path.resolve(dir));
-        return;
-      }
-
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          if (entry.name.startsWith('.') && entry.name !== '.release') continue;
-          if (ignoreDirs.has(entry.name)) continue;
-          scan(path.join(dir, entry.name), depth + 1);
-        }
-      }
-    } catch {}
-  }
-
-  for (const root of roots) {
-    if (fs.existsSync(root)) {
-      scan(root, 0);
-    }
-  }
-
-  for (const fPath of foundPaths) {
-    const meta = detectProjectMetadata(fPath);
+  for (const meta of discovered) {
     results.push({
-      id: fPath.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase(),
+      id: meta.id,
       name: meta.name,
-      path: fPath,
-      hasPubspec: true,
+      path: meta.path,
+      hasPubspec: meta.hasPubspec,
       package: meta.package,
+      iosBundleId: meta.iosBundleId,
       version: meta.version,
       buildNumber: meta.buildNumber,
+      projectType: meta.type,
+      projectTypeLabel: meta.typeLabel,
+      isDirectlySupported: meta.isDirectlySupported,
     });
   }
 
