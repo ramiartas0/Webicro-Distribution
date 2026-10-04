@@ -73,10 +73,16 @@ def scan_codebase(directories: List[str]) -> Dict[str, List[Tuple[int, str]]]:
     """Scans target directories for files with Turkish strings."""
     found: Dict[str, List[Tuple[int, str]]] = {}
     extensions = {'.ts', '.tsx'}
-    excluded_dirs = {'node_modules', 'dist', '.git', '.release'}
+    excluded_dirs = {'node_modules', 'dist', '.git', '.release', 'locales'}
     
     for d in directories:
         if not os.path.exists(d):
+            continue
+        if os.path.isfile(d):
+            if any(d.endswith(ext) for ext in extensions):
+                items = extract_strings_from_file(d)
+                if items:
+                    found[d] = items
             continue
         for root, dirs, files in os.walk(d):
             dirs[:] = [name for name in dirs if name not in excluded_dirs]

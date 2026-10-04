@@ -296,12 +296,15 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
         'Projects',
         'Workspace',
         'Desktop',
+        'Desktop/DEV',
+        'DEV',
         'Development',
         'Code',
         'Sites',
         'apps',
         'repos',
         'src',
+        'Documents',
       ];
       for (const d of standardDevDirs) {
         const full = path.join(home, d);
@@ -333,15 +336,20 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
     'Movies',
     'Pictures',
     'webicro_distribution',
+    '.pub-cache',
+    '.sdk',
+    'engine',
+    'SourcePackages',
+    'checkouts',
   ]);
 
   function scan(dir: string, depth: number): void {
-    if (depth > 4) return;
+    if (depth > 8) return;
     if (!fs.existsSync(dir)) return;
 
     try {
       const pubspecPath = path.join(dir, 'pubspec.yaml');
-      if (fs.existsSync(pubspecPath) && path.resolve(dir) !== path.resolve(process.cwd())) {
+      if (fs.existsSync(pubspecPath) && !path.resolve(dir).endsWith('webicro_distribution')) {
         foundPaths.add(path.resolve(dir));
         return;
       }

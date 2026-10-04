@@ -481,6 +481,15 @@ export default function App() {
     [t],
   );
 
+  const getStepLocalizedName = useCallback(
+    (step: PipelineStep): string => {
+      const stepKey = `pipeline.step${step.id}`;
+      const translated = t(stepKey);
+      return translated !== stepKey ? translated : step.name;
+    },
+    [t],
+  );
+
   const [projectPipelines, setProjectPipelines] = useState<Record<string, ProjectPipelineState>>(
     {},
   );
@@ -2067,10 +2076,10 @@ export default function App() {
 
     const initialPipelineSteps = initialStages.map((s, idx) => {
       if (!targetAndroid && s.id === 4) {
-        return { ...s, status: 'skipped' as const, details: 'Android derlemesi atlandı' };
+        return { ...s, status: 'skipped' as const, details: t('alerts.androidBuildSkipped') };
       }
       if (!targetIos && s.id === 5) {
-        return { ...s, status: 'skipped' as const, details: 'iOS derlemesi atlandı' };
+        return { ...s, status: 'skipped' as const, details: t('alerts.iosBuildSkipped') };
       }
       if (idx === 0) {
         return { ...s, status: 'running' as const };
@@ -2147,7 +2156,7 @@ export default function App() {
 
       if (!response.ok) {
         const errData = (await response.json()) as { error?: string };
-        const errMsg = errData.error || 'Dağıtım başlatılamadı';
+        const errMsg = errData.error || t('alerts.releaseStartFailed');
         setProjectPipelines((prev) => ({
           ...prev,
           [targetPath]: {
@@ -2201,9 +2210,11 @@ export default function App() {
     const targetPath = projectPathToCancel || activeProjectPath;
     if (!targetPath) return;
 
-    const confirmCancel = window.confirm(
-      `${projectName || 'Bu proje'} için dağıtım sürecini sıfırlamak / iptal etmek istediğinize emin misiniz?`,
+    const confirmMsg = t('labels.cancelPipelineConfirm').replace(
+      '{project}',
+      projectName || (language === 'tr' ? 'Bu proje' : 'This project'),
     );
+    const confirmCancel = window.confirm(confirmMsg);
     if (!confirmCancel) return;
 
     try {
@@ -2226,15 +2237,17 @@ export default function App() {
           ),
         );
         toast.warning(
-          `"${projectName || 'Proje'}" için dağıtım süreci iptal edildi.`,
-          'Dağıtım İptal Edildi',
+          language === 'tr'
+            ? `"${projectName || 'Proje'}" için dağıtım süreci iptal edildi.`
+            : `Release pipeline cancelled for "${projectName || 'Project'}".`,
+          t('alerts.releaseCancelledTitle'),
         );
       } else {
-        toast.error('Dağıtım süreci iptal edilemedi.');
+        toast.error(t('alerts.releaseCancelFailed'));
       }
     } catch (err) {
-      console.error('Boru hattı iptal hatası:', err);
-      toast.error('İptal işlemi sırasında bağlantı hatası oluştu.');
+      console.error('Release pipeline cancel error:', err);
+      toast.error(t('alerts.cancelConnectionErrorDesc'));
     }
   };
 
@@ -2325,11 +2338,7 @@ export default function App() {
             </Tooltip>
 
             <Tooltip
-              content={
-                language === 'tr'
-                  ? 'Özel bir klasör seç veya proje ekle'
-                  : 'Select custom directory or add project'
-              }
+              content={t('labels.selectCustomOrAdd')}
               position="bottom"
             >
               <button
@@ -2433,7 +2442,7 @@ export default function App() {
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 bg-primary text-primary-foreground animate-pulse">
                       <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                       <span>
-                        {language === 'tr' ? 'Dağıtılıyor' : 'Releasing'} ({currentStage}/
+                        {t('labels.releasingBadge')} ({currentStage}/
                         {totalStageCount})
                       </span>
                     </span>
@@ -2523,11 +2532,7 @@ export default function App() {
         {}
         <div className="p-3 border-t border-sidebar-border bg-sidebar-accent/20 space-y-1">
           <Tooltip
-            content={
-              language === 'tr'
-                ? 'Google Play ve App Store API anahtarlarını test et ve doğrula'
-                : 'Test and verify Google Play and App Store API credentials'
-            }
+            content={t('labels.testAndVerifyApiKeys')}
             position="right"
           >
             <button
@@ -2543,11 +2548,7 @@ export default function App() {
           </Tooltip>
 
           <Tooltip
-            content={
-              language === 'tr'
-                ? 'SQLite veritabanı dağıtım kayıtlarını ve denetim loglarını listele'
-                : 'List release history and audit logs from SQLite database'
-            }
+            content={t('labels.listSqliteRecords')}
             position="right"
           >
             <button
@@ -2572,11 +2573,7 @@ export default function App() {
           </Tooltip>
 
           <Tooltip
-            content={
-              language === 'tr'
-                ? 'Dağıtım adımları, mağaza kuralları ve dokümantasyon rehberi'
-                : 'Distribution steps, store policies and documentation guide'
-            }
+            content={t('labels.releaseStepsAndDocs')}
             position="right"
           >
             <button
@@ -2620,11 +2617,7 @@ export default function App() {
                 )}
                 {gitRemote.connected && (
                   <Tooltip
-                    content={
-                      language === 'tr'
-                        ? `Bağlı Uzak Adres: ${gitRemote.remoteUrl || 'GitHub'}`
-                        : `Connected Remote: ${gitRemote.remoteUrl || 'GitHub'}`
-                    }
+                    content={`${t('labels.remoteRepoColon')} ${gitRemote.remoteUrl || 'GitHub'}`}
                     position="bottom"
                   >
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground flex items-center gap-1 cursor-help">
@@ -2637,12 +2630,8 @@ export default function App() {
                   <Tooltip
                     content={
                       isGitClean
-                        ? language === 'tr'
-                          ? 'Git çalışma dizini temiz ve güncel'
-                          : 'Git working tree is clean and up-to-date'
-                        : language === 'tr'
-                          ? `${uncommittedFiles.length} adet kaydedilmemiş değişiklik var`
-                          : `${uncommittedFiles.length} uncommitted changes`
+                        ? t('labels.gitCleanAndUpdated')
+                        : `${uncommittedFiles.length} ${t('labels.uncommittedChanges')}`
                     }
                     position="bottom"
                   >
@@ -2676,7 +2665,7 @@ export default function App() {
                     <div className="absolute left-0 top-full mt-1.5 hidden group-hover:block z-50 min-w-56 max-w-sm p-2.5 rounded-lg bg-popover/95 backdrop-blur border border-border shadow-xl text-[11px] animate-in fade-in-50 zoom-in-95">
                       <div className="font-semibold text-foreground mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
                         <span>
-                          {language === 'tr' ? 'Commit Edilmemiş Dosyalar' : 'Uncommitted Files'} (
+                          {t('labels.uncommittedFilesTitle')} (
                           {uncommittedFiles.length})
                         </span>
                       </div>
@@ -2700,11 +2689,7 @@ export default function App() {
                 {}
                 {!isGitClean && uncommittedFiles.length > 0 && (
                   <Tooltip
-                    content={
-                      language === 'tr'
-                        ? "Değişen dosyaları commit edip doğrudan GitHub'a push eder"
-                        : 'Commit changed files and push directly to GitHub'
-                    }
+                    content={t('labels.pushToRemoteDesc')}
                     position="bottom"
                   >
                     <button
@@ -2779,9 +2764,7 @@ export default function App() {
           {/* ORTA BÖLÜM: ANA SEKME DEĞİŞTİRİCİ */}
           <div className="flex items-center p-1 bg-secondary/80 rounded-xl border border-border shadow-2xs">
             <Tooltip
-              content={
-                language === 'tr' ? 'Dağıtım kontrol merkezine geç' : 'Switch to release dashboard'
-              }
+              content={t('labels.goToReleaseCenter')}
               position="bottom"
             >
               <button
@@ -2799,11 +2782,7 @@ export default function App() {
             </Tooltip>
 
             <Tooltip
-              content={
-                language === 'tr'
-                  ? 'SQLite veritabanındaki sürüm ve denetim kayıtları'
-                  : 'Release and audit records in SQLite database'
-              }
+              content={t('labels.sqliteReleaseAndAuditLogs')}
               position="bottom"
             >
               <button
@@ -2843,11 +2822,7 @@ export default function App() {
             </Tooltip>
 
             <Tooltip
-              content={
-                language === 'tr'
-                  ? 'Google Play, App Store ve AI kimliklerini yapılandır'
-                  : 'Configure Google Play, App Store and AI credentials'
-              }
+              content={t('labels.configureStoreAndAiKeys')}
               position="bottom"
             >
               <button
@@ -2860,11 +2835,7 @@ export default function App() {
             </Tooltip>
 
             <Tooltip
-              content={
-                language === 'tr'
-                  ? 'Canlı mağaza sürümlerini API üzerinden senkronize et'
-                  : 'Sync live store versions via API'
-              }
+              content={t('labels.syncLiveStoresOverApi')}
               position="bottom"
             >
               <button
@@ -2949,17 +2920,16 @@ export default function App() {
                             <GooglePlayIcon className="w-4 h-4 shrink-0" />
                             <AppStoreConnectIcon className="w-4 h-4 shrink-0" />
                           </span>
-                          Canlı Mağaza Karşılaştırma Matrisi (Store vs Local)
+                          {t('matrix.title')}
                         </h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Yerel kod tabanındaki sürüm ile Google Play ve Apple App Store
-                          sürümlerinin anlık karşılaştırması.
+                          {t('matrix.subtitle')}
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-2.5 py-1 rounded-full font-semibold border border-border bg-secondary text-secondary-foreground">
-                          {activeComparison?.badge || 'Durum Belirleniyor'}
+                          {activeComparison?.badge || t('matrix.statusDetermining')}
                         </span>
                       </div>
                     </div>
@@ -2971,7 +2941,7 @@ export default function App() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span className="font-semibold text-foreground flex items-center gap-1.5">
-                              <Code2 className="w-3.5 h-3.5 text-primary" /> Yerel Kod (Local)
+                              <Code2 className="w-3.5 h-3.5 text-primary" /> {t('matrix.localCode')}
                             </span>
                             <span className="font-mono text-foreground font-semibold">
                               {gitBranch || 'main'}
@@ -2986,25 +2956,25 @@ export default function App() {
                                 : '-'}
                             </div>
                             <div className="text-xs font-mono text-muted-foreground">
-                              Build Numarası: #{currentBuildNumber || 1}
+                              {t('matrix.buildNumberColon')} #{currentBuildNumber || 1}
                             </div>
                           </div>
                           <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
                             {commits.length > 0 ? (
                               <>
-                                Son Commit:{' '}
+                                {t('matrix.lastCommitColon')}{' '}
                                 <span className="font-mono text-foreground font-semibold">
                                   {commits[0]?.hash.substring(0, 7)}
                                 </span>{' '}
-                                ({commits.length} commit incelendi)
+                                ({commits.length} {t('matrix.commitsExamined')})
                               </>
                             ) : isLoadingProject ? (
                               <span className="text-muted-foreground/80 italic">
-                                Commit geçmişi analiz ediliyor...
+                                {t('matrix.analyzingCommitHistory')}
                               </span>
                             ) : (
                               <span className="text-muted-foreground/60">
-                                İncelenen commit bulunamadı
+                                {t('matrix.noExaminedCommits')}
                               </span>
                             )}
                           </div>
@@ -3033,12 +3003,8 @@ export default function App() {
                               }`}
                             >
                               {googlePlayInfo.connected
-                                ? language === 'tr'
-                                  ? 'API Bağlı'
-                                  : 'API Connected'
-                                : language === 'tr'
-                                  ? 'Bağlı Değil'
-                                  : 'Not Connected'}
+                                ? t('labels.apiConnected')
+                                : t('labels.notConnected')}
                             </span>
                           </div>
                           <div className="pt-1">
@@ -3061,7 +3027,7 @@ export default function App() {
                                 </span>
                               ) : activeComparison?.googlePlay?.status === 'auth_error' ? (
                                 <span className="text-destructive text-lg font-bold">
-                                  {language === 'tr' ? 'Yetki Gerekli' : 'Auth Required'}
+                                  {t('matrix.authRequiredBadge')}
                                 </span>
                               ) : googlePlayInfo.connected ? (
                                 <span className="text-foreground text-lg font-bold">
@@ -3082,7 +3048,7 @@ export default function App() {
                               className="text-xs font-mono text-muted-foreground truncate"
                               title={googlePlayInfo.serviceAccount}
                             >
-                              {language === 'tr' ? 'Hesap:' : 'Account:'}{' '}
+                              {t('matrix.accountColon')}{' '}
                               {googlePlayInfo.serviceAccount
                                 ? googlePlayInfo.serviceAccount.split('@')[0]
                                 : 'play-store-deployer'}
@@ -3110,9 +3076,7 @@ export default function App() {
                               }`}
                             >
                               {appStoreInfo.connected
-                                ? language === 'tr'
-                                  ? 'API Bağlı'
-                                  : 'API Connected'
+                                ? t('labels.apiConnected')
                                 : t('common.notConfigured')}
                             </span>
                           </div>
@@ -3196,11 +3160,7 @@ export default function App() {
                       <div className="flex items-center shrink-0">
                         {canSyncToHigher ? (
                           <Tooltip
-                            content={
-                              language === 'tr'
-                                ? 'Düşük olan yerel sürümü canlı mağaza sürümüne otomatik eşitler'
-                                : 'Automatically syncs lower local version to live store version'
-                            }
+                            content={t('labels.autoSyncLowerVersionDesc')}
                             position="top"
                           >
                             <button
@@ -3214,30 +3174,20 @@ export default function App() {
                               />
                               <span>
                                 {isSyncingStoreVersion
-                                  ? language === 'tr'
-                                    ? 'Eşitleniyor...'
-                                    : 'Syncing...'
-                                  : language === 'tr'
-                                    ? `Sürümleri Eşitle (v${highestVersion}+${highestBuildNumber}'e Yükselt)`
-                                    : `Sync Versions (Upgrade to v${highestVersion}+${highestBuildNumber})`}
+                                  ? t('labels.syncingVersion')
+                                  : `${t('labels.syncVersionsBtn')} (${language === 'tr' ? `v${highestVersion}+${highestBuildNumber}'e Yükselt` : `Upgrade to v${highestVersion}+${highestBuildNumber}`})`}
                               </span>
                             </button>
                           </Tooltip>
                         ) : areAllInSync ? (
                           <Tooltip
-                            content={
-                              language === 'tr'
-                                ? 'Yerel pubspec.yaml ile canlı mağaza sürümleri birebir uyumlu'
-                                : 'Local pubspec.yaml matches live store versions'
-                            }
+                            content={t('labels.versionsSyncedDesc')}
                             position="top"
                           >
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-semibold text-xs cursor-default">
                               <CheckCircle2 className="w-4 h-4 text-foreground" />
                               <span>
-                                {language === 'tr'
-                                  ? `Sürümler Eşit (v${highestVersion} #${highestBuildNumber})`
-                                  : `Versions Synced (v${highestVersion} #${highestBuildNumber})`}
+                                {t('labels.versionsEqual')} (v{highestVersion} #{highestBuildNumber})
                               </span>
                             </div>
                           </Tooltip>
@@ -3361,11 +3311,7 @@ export default function App() {
                   {/* HIZLI PLATFORM SEÇİCİ (SEGMENTED CONTROL) */}
                   <div className="p-1.5 bg-secondary/60 rounded-xl border border-border flex flex-col sm:flex-row items-center gap-1.5">
                     <Tooltip
-                      content={
-                        language === 'tr'
-                          ? 'Google Play için AAB derlemesi ve yayınlama'
-                          : 'Build AAB and publish to Google Play'
-                      }
+                      content={t('labels.googlePlayAabDesc')}
                       position="top"
                       className="w-full"
                     >
@@ -3387,11 +3333,7 @@ export default function App() {
                     </Tooltip>
 
                     <Tooltip
-                      content={
-                        language === 'tr'
-                          ? 'App Store Connect için IPA derlemesi ve TestFlight dağıtımı'
-                          : 'Build IPA and publish to App Store Connect / TestFlight'
-                      }
+                      content={t('labels.appStoreIpaDesc')}
                       position="top"
                       className="w-full"
                     >
@@ -3413,11 +3355,7 @@ export default function App() {
                     </Tooltip>
 
                     <Tooltip
-                      content={
-                        language === 'tr'
-                          ? 'Android (AAB) ve iOS (IPA) eş zamanlı tam dağıtım'
-                          : 'Simultaneous full distribution for Android (AAB) & iOS (IPA)'
-                      }
+                      content={t('labels.bothPlatformsDesc')}
                       position="top"
                       className="w-full"
                     >
@@ -3436,7 +3374,7 @@ export default function App() {
                         </span>
                         <span>{t('pipeline.allPlatforms')}</span>
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
-                          İkisi Birden
+                          {t('pipeline.both')}
                         </span>
                       </button>
                     </Tooltip>
@@ -3549,12 +3487,12 @@ export default function App() {
                               isValidGoogleTrack(activeComparison.googlePlay.track) ? (
                                 <span className="text-[10px] text-foreground font-medium flex items-center gap-1">
                                   <span className="w-1.5 h-1.5 rounded-full bg-foreground"></span>
-                                  {language === 'tr' ? 'Yayındaki Kanal:' : 'Live Track:'}{' '}
+                                  {t('labels.liveChannelLabel')}{' '}
                                   {getGoogleTrackLabel(activeComparison.googlePlay.track, t)}
                                 </span>
                               ) : (
                                 <span className="text-[10px] text-muted-foreground">
-                                  {language === 'tr' ? 'Otomatik Seçili' : 'Auto Selected'}
+                                  {t('labels.autoSelectedBadge')}
                                 </span>
                               )}
                             </div>
@@ -3635,9 +3573,7 @@ export default function App() {
                       {targetIos && (
                         <div className="space-y-2 pt-1 border-t border-border/60 text-xs text-muted-foreground">
                           <p className="text-[11px] leading-relaxed">
-                            {language === 'tr'
-                              ? 'Yüklenen IPA doğrudan TestFlight derlemelerine eklenir ve hazır olduğunda incelemeye gönderilir.'
-                              : 'Uploaded IPA is added to TestFlight builds and submitted for review when ready.'}
+                            {t('labels.ipaTestFlightDesc')}
                           </p>
                           <div className="text-[10px] font-mono text-muted-foreground bg-secondary/50 p-2 rounded border border-border">
                             Auth: ES256 JWT • Key:{' '}
@@ -3661,9 +3597,7 @@ export default function App() {
                           {t('ai.releaseNotesTitle')}
                         </h4>
                         <span className="text-[11px] text-muted-foreground">
-                          {language === 'tr'
-                            ? 'Mağaza standartlarında madde imli (•) temiz çıktılar'
-                            : 'Clean bulleted (•) output tailored for store guidelines'}
+                          {t('labels.bulletNotesCleanOutput')}
                         </span>
                       </div>
                     </div>
@@ -3680,27 +3614,19 @@ export default function App() {
                             )
                           }
                           className="text-xs font-semibold bg-transparent text-foreground cursor-pointer focus:outline-none"
-                          title={
-                            language === 'tr'
-                              ? 'Sürüm notu üretim motoru'
-                              : 'Release note generation engine'
-                          }
+                          title={t('labels.releaseNotesEngine')}
                         >
                           <option value="gemini">Google Gemini</option>
                           <option value="openai">OpenAI (ChatGPT)</option>
                           <option value="anthropic">Anthropic (Claude)</option>
                           <option value="conventional">
-                            {language === 'tr' ? 'Konvansiyonel Çözücü' : 'Conventional Solver'}
+                            {t('labels.conventionalResolver')}
                           </option>
                         </select>
                       </div>
 
                       <Tooltip
-                        content={
-                          language === 'tr'
-                            ? 'Yapay zeka modelleri ve API anahtarlarını yönet'
-                            : 'Manage AI models and API credentials'
-                        }
+                        content={t('labels.manageAiModelsAndKeys')}
                         position="top"
                       >
                         <button
@@ -3716,11 +3642,7 @@ export default function App() {
                       </Tooltip>
 
                       <Tooltip
-                        content={
-                          language === 'tr'
-                            ? 'Git geçmişindeki commitleri analiz ederek çift dilli sürüm notu üretir'
-                            : 'Analyzes Git commits and generates dual-language release notes'
-                        }
+                        content={t('labels.dualLanguageNotesDesc')}
                         position="top"
                       >
                         <button
@@ -3749,11 +3671,7 @@ export default function App() {
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{t('ai.notesTr')}</span>
                         <Tooltip
-                          content={
-                            language === 'tr'
-                              ? 'Türkçe sürüm notunu panoya kopyala'
-                              : 'Copy Turkish release notes to clipboard'
-                          }
+                          content={t('labels.copyTrNotes')}
                           position="top"
                         >
                           <button
@@ -3796,11 +3714,7 @@ export default function App() {
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{t('ai.notesEn')}</span>
                         <Tooltip
-                          content={
-                            language === 'tr'
-                              ? 'İngilizce sürüm notunu panoya kopyala'
-                              : 'Copy English release notes to clipboard'
-                          }
+                          content={t('labels.copyEnNotes')}
                           position="top"
                         >
                           <button
@@ -3821,7 +3735,11 @@ export default function App() {
                         rows={6}
                         value={releaseNotesEN}
                         onChange={(e) => setReleaseNotesEN(e.target.value)}
-                        placeholder="Release notes not generated yet. Click 'Generate Notes with AI' to create or enter manually..."
+                        placeholder={
+                          language === 'tr'
+                            ? "Sürüm notu henüz oluşturulmadı. 'AI ile Sürüm Notu Üret' butonuna tıklayarak oluşturun veya buraya manuel girin..."
+                            : "Release notes not generated yet. Click 'Generate Notes with AI' to create or enter manually..."
+                        }
                         className="w-full text-xs p-3 rounded-lg border border-border bg-background text-foreground font-sans focus:outline-none focus:ring-1 focus:ring-primary resize-none leading-relaxed placeholder:text-muted-foreground/60"
                       />
                       <div className="flex items-center justify-between text-[11px] px-1">
@@ -3847,25 +3765,25 @@ export default function App() {
                       {t('pipeline.startRelease')}
                     </h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                      6 kurumsal aşamalı sıralı dağıtım zincirini yürütür.
+                      {t('pipeline.startReleaseDesc')}
                     </p>
                   </div>
 
                   <div className="p-3 rounded-lg bg-secondary/50 border border-border space-y-1.5 text-xs">
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Hedef Proje:</span>
+                      <span className="text-muted-foreground">{t('labels.targetProjectColon')}</span>
                       <span className="font-semibold text-foreground truncate max-w-[130px]">
                         {projectName}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Hedef Sürüm:</span>
+                      <span className="text-muted-foreground">{t('labels.targetVersionColon')}</span>
                       <span className="font-mono font-bold text-foreground">
                         {nextVersion}+{nextBuildNumber}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Hedef Platform:</span>
+                      <span className="text-muted-foreground">{t('labels.targetPlatformColon')}</span>
                       <span className="font-semibold text-[11px] font-mono px-2 py-0.5 rounded-full border border-border bg-secondary text-secondary-foreground">
                         {targetAndroid && targetIos
                           ? t('pipeline.both')
@@ -3876,7 +3794,7 @@ export default function App() {
                     </div>
                     {targetAndroid && (
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Play Kanalı:</span>
+                        <span className="text-muted-foreground">{t('labels.playChannelColon')}</span>
                         <span className="font-semibold text-xs text-foreground">
                           {getGoogleTrackLabel(googleTrack, t)}
                         </span>
@@ -3977,8 +3895,8 @@ export default function App() {
                       <CheckCircle2 className="w-4 h-4 text-foreground" />
                       <span>
                         {language === 'tr'
-                          ? `Sürüm ${currentDistributedVersion || currentVersion} başarıyla dağıtıldı!`
-                          : `Version ${currentDistributedVersion || currentVersion} released successfully!`}
+                          ? `Sürüm ${currentDistributedVersion || currentVersion} ${t('labels.versionDistributedSuccess')}`
+                          : `Version ${currentDistributedVersion || currentVersion} ${t('labels.versionDistributedSuccess')}`}
                       </span>
                     </div>
                   )}
@@ -3989,9 +3907,7 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
                       <Layers className="w-4 h-4 text-primary" />
-                      {language === 'tr'
-                        ? 'Dağıtım Boru Hattı (6 Aşama)'
-                        : 'Release Pipeline (6 Stages)'}
+                      {t('labels.pipelineStagesTitle')}
                     </h4>
                     <span className="text-xs font-mono font-semibold text-primary">
                       {currentActiveStep}/6
@@ -4004,8 +3920,8 @@ export default function App() {
                         key={step.id}
                         content={
                           language === 'tr'
-                            ? `Aşama ${step.id}: ${step.name} • Durum: ${step.status.toUpperCase()}`
-                            : `Stage ${step.id}: ${step.name} • Status: ${step.status.toUpperCase()}`
+                            ? `Aşama ${step.id}: ${getStepLocalizedName(step)} • Durum: ${step.status.toUpperCase()}`
+                            : `Stage ${step.id}: ${getStepLocalizedName(step)} • Status: ${step.status.toUpperCase()}`
                         }
                         position="left"
                         className="w-full"
@@ -4031,7 +3947,7 @@ export default function App() {
                               <span
                                 className={`truncate block font-medium ${step.status === 'skipped' ? 'line-through text-muted-foreground/60' : ''}`}
                               >
-                                {step.name}
+                                {getStepLocalizedName(step)}
                               </span>
                               {step.details && (
                                 <span className="text-[10px] text-muted-foreground/80 block truncate">
@@ -4227,7 +4143,7 @@ export default function App() {
                     {t('pipeline.liveLogs')}
                   </h4>
                   <span className="text-[10px] font-mono text-muted-foreground px-2 py-0.5 rounded bg-muted/60 border border-border/40">
-                    {currentLogs.length} {language === 'tr' ? 'satır log' : 'log lines'}
+                    {currentLogs.length} {t('labels.linesLogCount')}
                   </span>
                 </div>
 
@@ -4257,9 +4173,7 @@ export default function App() {
               <div className="p-4 rounded-lg bg-zinc-950 text-zinc-100 font-mono text-xs h-64 overflow-y-auto space-y-1 border border-zinc-800 select-text cursor-text selection:bg-primary selection:text-primary-foreground">
                 {currentLogs.length === 0 ? (
                   <div className="text-zinc-500 flex items-center justify-center h-full select-none">
-                    {language === 'tr'
-                      ? 'Dağıtım başlatıldığında canlı orkestrasyon adımları ve işlem logları burada akacaktır.'
-                      : 'Live orchestration steps and process logs will stream here when release begins.'}
+                    {t('labels.liveLogsEmptyDesc')}
                   </div>
                 ) : (
                   currentLogs.map((log, idx) => (
@@ -4386,11 +4300,7 @@ export default function App() {
                 {/* Proje Filtresi */}
                 <div className="flex items-center p-0.5 bg-secondary rounded-lg border border-border">
                   <Tooltip
-                    content={
-                      language === 'tr'
-                        ? 'Sistemdeki tüm kayıtlı projelerin geçmişi'
-                        : 'History of all registered projects'
-                    }
+                    content={t('labels.allRegisteredProjectsHistory')}
                     position="top"
                   >
                     <button
@@ -4405,7 +4315,7 @@ export default function App() {
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      {language === 'tr' ? 'Tüm Projeler' : 'All Projects'}
+                      {t('labels.allProjectsOption')}
                     </button>
                   </Tooltip>
                   {projectName && (
@@ -4503,9 +4413,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <Rocket className="w-4 h-4 text-primary" />
                     <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      {language === 'tr'
-                        ? `Kayıtlı Dağıtımlar (${filteredReleases.length})`
-                        : `Recorded Releases (${filteredReleases.length})`}
+                      {t('labels.recordedReleasesTitle')} ({filteredReleases.length})
                     </h3>
                   </div>
                   <span className="text-[10px] font-mono text-muted-foreground">
@@ -4520,9 +4428,7 @@ export default function App() {
                       {t('history.noReleasesFound')}
                     </p>
                     <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
-                      {language === 'tr'
-                        ? 'Seçilen filtre ve arama kriterlerine uygun sürüm kaydı bulunmamaktadır.'
-                        : 'No release records found matching the selected criteria.'}
+                      {t('labels.noMatchingReleases')}
                     </p>
                   </div>
                 ) : (
@@ -4581,9 +4487,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <FileText className="w-4 h-4 text-primary" />
                     <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                      {language === 'tr'
-                        ? `Denetim Günlükleri (${filteredAuditLogs.length})`
-                        : `Audit Logs (${filteredAuditLogs.length})`}
+                      {t('labels.auditLogsTitle')} ({filteredAuditLogs.length})
                     </h3>
                   </div>
                   <span className="text-[10px] font-mono text-muted-foreground">
@@ -4598,9 +4502,7 @@ export default function App() {
                       {t('history.noAuditLogsFound')}
                     </p>
                     <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
-                      {language === 'tr'
-                        ? 'Seçilen kriterlerle eşleşen SQLite denetim kaydı bulunamadı.'
-                        : 'No audit logs found matching the selected criteria.'}
+                      {t('labels.noMatchingAuditLogs')}
                     </p>
                   </div>
                 ) : (
@@ -4642,7 +4544,7 @@ export default function App() {
 
                           {log.releaseId && (
                             <div className="text-[10px] font-mono text-muted-foreground/80 pt-1 border-t border-border/40">
-                              {language === 'tr' ? 'İlişkili Dağıtım ID:' : 'Related Release ID:'}{' '}
+                              {t('labels.relatedReleaseIdLabel')}{' '}
                               <span className="text-foreground">{log.releaseId}</span>
                             </div>
                           )}
@@ -4666,7 +4568,7 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-sm flex items-center gap-2 text-foreground">
                 <FolderPlus className="w-4 h-4 text-primary" />
-                {language === 'tr' ? 'Yeni Proje Dizini Ekle' : 'Add New Project Directory'}
+                {t('labels.addNewProjectDirectoryModal')}
               </h3>
               <button
                 onClick={() => setShowAddProjectModal(false)}
@@ -4679,7 +4581,7 @@ export default function App() {
             <form onSubmit={(e) => void handleAddNewProject(e)} className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1">
-                  {language === 'tr' ? 'Proje Adı (İsteğe bağlı):' : 'Project Name (Optional):'}
+                  {t('labels.projectNameOptional')}
                 </label>
                 <input
                   type="text"
@@ -4738,9 +4640,7 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-sm flex items-center gap-2 text-foreground">
                 <Compass className="w-4 h-4 text-primary" />
-                {language === 'tr'
-                  ? 'Ortamdaki Flutter Projelerini Tara ve İçe Aktar'
-                  : 'Scan & Import Flutter Projects'}
+                {t('labels.scanAndImportProjectsTitle')}
               </h3>
               <button
                 onClick={() => setShowScanModal(false)}
@@ -4752,27 +4652,21 @@ export default function App() {
 
             <div className="space-y-4 text-xs">
               <p className="text-muted-foreground leading-relaxed">
-                {language === 'tr'
-                  ? 'Webicro Distribution, belirttiğiniz dizin veya genel geliştirici klasörlerinizdeki tüm Flutter (pubspec.yaml içeren) uygulamalarını otomatik olarak tespit eder, paket kimliklerini çıkartır ve mağaza durumlarıyla eşleştirir.'
-                  : 'Webicro Distribution automatically discovers all Flutter apps (containing pubspec.yaml) in your directories, extracts package IDs, and checks store statuses.'}
+                {t('labels.scanProjectsBannerDesc')}
               </p>
 
               {/* HIZLI OTOMATİK TARAMA */}
               <div className="p-3.5 rounded-lg bg-secondary/50 border border-border space-y-2">
                 <div className="font-semibold text-foreground flex items-center justify-between">
                   <span>
-                    {language === 'tr'
-                      ? '1. Genel Çalışma Alanını Otomatik Tara'
-                      : '1. Auto-Scan General Workspace'}
+                    {t('labels.scanGlobalAreaTitle')}
                   </span>
                   <span className="text-[10px] text-muted-foreground font-mono">
                     Desktop, Workspace, Projects
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {language === 'tr'
-                    ? 'Ev dizininizdeki standart proje klasörlerini ve mevcut deponun kardeş dizinlerini derinlemesine tarar.'
-                    : 'Deep-scans standard project directories in your home folder and sibling repositories.'}
+                  {t('labels.scanGlobalAreaDesc')}
                 </p>
                 <button
                   type="button"
@@ -4798,9 +4692,7 @@ export default function App() {
                 className="p-3.5 rounded-lg border border-border bg-background space-y-2.5"
               >
                 <div className="font-semibold text-foreground">
-                  {language === 'tr'
-                    ? '2. Özel Bir Klasör Dizinini Tara'
-                    : '2. Scan a Custom Folder Directory'}
+                  {t('labels.scanCustomFolderTitle')}
                 </div>
                 <div>
                   <input
@@ -4811,9 +4703,7 @@ export default function App() {
                     className="w-full text-xs font-mono px-3 py-2 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   <span className="text-[10px] text-muted-foreground mt-1 block">
-                    {language === 'tr'
-                      ? 'Bu klasörün altındaki tüm alt dizinler taranır ve bulunan tüm Flutter projeleri listeye eklenir.'
-                      : 'All subdirectories under this folder will be scanned and found Flutter projects added.'}
+                    {t('labels.scanCustomFolderDesc')}
                   </span>
                 </div>
                 <button
@@ -4840,9 +4730,7 @@ export default function App() {
                 }}
                 className="text-xs text-primary hover:underline cursor-pointer"
               >
-                {language === 'tr'
-                  ? '+ Tek bir projeyi doğrudan dosya yoluyla ekle'
-                  : '+ Add a single project directly via file path'}
+                {t('labels.addSingleProjectDirectly')}
               </button>
               <button
                 type="button"
@@ -4864,14 +4752,13 @@ export default function App() {
               <div>
                 <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
                   <Key className="w-5 h-5 text-primary" />
-                  {language === 'tr'
-                    ? 'Kendi API Kimliklerini Bağla & Doğrula'
-                    : 'Connect & Verify Your API Credentials'}
+                  {t('labels.connectAndVerifyApiKeysModal')}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {language === 'tr'
-                    ? `Bu projeye (${projectName}) veya tüm projelerinize kendi Google Play ve App Store API anahtarlarınızı bağlayın.`
-                    : `Connect your own Google Play and App Store API keys to this project (${projectName}) or all your projects.`}
+                  {t('labels.connectCustomApiKeysDesc').replace(
+                    '{project}',
+                    projectName || (language === 'tr' ? 'Seçili Proje' : 'Selected Project'),
+                  )}
                 </p>
               </div>
               <button
@@ -4938,7 +4825,7 @@ export default function App() {
                 <div className="p-3 rounded-lg bg-background border border-border flex items-center justify-between text-xs">
                   <div>
                     <span className="text-muted-foreground">
-                      {language === 'tr' ? 'Aktif Kayıtlı Hesap:' : 'Active Registered Account:'}
+                      {t('labels.activeRegisteredAccount')}
                     </span>{' '}
                     <span className="font-mono font-semibold text-foreground">
                       {googlePlayInfo.serviceAccount}
@@ -4952,9 +4839,7 @@ export default function App() {
                     }`}
                   >
                     {googlePlayInfo.connected
-                      ? language === 'tr'
-                        ? 'Bağlantı Hazır'
-                        : 'Connected'
+                      ? t('labels.connectionReadyBadge')
                       : language === 'tr'
                         ? 'Bekliyor'
                         : 'Pending'}
@@ -4964,14 +4849,10 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                     <span>
-                      {language === 'tr'
-                        ? 'Google Cloud Service Account JSON İçeriği:'
-                        : 'Google Cloud Service Account JSON Content:'}
+                      {t('labels.googlePlayJsonLabel')}
                     </span>
                     <span className="text-[10px] font-normal text-muted-foreground">
-                      {language === 'tr'
-                        ? 'JSON dosyasını açıp içeriğini yapıştırın'
-                        : 'Open JSON file and paste content'}
+                      {t('labels.openJsonPasteContent')}
                     </span>
                   </label>
                   <textarea
@@ -4986,14 +4867,10 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                     <span>
-                      {language === 'tr'
-                        ? 'Veya Doğrudan JSON Dosya Yolu:'
-                        : 'Or Direct JSON File Path:'}
+                      {t('labels.orDirectJsonPath')}
                     </span>
                     <span className="text-[10px] font-normal text-muted-foreground">
-                      {language === 'tr'
-                        ? 'örneğin: ~/.secrets/google-play-key.json'
-                        : 'e.g.: ~/.secrets/google-play-key.json'}
+                      {t('labels.jsonPathExamplePlaceholder')}
                     </span>
                   </label>
                   <input
@@ -5017,20 +4894,14 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 shrink-0 text-foreground" />
                         <span>
-                          {googleTestResult.message ||
-                            (language === 'tr'
-                              ? 'Google Play Service Account başarıyla bağlandı ve kaydedildi!'
-                              : 'Google Play Service Account connected and saved successfully!')}
+                          {googleTestResult.message || t('labels.googlePlaySavedSuccess')}
                         </span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
                         <X className="w-3.5 h-3.5 shrink-0 text-destructive" />
                         <span>
-                          {googleTestResult.error ||
-                            (language === 'tr'
-                              ? 'Doğrulama başarısız oldu.'
-                              : 'Verification failed.')}
+                          {googleTestResult.error || t('settings.verificationFailed')}
                         </span>
                       </div>
                     )}
@@ -5046,18 +4917,12 @@ export default function App() {
                       className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                     />
                     <span>
-                      {language === 'tr'
-                        ? 'Tüm projeler için genel (global) anahtar olarak kaydet'
-                        : 'Save as global key for all projects'}
+                      {t('labels.saveAsGlobalKey')}
                     </span>
                   </label>
 
                   <Tooltip
-                    content={
-                      language === 'tr'
-                        ? 'Google Play Service Account kimliğini test eder ve kalıcı olarak kaydeder'
-                        : 'Tests and permanently saves Google Play Service Account'
-                    }
+                    content={t('labels.googlePlayTestAndSaveDesc')}
                     position="top"
                   >
                     <button
@@ -5137,14 +5002,10 @@ export default function App() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground flex items-center justify-between">
                     <span>
-                      {language === 'tr'
-                        ? 'AuthKey .p8 Özel Anahtar İçeriği:'
-                        : 'AuthKey .p8 Private Key Content:'}
+                      {t('labels.authKeyP8ContentLabel')}
                     </span>
                     <span className="text-[10px] font-normal text-muted-foreground">
-                      {language === 'tr'
-                        ? '-----BEGIN PRIVATE KEY----- bloğunu yapıştırın'
-                        : 'Paste -----BEGIN PRIVATE KEY----- block'}
+                      {t('labels.pastePrivateBlockPlaceholder')}
                     </span>
                   </label>
                   <textarea
@@ -5168,20 +5029,14 @@ export default function App() {
                       <div className="flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 shrink-0 text-foreground" />
                         <span>
-                          {appleTestResult.message ||
-                            (language === 'tr'
-                              ? 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!'
-                              : 'Apple App Store Connect API connected and saved successfully!')}
+                          {appleTestResult.message || t('labels.appStoreSavedSuccess')}
                         </span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
                         <X className="w-3.5 h-3.5 shrink-0 text-destructive" />
                         <span>
-                          {appleTestResult.error ||
-                            (language === 'tr'
-                              ? 'Doğrulama başarısız oldu.'
-                              : 'Verification failed.')}
+                          {appleTestResult.error || t('settings.verificationFailed')}
                         </span>
                       </div>
                     )}
@@ -5197,18 +5052,12 @@ export default function App() {
                       className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                     />
                     <span>
-                      {language === 'tr'
-                        ? 'Tüm projeler için genel (global) anahtar olarak kaydet'
-                        : 'Save as global key for all projects'}
+                      {t('labels.saveAsGlobalKey')}
                     </span>
                   </label>
 
                   <Tooltip
-                    content={
-                      language === 'tr'
-                        ? 'Apple App Store Connect API anahtarını test eder ve kalıcı olarak kaydeder'
-                        : 'Tests and permanently saves Apple App Store Connect API key'
-                    }
+                    content={t('labels.appStoreTestAndSaveDesc')}
                     position="top"
                   >
                     <button
@@ -5221,12 +5070,8 @@ export default function App() {
                       <Save className={`w-3.5 h-3.5 ${isSavingApple ? 'animate-spin' : ''}`} />
                       <span>
                         {isSavingApple
-                          ? language === 'tr'
-                            ? 'Kaydediliyor & Test Ediliyor...'
-                            : 'Saving & Testing...'
-                          : language === 'tr'
-                            ? 'Kaydet ve Bağlantıyı Doğrula'
-                            : 'Save and Verify Connection'}
+                          ? (language === 'tr' ? 'Kaydediliyor & Test Ediliyor...' : 'Saving & Testing...')
+                          : t('labels.saveAndVerifyConnectionBtn')}
                       </span>
                     </button>
                   </Tooltip>
@@ -5238,9 +5083,7 @@ export default function App() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-foreground">
-                          {language === 'tr'
-                            ? 'App Store Hesabındaki Kayıtlı Uygulamalar:'
-                            : 'Registered Apps in App Store Account:'}
+                          {t('labels.registeredAppsInAccount')}
                         </span>
                         {appleConnectApps.length > 0 && (
                           <span className="text-[10px] font-mono bg-secondary text-foreground border border-border px-1.5 py-0.5 rounded font-medium">
@@ -5260,12 +5103,8 @@ export default function App() {
                         />
                         <span>
                           {isLoadingAppleApps
-                            ? language === 'tr'
-                              ? 'Sorgulanıyor...'
-                              : 'Fetching...'
-                            : language === 'tr'
-                              ? 'Listeyi Yenile'
-                              : 'Refresh List'}
+                            ? t('labels.fetchingAppsCount')
+                            : t('settings.refreshList')}
                         </span>
                       </button>
                     </div>
@@ -5274,9 +5113,7 @@ export default function App() {
                       <div className="p-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-2 border border-border/60 rounded-lg bg-secondary/20">
                         <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary" />
                         <span>
-                          {language === 'tr'
-                            ? 'App Store Connect API üzerinden kayıtlı uygulamalar alınıyor...'
-                            : 'Fetching registered applications via App Store Connect API...'}
+                          {t('labels.fetchingAppsViaApi')}
                         </span>
                       </div>
                     ) : appleConnectApps.length > 0 ? (
@@ -5300,9 +5137,7 @@ export default function App() {
                                   <span>{app.name}</span>
                                   {isMatchedWithCurrent && (
                                     <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-secondary text-foreground border border-border font-mono">
-                                      {language === 'tr'
-                                        ? 'Aktif Proje İle Eşleşti'
-                                        : 'Matched Active Project'}
+                                      {t('labels.activeProjectMatchedBadge')}
                                     </span>
                                   )}
                                 </div>
@@ -5481,23 +5316,17 @@ export default function App() {
                           onClick={() => void fetchAiModels('gemini', geminiApiKeyInput)}
                           disabled={isLoadingAiModels}
                           className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                          title={
-                            language === 'tr'
-                              ? 'API anahtarına ait modelleri canlı sorgula'
-                              : 'Query models live for this API key'
-                          }
+                          title={t('labels.queryModelsLiveBtn')}
                         >
                           <RefreshCw
                             className={`w-3 h-3 ${isLoadingAiModels ? 'animate-spin' : ''}`}
                           />
                           <span>
                             {isLoadingAiModels
-                              ? language === 'tr'
-                                ? 'Modeller Alınıyor...'
-                                : 'Fetching Models...'
-                              : language === 'tr'
+                              ? t('labels.fetchingModelsTitle')
+                              : (language === 'tr'
                                 ? "API'den Modelleri Getir"
-                                : 'Fetch Models from API'}
+                                : 'Fetch Models from API')}
                           </span>
                         </button>
                       </div>
@@ -5510,17 +5339,13 @@ export default function App() {
                           <option key={m.id} value={m.id}>
                             {m.name}{' '}
                             {m.recommended
-                              ? language === 'tr'
-                                ? '(Önerilen)'
-                                : '(Recommended)'
+                              ? t('labels.recommendedBadge')
                               : ''}
                           </option>
                         ))}
                       </select>
                       <p className="text-[10px] text-muted-foreground">
-                        {language === 'tr'
-                          ? 'API anahtarınızın desteklediği modeller otomatik taranır. Google Gemini 2.5 ve 3.x serisi tam desteklenir.'
-                          : 'Models supported by your API key are auto-scanned. Full support for Gemini 2.5 & 3.x series.'}
+                        {t('labels.geminiModelsDesc')}
                       </p>
                     </div>
                   </div>
@@ -5554,9 +5379,7 @@ export default function App() {
                           }}
                           placeholder={
                             aiConfiguredInfo.openaiConfigured
-                              ? language === 'tr'
-                                ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)'
-                                : 'Type to enter new key (current preserved)'
+                              ? t('labels.typeToChangeKeyPlaceholder')
                               : 'sk-proj-...'
                           }
                           className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
@@ -5583,23 +5406,17 @@ export default function App() {
                           onClick={() => void fetchAiModels('openai', openaiApiKeyInput)}
                           disabled={isLoadingAiModels}
                           className="text-[10px] text-primary hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                          title={
-                            language === 'tr'
-                              ? 'OpenAI modellerini canlı sorgula'
-                              : 'Query OpenAI models live'
-                          }
+                          title={t('labels.queryModelsLiveBtn')}
                         >
                           <RefreshCw
                             className={`w-3 h-3 ${isLoadingAiModels ? 'animate-spin' : ''}`}
                           />
                           <span>
                             {isLoadingAiModels
-                              ? language === 'tr'
-                                ? 'Modeller Alınıyor...'
-                                : 'Fetching Models...'
-                              : language === 'tr'
+                              ? t('labels.fetchingModelsTitle')
+                              : (language === 'tr'
                                 ? "API'den Modelleri Getir"
-                                : 'Fetch Models from API'}
+                                : 'Fetch Models from API')}
                           </span>
                         </button>
                       </div>
@@ -5612,9 +5429,7 @@ export default function App() {
                           <option key={m.id} value={m.id}>
                             {m.name}{' '}
                             {m.recommended
-                              ? language === 'tr'
-                                ? '(Önerilen)'
-                                : '(Recommended)'
+                              ? t('labels.recommendedBadge')
                               : ''}
                           </option>
                         ))}
@@ -5651,9 +5466,7 @@ export default function App() {
                           }}
                           placeholder={
                             aiConfiguredInfo.anthropicConfigured
-                              ? language === 'tr'
-                                ? 'Yeni anahtar girmek için yazın (mevcut korunuyor)'
-                                : 'Type to enter new key (current preserved)'
+                              ? t('labels.typeToChangeKeyPlaceholder')
                               : 'sk-ant-api03-...'
                           }
                           className="w-full text-xs font-mono px-3 py-2 pr-9 rounded-md border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
@@ -5681,9 +5494,7 @@ export default function App() {
                           <option key={m.id} value={m.id}>
                             {m.name}{' '}
                             {m.recommended
-                              ? language === 'tr'
-                                ? '(Önerilen)'
-                                : '(Recommended)'
+                              ? t('labels.recommendedBadge')
                               : ''}
                           </option>
                         ))}
@@ -5698,15 +5509,11 @@ export default function App() {
                     <div className="flex items-center gap-2 text-foreground font-semibold">
                       <CheckCircle2 className="w-4 h-4 text-foreground" />
                       <span>
-                        {language === 'tr'
-                          ? 'Çevrimdışı ve Sıfır Yapılandırma'
-                          : 'Offline & Zero Configuration'}
+                        {t('labels.offlineZeroConfigDesc')}
                       </span>
                     </div>
                     <p className="text-muted-foreground leading-relaxed text-[11px]">
-                      {language === 'tr'
-                        ? 'Herhangi bir API anahtarı gerekmez. Git geçmişinizdeki feat:, fix:, perf:, refactor: etiketlerini çözümleyerek mağaza standartlarında profesyonel çift dilli sürüm notu üretir.'
-                        : 'No API key required. Analyzes feat:, fix:, perf:, refactor: tags in Git history to generate professional bilingual release notes.'}
+                      {t('labels.offlineGitNotesDesc')}
                     </p>
                   </div>
                 )}
@@ -5740,19 +5547,13 @@ export default function App() {
                       className="rounded text-primary focus:ring-primary w-4 h-4 cursor-pointer"
                     />
                     <span>
-                      {language === 'tr'
-                        ? 'Tüm projeler için genel (global) anahtar olarak kaydet'
-                        : 'Save as global key for all projects'}
+                      {t('labels.saveAsGlobalKey')}
                     </span>
                   </label>
 
                   <div className="flex items-center gap-2">
                     <Tooltip
-                      content={
-                        language === 'tr'
-                          ? 'Seçilen yapay zeka modeline test isteği göndererek doğrular'
-                          : 'Sends a test request to verify selected AI model'
-                      }
+                      content={t('labels.testAiRequestDesc')}
                       position="top"
                     >
                       <button
@@ -5762,21 +5563,13 @@ export default function App() {
                         className="px-3.5 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/80 text-foreground font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
                       >
                         {isTestingAI
-                          ? language === 'tr'
-                            ? 'Test Ediliyor...'
-                            : 'Testing...'
-                          : language === 'tr'
-                            ? 'Bağlantıyı Test Et'
-                            : 'Test Connection'}
+                          ? (language === 'tr' ? 'Test Ediliyor...' : 'Testing...')
+                          : t('labels.testConnectionBtn')}
                       </button>
                     </Tooltip>
 
                     <Tooltip
-                      content={
-                        language === 'tr'
-                          ? 'Yapay zeka model ve anahtar yapılandırmasını kaydeder'
-                          : 'Saves AI model and key configuration'
-                      }
+                      content={t('labels.saveAiConfigDesc')}
                       position="top"
                     >
                       <button
@@ -5787,12 +5580,8 @@ export default function App() {
                         <Save className={`w-3.5 h-3.5 ${isSavingAI ? 'animate-spin' : ''}`} />
                         <span>
                           {isSavingAI
-                            ? language === 'tr'
-                              ? 'Kaydediliyor...'
-                              : 'Saving...'
-                            : language === 'tr'
-                              ? 'Ayarları Kaydet'
-                              : 'Save Settings'}
+                            ? (language === 'tr' ? 'Kaydediliyor...' : 'Saving...')
+                            : t('labels.saveSettingsBtn')}
                         </span>
                       </button>
                     </Tooltip>
