@@ -17,19 +17,19 @@ RED="\033[0;31m"
 RESET="\033[0m"
 
 log_info() {
-    printf "${BLUE}ℹ${RESET} %s\n" "$1"
+    printf "${BLUE}ℹ${RESET} %b\n" "$1"
 }
 
 log_success() {
-    printf "${GREEN}✔${RESET} %s\n" "$1"
+    printf "${GREEN}✔${RESET} %b\n" "$1"
 }
 
 log_warn() {
-    printf "${YELLOW}⚠${RESET} %s\n" "$1"
+    printf "${YELLOW}⚠${RESET} %b\n" "$1"
 }
 
 log_error() {
-    printf "${RED}✖${RESET} %s\n" "$1"
+    printf "${RED}✖${RESET} %b\n" "$1"
 }
 
 print_banner() {
@@ -145,9 +145,33 @@ verify_installation() {
 }
 
 main() {
+    DRY_RUN=false
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run)
+                DRY_RUN=true
+                ;;
+            --help|-h)
+                print_banner
+                printf "Kullanım: ./scripts/install.sh [seçenekler]\n\n"
+                printf "Seçenekler:\n"
+                printf "  --dry-run    Gerçek kurulum yapmadan ortam ve paket yöneticisi denetimlerini simüle eder\n"
+                printf "  --help, -h   Bu yardım mesajını gösterir\n\n"
+                exit 0
+                ;;
+        esac
+    done
+
     print_banner
     check_node
     detect_package_manager
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "${YELLOW}[DRY-RUN]${RESET} Gerçek kurulum adımları atlanıyor (simülasyon modu)."
+        log_info "${YELLOW}[DRY-RUN]${RESET} Tespit edilen hedef: Yerel depo veya @webicro/cli paketi."
+        log_success "${YELLOW}[DRY-RUN]${RESET} Ortam ve paket yöneticisi denetimleri başarıyla geçti."
+        exit 0
+    fi
 
     # Eğer yerel depo içerisinden çalıştırılıyorsa yerel build & link yap
     if ! install_local_repo; then
