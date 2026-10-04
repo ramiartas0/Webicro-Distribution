@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import type { AppStoreConfig, AppStoreUploadResult } from './types.js';
 import { generateAppStoreToken } from './auth.js';
 import { waitForBuildProcessing } from './polling.js';
@@ -214,6 +217,45 @@ export class AppStoreAdapter {
     });
   }
 
+  private ensureAuthKeyFile(): void {
+    const keyId = this.config.keyId;
+    const homedir = os.homedir();
+    const candidateDirs = [
+      path.join(homedir, '.appstoreconnect', 'private_keys'),
+      path.join(homedir, '.private_keys'),
+      path.join(homedir, 'private_keys'),
+    ];
+
+    for (const dir of candidateDirs) {
+      const candidateFile = path.join(dir, `AuthKey_${keyId}.p8`);
+      if (fs.existsSync(candidateFile)) {
+        return;
+      }
+    }
+
+    let keyContent = this.config.privateKeyContent;
+    if (!keyContent && this.config.privateKeyPath && fs.existsSync(this.config.privateKeyPath)) {
+      keyContent = fs.readFileSync(this.config.privateKeyPath, 'utf8');
+    }
+
+    if (!keyContent) {
+      return;
+    }
+
+    const targetDir = path.join(homedir, '.appstoreconnect', 'private_keys');
+    try {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
+      }
+      const targetFile = path.join(targetDir, `AuthKey_${keyId}.p8`);
+      fs.writeFileSync(targetFile, keyContent, { mode: 0o600, encoding: 'utf8' });
+    } catch (err: unknown) {
+      console.warn(
+        `[AppStoreAdapter] AuthKey dosyası yazılamadı: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   public async uploadAndRelease(
     ipaPath: string,
     versionString: string,
@@ -221,6 +263,7 @@ export class AppStoreAdapter {
     whatsNew?: Record<string, string>,
     submitReview?: boolean,
   ): Promise<AppStoreUploadResult> {
+    this.ensureAuthKeyFile();
     const appId = await this.getAppId();
 
     await new Promise<void>((resolve, reject) => {

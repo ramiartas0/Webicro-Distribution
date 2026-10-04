@@ -34,7 +34,7 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
           systemInstruction: SYSTEM_PROMPT,
           generationConfig: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 600,
+            maxOutputTokens: 2048,
             temperature: 0.1,
           },
         });

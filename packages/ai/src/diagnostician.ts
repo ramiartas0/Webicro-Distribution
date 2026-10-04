@@ -153,6 +153,30 @@ export class AIDiagnostician {
       };
     }
 
+    if (
+      combinedText.includes('failed to load authkey file') ||
+      combinedText.includes('altool exited with code 1') ||
+      combinedText.includes('could not be found in any of these locations')
+    ) {
+      return {
+        category: 'STORE_API',
+        categoryTitle: 'Apple altool AuthKey Anahtar Dosyası Hatası',
+        source: 'app_store',
+        sourceLabel: 'Apple CLI altool & App Store Connect API',
+        rootCause:
+          'Apple altool CLI aracı, IPA yüklemesi yapabilmek için ilgili AuthKey_<KEY_ID>.p8 dosyasını yerel anahtar dizinlerinde bulamadı.',
+        explanation:
+          'Apple altool CLI aracı API anahtarını diskte ~/.appstoreconnect/private_keys veya ~/.private_keys dizinlerinde arar. Bu dosya bulunamadığı için altool yükleme işlemi iptal edildi.',
+        autoFixAvailable: true,
+        autoFixAction: 'NONE',
+        solutionSteps: [
+          'Webicro Distribution bu dosyayı otomatik olarak ~/.appstoreconnect/private_keys dizinine konumlandırmaktadır.',
+          'App Store Connect Private Key (.p8) içeriğinin veya dosya yolunun eksiksiz girildiğinden emin olun.',
+          'Yükleme işlemini yeniden başlatın.',
+        ],
+      };
+    }
+
     return null;
   }
 
@@ -211,17 +235,31 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
     try {
       if (provider === 'gemini') {
         const gemini = new GoogleGenerativeAI(apiKey);
-        const modelName = options?.model || 'gemini-2.5-flash';
-        const model = gemini.getGenerativeModel({
-          model: modelName,
-          generationConfig: { responseMimeType: 'application/json' },
-        });
+        const candidateModels = [
+          options?.model || 'gemini-3.1-flash-lite',
+          'gemini-2.5-flash',
+          'gemini-3.5-flash',
+        ];
+        const uniqueCandidates = Array.from(new Set(candidateModels));
 
-        const resp = await model.generateContent([{ text: systemPrompt }, { text: userPrompt }]);
+        let lastError: unknown;
+        for (const candidate of uniqueCandidates) {
+          try {
+            const model = gemini.getGenerativeModel({
+              model: candidate,
+              generationConfig: { responseMimeType: 'application/json' },
+            });
 
-        const text = resp.response.text();
-        const parsed = JSON.parse(text) as AIDiagnosisResult;
-        return parsed;
+            const resp = await model.generateContent([{ text: systemPrompt }, { text: userPrompt }]);
+            const text = resp.response.text();
+            const parsed = JSON.parse(text) as AIDiagnosisResult;
+            return parsed;
+          } catch (mErr) {
+            lastError = mErr;
+            continue;
+          }
+        }
+        throw lastError;
       }
 
       if (provider === 'openai') {

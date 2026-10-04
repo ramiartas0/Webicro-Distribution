@@ -50,10 +50,22 @@ ${commitLines}
   }
 
   protected parseJsonSafely(text: string): unknown {
-    const cleanedText = text
-      .replace(/^```json\s*/i, '')
-      .replace(/\s*```$/i, '')
+    let cleanedText = text
+      .replace(/```(?:json)?/gi, '')
+      .replace(/```/g, '')
       .trim();
-    return JSON.parse(cleanedText);
+
+    const firstBrace = cleanedText.indexOf('{');
+    const lastBrace = cleanedText.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleanedText = cleanedText.substring(firstBrace, lastBrace + 1);
+    }
+
+    try {
+      return JSON.parse(cleanedText);
+    } catch {
+      const sanitized = cleanedText.replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(sanitized);
+    }
   }
 }

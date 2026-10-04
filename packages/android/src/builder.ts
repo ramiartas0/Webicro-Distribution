@@ -10,7 +10,7 @@ function runProcessWithLiveLogs(
   onLog?: (line: string) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, shell: true });
+    const child = spawn(command, args, { cwd });
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
