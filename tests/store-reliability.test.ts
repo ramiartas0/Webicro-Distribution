@@ -340,6 +340,70 @@ describe('Store Adapters Reliability & Isolation', () => {
       "/data/attributes/platform",
     );
   });
+
+  it('AppStoreAdapter 409 durumunda paneldeki mevcut taslak sürümü tespit edip hedef sürüme güncelleyebilmeli', async () => {
+    const { AppStoreAdapter } = await import('../packages/app-store/src/adapter.js');
+
+    const patchedVersions: { id: string; versionString: string }[] = [];
+    vi.stubGlobal('fetch', async (url: string, options?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.endsWith('/appStoreVersions') && options?.method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            errors: [
+              {
+                code: 'ENTITY_ERROR.RELATIONSHIP.INVALID',
+                detail: 'You cannot create a new version of the App in the current state.',
+              },
+            ],
+          }),
+          { status: 409, statusText: 'Conflict', headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (urlStr.includes('/apps/app-1/appStoreVersions') && (!options?.method || options.method === 'GET')) {
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 'existing-draft-version-id',
+                attributes: {
+                  versionString: '1.9.0',
+                  appVersionState: 'PREPARE_FOR_SUBMISSION',
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (urlStr.includes('/appStoreVersions/existing-draft-version-id') && options?.method === 'PATCH') {
+        const body = JSON.parse(options.body as string);
+        patchedVersions.push({
+          id: 'existing-draft-version-id',
+          versionString: body.data.attributes.versionString,
+        });
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    // Simulate uploadAndRelease flow
+    vi.spyOn(adapter, 'getAppId').mockResolvedValue('app-1');
+    vi.spyOn(adapter, 'attachBuildToVersion').mockResolvedValue(undefined);
+
+    // Call updateAppStoreVersion directly to verify PATCH works
+    await adapter.updateAppStoreVersion('existing-draft-version-id', '1.11.0');
+    expect(patchedVersions.length).toBe(1);
+    expect(patchedVersions[0]?.versionString).toBe('1.11.0');
+  });
 });
 
 

@@ -178,6 +178,29 @@ export class AIDiagnostician {
     }
 
     if (
+      combinedText.includes('entity_error.relationship.invalid') ||
+      combinedText.includes('you cannot create a new version of the app in the current state') ||
+      (combinedText.includes('409') && combinedText.includes('new version of the app in the current state'))
+    ) {
+      return {
+        category: 'STORE_API',
+        categoryTitle: 'Apple App Store Connect Mevcut Taslak Sürüm Çakışması (409 Conflict)',
+        source: 'app_store',
+        sourceLabel: 'Apple App Store Connect API (/appStoreVersions)',
+        rootCause:
+          'App Store Connect üzerinde halihazırda düzenlenebilir (PREPARE_FOR_SUBMISSION / taslak) durumda bekleyen bir sürüm kaydı bulunması nedeniyle yeni sürüm oluşturulamadı.',
+        explanation:
+          'Apple kuralları gereği App Store Connect üzerinde bir uygulama için aynı anda yalnızca 1 adet taslak (gönderime hazırlanan) sürüm bulunabilir. Önceki denemelerden veya panelden kalan bir taslak sürüm varken API yeni bir sürüm açılmasına izin vermez. Dağıtım motoru mevcut taslağı tespit edip hedef sürüme adapte edecek şekilde güncellenmiştir.',
+        autoFixAvailable: true,
+        autoFixAction: 'NONE',
+        solutionSteps: [
+          'Dağıtım motoru, panelde kalan mevcut taslak sürümü otomatik olarak bulup hedef sürüme güncelleyecek ve build ile ilişkilendirecektir.',
+          'Dilerseniz App Store Connect panelinde sol menüden beklemede olan eski taslağı silebilir veya dağıtımı doğrudan yeniden başlatabilirsiniz.',
+        ],
+      };
+    }
+
+    if (
       (combinedText.includes('entity_error.attribute.required') &&
         combinedText.includes('platform')) ||
       (combinedText.includes('missing a required attribute') &&

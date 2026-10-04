@@ -186,6 +186,26 @@ export class AppStoreAdapter {
     return data.data.id;
   }
 
+  public async updateAppStoreVersion(
+    versionId: string,
+    versionString: string,
+  ): Promise<void> {
+    const payload = {
+      data: {
+        type: 'appStoreVersions',
+        id: versionId,
+        attributes: {
+          versionString,
+        },
+      },
+    };
+
+    await this.fetchApi(`/appStoreVersions/${versionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
   public async updateWhatsNew(versionId: string, locale: string, text: string): Promise<void> {
     const localizations = (await this.fetchApi(
       `/appStoreVersions/${versionId}/appStoreVersionLocalizations`,
@@ -455,15 +475,45 @@ export class AppStoreAdapter {
 
     const versionId = await this.createAppStoreVersion(appId, versionString, 'IOS').catch(
       async (e) => {
-        const versions = (await this.fetchApi(
-          `/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}&filter[platform]=IOS`,
-        )) as { data: { id: string; attributes: { appStoreState: string } }[] };
-        const editable = versions.data.find((v) =>
-          ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(
-            v.attributes.appStoreState,
-          ),
-        );
-        if (editable) return editable.id;
+        // 1. Önce tam olarak aynı sürüm numarasına (versionString) sahip kayıtları ara
+        try {
+          const exactVersions = (await this.fetchApi(
+            `/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}&filter[platform]=IOS`,
+          )) as { data: { id: string; attributes: { appStoreState?: string; appVersionState?: string } }[] };
+          const exactEditable = exactVersions.data?.find((v) => {
+            const state = v.attributes.appVersionState || v.attributes.appStoreState || '';
+            return ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(state);
+          });
+          if (exactEditable) {
+            report?.(`Mevcut taslak sürüm bulundu (${versionString}): ID ${exactEditable.id}`);
+            return exactEditable.id;
+          }
+        } catch {}
+
+        // 2. Eğer Apple 409 (You cannot create a new version of the App in the current state) vermişse,
+        // panelde henüz gönderilmemiş / düzenlenebilir başka bir taslak sürüm (ör. 1.8.0 veya 1.9.0) vardır.
+        // Apple aynı anda yalnızca 1 adet taslak sürüme izin verir.
+        try {
+          const allVersions = (await this.fetchApi(
+            `/apps/${appId}/appStoreVersions?filter[platform]=IOS`,
+          )) as { data: { id: string; attributes: { versionString: string; appStoreState?: string; appVersionState?: string } }[] };
+          const anyEditable = allVersions.data?.find((v) => {
+            const state = v.attributes.appVersionState || v.attributes.appStoreState || '';
+            return ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(state);
+          });
+
+          if (anyEditable) {
+            report?.(
+              `Panelde mevcut düzenlenebilir taslak sürüm (${anyEditable.attributes.versionString}) bulundu. Hedef sürüme (${versionString}) güncelleniyor...`,
+            );
+            if (anyEditable.attributes.versionString !== versionString) {
+              await this.updateAppStoreVersion(anyEditable.id, versionString);
+              report?.(`Sürüm numarası güncellendi: ${anyEditable.attributes.versionString} -> ${versionString}`);
+            }
+            return anyEditable.id;
+          }
+        } catch {}
+
         throw e;
       },
     );
