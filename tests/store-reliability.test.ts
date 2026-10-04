@@ -170,3 +170,74 @@ describe('waitForBuildProcessing Live Progress & Abort', () => {
     await expect(promise).rejects.toThrow();
   });
 });
+
+describe('Store Adapters Reliability & Isolation', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('AppStoreAdapter.createAppStoreVersion zorunlu platform: "IOS" parametresini göndermeli', async () => {
+    const { AppStoreAdapter } = await import('../packages/app-store/src/adapter.js');
+
+    let sentBody: { data?: { attributes?: { platform?: string; versionString?: string } } } | null = null;
+    vi.stubGlobal('fetch', async (_url: string, options?: RequestInit) => {
+      if (options?.body) {
+        sentBody = JSON.parse(options.body as string);
+      }
+      return {
+        ok: true,
+        json: async () => ({ data: { id: 'version-123' } }),
+      };
+    });
+
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+
+    // Mock authenticate to avoid JWT generation failure
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    const versionId = await adapter.createAppStoreVersion('app-123', '1.8.0');
+    expect(versionId).toBe('version-123');
+    expect(sentBody).not.toBeNull();
+    expect(sentBody?.data?.attributes?.platform).toBe('IOS');
+    expect(sentBody?.data?.attributes?.versionString).toBe('1.8.0');
+  });
+
+  it('GooglePlayAdapter aktif yayın sürerken geçici Edit açmayarak açık Editi silinmekten korumalı', async () => {
+    const { GooglePlayAdapter } = await import('../packages/google-play/src/adapter.js');
+
+    const adapter = new GooglePlayAdapter({
+      packageName: 'com.webicro.protecttest',
+      serviceAccountJson: JSON.stringify({
+        client_email: 'test@example.com',
+        private_key: 'dummy',
+      }),
+    });
+
+    // Simulate active release edit
+    GooglePlayAdapter.setActiveReleaseEditForTesting('com.webicro.protecttest', 'active-edit-999');
+
+    expect(GooglePlayAdapter.isReleaseActive('com.webicro.protecttest')).toBe(true);
+
+    let fetchCalled = false;
+    vi.stubGlobal('fetch', async () => {
+      fetchCalled = true;
+      return { ok: true, json: async () => ({}) };
+    });
+
+    const res = await adapter.getSafeLatestVersionCode();
+    expect(res.status).toBe('found');
+    expect(res.message).toContain('Edit koruma altında');
+    // Fetch should NOT have been called to create or delete an edit!
+    expect(fetchCalled).toBe(false);
+
+    // Cleanup
+    GooglePlayAdapter.setActiveReleaseEditForTesting('com.webicro.protecttest', null);
+    expect(GooglePlayAdapter.isReleaseActive('com.webicro.protecttest')).toBe(false);
+  });
+});
+

@@ -126,11 +126,16 @@ export class AppStoreAdapter {
     };
   }
 
-  public async createAppStoreVersion(appId: string, versionString: string): Promise<string> {
+  public async createAppStoreVersion(
+    appId: string,
+    versionString: string,
+    platform: 'IOS' | 'MAC_OS' | 'TV_OS' | 'VISION_OS' = 'IOS',
+  ): Promise<string> {
     const payload = {
       data: {
         type: 'appStoreVersions',
         attributes: {
+          platform,
           versionString,
         },
         relationships: {
@@ -342,18 +347,20 @@ export class AppStoreAdapter {
     }
     throwIfAborted();
 
-    const versionId = await this.createAppStoreVersion(appId, versionString).catch(async (e) => {
-      const versions = (await this.fetchApi(
-        `/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}`,
-      )) as { data: { id: string; attributes: { appStoreState: string } }[] };
-      const editable = versions.data.find((v) =>
-        ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(
-          v.attributes.appStoreState,
-        ),
-      );
-      if (editable) return editable.id;
-      throw e;
-    });
+    const versionId = await this.createAppStoreVersion(appId, versionString, 'IOS').catch(
+      async (e) => {
+        const versions = (await this.fetchApi(
+          `/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}&filter[platform]=IOS`,
+        )) as { data: { id: string; attributes: { appStoreState: string } }[] };
+        const editable = versions.data.find((v) =>
+          ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(
+            v.attributes.appStoreState,
+          ),
+        );
+        if (editable) return editable.id;
+        throw e;
+      },
+    );
 
     if (whatsNew) {
       for (const [locale, text] of Object.entries(whatsNew)) {
