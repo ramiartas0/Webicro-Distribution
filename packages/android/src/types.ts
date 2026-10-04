@@ -1,6 +1,6 @@
 export interface AndroidBuildConfig {
-  buildName: string; // e.g. "2.5.0"
-  buildNumber: number; // e.g. 250
+  buildName: string;
+  buildNumber: number;
   clean?: boolean;
   flavor?: string;
   target?: string;

@@ -50,7 +50,7 @@ export class ReleasePlanner {
 
     return {
       steps,
-      estimatedDurationMs: steps.length * 60000, // 1 minute per step avg
+      estimatedDurationMs: steps.length * 60000,
       versionResolution: resolution,
       requiresManualApproval: !options.autoApprove
     };

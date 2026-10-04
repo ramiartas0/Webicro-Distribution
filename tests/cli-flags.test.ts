@@ -14,13 +14,11 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
     execSync('git config user.name "Test User"', { cwd: tempRepoDir });
     execSync('git config user.email "test@example.com"', { cwd: tempRepoDir });
 
-    // pubspec.yaml
     fs.writeFileSync(
       path.join(tempRepoDir, 'pubspec.yaml'),
       'name: sample_flutter_app\nversion: 2.1.0+42\n',
     );
 
-    // android/app/build.gradle
     const androidAppDir = path.join(tempRepoDir, 'android/app');
     fs.mkdirSync(androidAppDir, { recursive: true });
     fs.writeFileSync(
@@ -79,7 +77,7 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
   });
 
   it('should throw CONFIG_ERROR if Android build/upload is requested but no packageId can be detected', async () => {
-    // Gradle dosyasını sil ve commit et (git ağacı temiz kalsın)
+
     const gradleFile = path.join(tempRepoDir, 'android/app/build.gradle');
     if (fs.existsSync(gradleFile)) {
       fs.unlinkSync(gradleFile);

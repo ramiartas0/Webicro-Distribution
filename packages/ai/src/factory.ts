@@ -36,7 +36,7 @@ export function createAIProvider(config?: AIProviderConfig): AIProvider {
 
     case 'conventional':
     default: {
-      // Eğer spesifik bir sağlayıcı seçilmemiş ama ortam değişkenlerinde anahtar varsa akıllı tespit:
+
       if (!config?.provider) {
         const geminiKey = process.env['GEMINI_API_KEY'];
         if (geminiKey) return new GeminiProvider({ apiKey: geminiKey });

@@ -24,7 +24,7 @@ export class ReleaseStateMachine {
     READY_FOR_SUBMISSION: ['SUBMITTED', 'FAILED'],
     SUBMITTED: ['RELEASED', 'FAILED'],
     RELEASED: ['FAILED'],
-    FAILED: ['ANALYZING', 'FAILED'] // Allow retry/resume
+    FAILED: ['ANALYZING', 'FAILED']
   };
 
   constructor(initialStatus: ReleaseStatus = 'DRAFT') {
@@ -36,7 +36,7 @@ export class ReleaseStateMachine {
   }
 
   public canTransitionTo(nextStatus: ReleaseStatus): boolean {
-    if (nextStatus === 'FAILED') return true; // ANY STATE -> FAILED
+    if (nextStatus === 'FAILED') return true;
     const allowed = ReleaseStateMachine.transitions[this.status];
     return allowed?.includes(nextStatus) ?? false;
   }
@@ -47,9 +47,7 @@ export class ReleaseStateMachine {
         `Cannot transition from ${this.status} to ${nextStatus}`
       );
     }
-    
-    // In a real application, this would record to DB & audit via injected services.
-    // Since we just have the class spec, we change state.
+
     this.status = nextStatus;
   }
 }

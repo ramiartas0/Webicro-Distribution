@@ -43,7 +43,7 @@ export class ReleaseOrchestrator {
   private planner: ReleasePlanner;
   private startTime = 0;
   private listeners: ((event: ReleaseStepEvent) => void)[] = [];
-  
+
   constructor() {
     this.stateMachine = new ReleaseStateMachine('DRAFT');
     this.planner = new ReleasePlanner();
@@ -78,7 +78,6 @@ export class ReleaseOrchestrator {
     const artifactRepo = new ArtifactRepository(dbConn.getDb());
     const storeSubmissionRepo = new StoreSubmissionRepository(dbConn.getDb());
 
-    // Merkezi Dağıtım Veritabanı (Web Dashboard için)
     let globalReleaseRepo: ReleaseRepository | null = null;
     let globalStepRepo: ReleaseStepRepository | null = null;
     let globalAuditRepo: AuditLogRepository | null = null;
@@ -95,7 +94,7 @@ export class ReleaseOrchestrator {
         globalStepRepo = new ReleaseStepRepository(centralConn.getDb());
         globalAuditRepo = new AuditLogRepository(centralConn.getDb());
       } catch {
-        // Merkezi db sessiz
+
       }
     }
 
@@ -125,7 +124,7 @@ export class ReleaseOrchestrator {
           globalStepRepo?.updateStatus(releaseId, step, 'SKIPPED');
         }
       } catch {
-        // DB adımı hata verse de akış kesilmez
+
       }
     };
 
@@ -139,7 +138,6 @@ export class ReleaseOrchestrator {
       checkAbort();
       this.stateMachine.transitionTo('ANALYZING');
 
-      // 0. Release ID & Initial DB Record (Foreign Key Integrity)
       const detectedMeta = detectProjectMetadata(targetDir);
       let currentRecord = releaseRepo.findByReleaseId(releaseId);
       if (!currentRecord) {
@@ -164,8 +162,7 @@ export class ReleaseOrchestrator {
         auditRepo.create(auditPayload);
         globalAuditRepo?.create(auditPayload);
       }
-      
-      // 1. Environment Check & Config Load
+
       emitAndRecord('Environment Check', 'IN_PROGRESS');
       let config = null;
       try {
@@ -183,7 +180,7 @@ export class ReleaseOrchestrator {
           config = ConfigLoader.loadFromFile(candidateConfig);
         }
       } catch {
-        // Varsayılan devam et
+
       }
 
       const projectName = config?.project?.name || detectedMeta.name || (targetDir ? path.basename(targetDir) : 'Project');
@@ -197,11 +194,9 @@ export class ReleaseOrchestrator {
 
       emitAndRecord('Environment Check', 'SUCCESS', 'Flutter, Node ve konfigürasyon doğrulandı');
 
-      // 2. Database initialization & Migration run
       emitAndRecord('Database Init', 'IN_PROGRESS');
       emitAndRecord('Database Init', 'SUCCESS', 'SQLite bağlantısı ve şema hazır');
 
-      // 4. Git Analysis & Security Check
       emitAndRecord('Git Analysis', 'IN_PROGRESS');
       const gitAnalyzer = new GitAnalyzer(targetDir);
       const gitAnalysis = await gitAnalyzer.analyze();
@@ -225,7 +220,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('Security Scan', 'SUCCESS', 'Hassas veri ve anahtar taraması temiz');
       }
 
-      // 5. Version Resolution
       emitAndRecord('Version Resolution', 'IN_PROGRESS');
       const updater = new PubspecVersionUpdater();
       let currentVerStr = '1.0.0+1';
@@ -233,7 +227,7 @@ export class ReleaseOrchestrator {
         const pubInfo = await updater.readPubspec(targetDir);
         currentVerStr = pubInfo.version;
       } catch {
-        // pubspec yoksa varsayılan
+
       }
 
       const resolver = new VersionResolver();
@@ -268,13 +262,11 @@ export class ReleaseOrchestrator {
 
       this.stateMachine.transitionTo('PLANNED');
 
-      // 6. Release Plan Creation
       const plan = this.planner.createPlan(resolution, options);
       emitAndRecord('Release Plan Creation', 'SUCCESS', `${plan.steps.length} adım planlandı`);
 
       this.stateMachine.transitionTo('VALIDATING');
 
-      // 7. Changelog Generation
       emitAndRecord('Changelog Generation', 'IN_PROGRESS');
       if (options.validateOnly) {
         emitAndRecord('Changelog Generation', 'SKIPPED', 'Doğrulama modunda CHANGELOG.md yazımı atlandı');
@@ -289,7 +281,6 @@ export class ReleaseOrchestrator {
         }
       }
 
-      // 8. AI / Conventional Release Notes Generation
       emitAndRecord('Release Notes Generation', 'IN_PROGRESS');
       const apiKey = process.env['GEMINI_API_KEY'];
       const languages = config?.ai?.languages && config.ai.languages.length > 0 ? config.ai.languages : ['tr', 'en'];
@@ -311,14 +302,13 @@ export class ReleaseOrchestrator {
         releaseNotes = await aiController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
         emitAndRecord('Release Notes Generation', 'SUCCESS', `${provider.name} ile çok dilli sürüm notları üretildi`);
       } catch (err: unknown) {
-        // Fallback to conventional notes if AI generation fails
+
         const fallbackProvider = new ConventionalReleaseNotesProvider();
         const fallbackController = new AIController(fallbackProvider, validatorAdapter);
         releaseNotes = await fallbackController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
         emitAndRecord('Release Notes Generation', 'SUCCESS', 'Standart conventional sürüm notları üretildi');
       }
 
-      // 9. Release Notes Validation
       emitAndRecord('Release Notes Validation', 'IN_PROGRESS');
       const valResult = rawValidator.validate(releaseNotes);
       const validationErrors = valResult.issues.filter(i => i.severity === 'error');
@@ -333,7 +323,6 @@ export class ReleaseOrchestrator {
       this.stateMachine.transitionTo('BUILDING');
       releaseRepo.updateStatus(releaseId, 'BUILDING');
 
-      // 10. Update pubspec.yaml version
       emitAndRecord('Pubspec Update', 'IN_PROGRESS');
       if (options.validateOnly) {
         emitAndRecord('Pubspec Update', 'SKIPPED', 'Doğrulama modunda pubspec.yaml güncellemesi atlandı');
@@ -346,7 +335,6 @@ export class ReleaseOrchestrator {
         }
       }
 
-      // 11. Flutter Doctor / Analyze (Fail-Closed)
       emitAndRecord('Flutter Check', 'IN_PROGRESS');
       try {
           const doctor = new FlutterDoctor();
@@ -371,7 +359,6 @@ export class ReleaseOrchestrator {
           throw new AppError(`Flutter ortam kontrolü başarısız: ${msg}`, 'BUILD_ERROR');
         }
 
-      // 12. Run Tests (Fail-Closed)
       if (!options.skipTests && config?.build?.runTests !== false) {
         emitAndRecord('Run Tests', 'IN_PROGRESS');
         try {
@@ -393,7 +380,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('Run Tests', 'SKIPPED', 'Testler kullanıcı tercihiyle atlandı');
       }
 
-      // Eğer yalnızca doğrulama modu istendiyse, derleme ve mağaza adımlarına geçmeden sonlandır
       if (options.validateOnly) {
         emitAndRecord('Validation Complete', 'SUCCESS', 'Doğrulama Modu: Flutter ortamı, statik analiz ve testler başarıyla doğrulandı');
         const durationMs = Date.now() - this.startTime;
@@ -406,7 +392,6 @@ export class ReleaseOrchestrator {
         };
       }
 
-      // 13 & 14. Android Build & Verify
       checkAbort();
       let androidArtifact: ArtifactManifest | undefined;
       if (shouldBuildAndroid) {
@@ -469,7 +454,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('Android Verify', 'SKIPPED');
       }
 
-      // 15 & 16. iOS Build & Verify
       checkAbort();
       let iosArtifact: ArtifactManifest | undefined;
       const shouldBuildIos = !options.skipIos && (config?.ios?.enabled !== false);
@@ -554,7 +538,6 @@ export class ReleaseOrchestrator {
         releaseRepo.updateStatus(releaseId, 'UPLOADING');
       }
 
-      // 17. Google Play Upload
       checkAbort();
       let googlePlayStatus = 'SKIPPED';
       if (!options.skipAndroid) {
@@ -631,7 +614,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
       }
 
-      // 18. App Store Upload
       checkAbort();
       let appStoreStatus = 'SKIPPED';
       if (!options.skipIos) {
@@ -674,7 +656,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
       }
 
-      // 19. Final Review / Submission & Real State Handling
       let finalStatus: ReleaseStatus = 'ARTIFACT_READY';
       const isStoreUploaded = (googlePlayStatus.startsWith('SUCCESS') || googlePlayStatus === 'LIVE') ||
                               (appStoreStatus.startsWith('SUCCESS') || appStoreStatus === 'PROCESSING');
@@ -693,7 +674,6 @@ export class ReleaseOrchestrator {
         emitAndRecord('Submission', 'SKIPPED', 'Mağaza yüklemesi yapılmadı; yerel derleme hazır');
       }
 
-      // 19.5 Git Release Commit, Tag & Push
       checkAbort();
       let gitResult: CommitAndPushResult | undefined;
       if (!options.skipGit) {
@@ -733,7 +713,6 @@ export class ReleaseOrchestrator {
       releaseRepo.updateStatus(releaseId, finalStatus);
       globalReleaseRepo?.updateStatus(releaseId, finalStatus);
 
-      // 20. Audit log completion & Notifications
       emitAndRecord('Audit & Notify', 'IN_PROGRESS');
       const completionAudit = {
         releaseId,

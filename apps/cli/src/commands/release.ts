@@ -43,7 +43,6 @@ export const releaseCommand = new Command('release')
       const skipGit = Boolean(options['skipGit']);
       const noPush = Boolean(options['push'] === false || options['noPush'] === true);
 
-      // Canlı Dağıtım Öncesi Güvenlik Kilidi ve Açık Onay
       const isLiveRelease = !isValidateOnly && !isBuildOnly;
       if (isLiveRelease && !options['yes'] && process.env['CI'] !== 'true') {
         const effectiveTrack = validatedTrack || 'internal';

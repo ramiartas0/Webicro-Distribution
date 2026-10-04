@@ -49,7 +49,6 @@ export const Tooltip: React.FC<TooltipProps> = ({
     return <>{children}</>;
   }
 
-  // Konumlandırma stilleri
   let positionClasses = '';
   switch (position) {
     case 'top':

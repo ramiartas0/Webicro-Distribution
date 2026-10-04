@@ -27,11 +27,9 @@ export class AIController {
 
   public async generate(version: string, commits: ParsedCommit[], languages?: string[]): Promise<ReleaseNotesMap> {
     const context = buildAIContext(version, commits, languages);
-    
-    // Call provider
+
     const notes = await this.provider.generateReleaseNotes(context);
-    
-    // Validate schema
+
     let validatedNotes: ReleaseNotesMap;
     try {
       validatedNotes = this.validator.validate(notes);
@@ -40,7 +38,6 @@ export class AIController {
       throw new AIError(`Validation failed: ${errMessage}`);
     }
 
-    // Run AISafetyChecker
     const warnings = this.safetyChecker.check(validatedNotes, commits);
     if (warnings.length > 0) {
       throw new AIError('Safety check failed with warnings', warnings);

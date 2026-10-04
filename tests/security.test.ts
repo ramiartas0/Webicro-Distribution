@@ -54,7 +54,6 @@ describe('Security & Loopback Hardening Verification', () => {
       const dirStat = fs.statSync(relDir);
       const fileStat = fs.statSync(credFile);
 
-      // POSIX modlarının doğrulanması (Windows dışı sistemlerde)
       if (process.platform !== 'win32') {
         const fileMode = fileStat.mode & 0o777;
         const dirMode = dirStat.mode & 0o777;
@@ -72,7 +71,6 @@ describe('Security & Loopback Hardening Verification', () => {
 
       process.env['GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'] = '{"project_id":"temp-env-proj"}';
 
-      // getStoreCredentials çağrıldığında hedef dizine otomatik credentials.json yazılmamalı
       getStoreCredentials(isolatedDir);
 
       const credFile = path.join(isolatedDir, '.release/credentials.json');

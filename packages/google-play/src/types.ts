@@ -3,7 +3,7 @@ export interface GooglePlayConfig {
   serviceAccountJsonPath?: string;
   serviceAccountJson?: string;
   track?: 'internal' | 'alpha' | 'beta' | 'production';
-  userFraction?: number; // 0.0 - 1.0 (e.g. 0.1 for 10% rollout)
+  userFraction?: number;
 }
 
 export interface GooglePlayUploadResult {
@@ -14,7 +14,7 @@ export interface GooglePlayUploadResult {
 }
 
 export interface GooglePlayReleaseNotes {
-  language: string; // e.g. "en-US", "tr-TR"
+  language: string;
   text: string;
 }
 

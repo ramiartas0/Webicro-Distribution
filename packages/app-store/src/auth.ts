@@ -14,7 +14,7 @@ export function generateAppStoreToken(config: AppStoreConfig): string {
 
   const payload = {
     iss: config.issuerId,
-    exp: Math.floor(Date.now() / 1000) + 20 * 60, // 20 minutes
+    exp: Math.floor(Date.now() / 1000) + 20 * 60,
     aud: 'appstoreconnect-v1'
   };
 

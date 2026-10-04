@@ -13,7 +13,7 @@ describe('ReleaseOrchestrator - Execution Modes (Validate-Only & Build-Only)', (
     execSync('git init', { cwd: tempDir });
     execSync('git config user.name "Test User"', { cwd: tempDir });
     execSync('git config user.email "test@example.com"', { cwd: tempDir });
-    // İzole pubspec.yaml oluştur
+
     fs.writeFileSync(
       path.join(tempDir, 'pubspec.yaml'),
       'name: modes_test_app\nversion: 1.0.0+1\n',
@@ -45,7 +45,6 @@ describe('ReleaseOrchestrator - Execution Modes (Validate-Only & Build-Only)', (
     expect(summary.androidArtifact).toBeUndefined();
     expect(summary.iosArtifact).toBeUndefined();
 
-    // validate-only modunda kesinlikle dosya mutasyonu yapılmamalıdır:
     expect(fs.existsSync(path.join(tempDir, 'CHANGELOG.md'))).toBe(false);
     const pubspecContent = fs.readFileSync(path.join(tempDir, 'pubspec.yaml'), 'utf8');
     expect(pubspecContent).toContain('1.0.0+1');

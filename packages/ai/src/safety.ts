@@ -5,7 +5,6 @@ export class AISafetyChecker {
   public check(notes: ReleaseNotesMap, commits: ParsedCommit[]): string[] {
     const warnings: string[] = [];
 
-    // Basic heuristic checks to detect potential hallucinations or empty notes
     for (const [lang, note] of Object.entries(notes)) {
       if (!note.short) {
         warnings.push(`[${lang}] Missing short description.`);

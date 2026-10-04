@@ -13,10 +13,10 @@ describe('ReleaseOrchestrator - Fail-Closed Behavior', () => {
     execSync('git init', { cwd: tempRepoDir });
     execSync('git config user.name "Test User"', { cwd: tempRepoDir });
     execSync('git config user.email "test@example.com"', { cwd: tempRepoDir });
-    // İlk commit'i oluştur
+
     fs.writeFileSync(path.join(tempRepoDir, 'README.md'), '# Test App');
     execSync('git add . && git commit -m "initial commit"', { cwd: tempRepoDir });
-    // Kirli dosya ekle (uncommitted dirty state)
+
     fs.writeFileSync(path.join(tempRepoDir, 'dirty.txt'), 'uncommitted changes');
   });
 
@@ -29,7 +29,6 @@ describe('ReleaseOrchestrator - Fail-Closed Behavior', () => {
   it('should fail-closed if requireCleanGit is enabled and working tree is dirty', async () => {
     const orchestrator = new ReleaseOrchestrator();
 
-    // release.config.yaml oluştur: requireCleanGit: true
     const configContent = `
 project:
   name: DirtyApp
@@ -39,7 +38,6 @@ security:
 `;
     fs.writeFileSync(path.join(tempRepoDir, 'release.config.yaml'), configContent);
 
-    // requireCleanGit enabled
     await expect(
       orchestrator.execute({
         targetDir: tempRepoDir,

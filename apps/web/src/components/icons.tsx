@@ -4,9 +4,6 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
   className?: string;
 }
 
-/**
- * Resmi Google Play Store Renkli Vektörel Logosu (Official Google Play Brandmark)
- */
 export function GooglePlayIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   return (
     <svg
@@ -36,9 +33,6 @@ export function GooglePlayIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   );
 }
 
-/**
- * Resmi Apple Logosu (Official Apple Inc. Brandmark - Simple Icons)
- */
 export function AppleIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   return (
     <svg
@@ -53,9 +47,6 @@ export function AppleIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   );
 }
 
-/**
- * Resmi Apple App Store Connect Logosu (Apple Resmi 1024x1024 App Store Connect Varlığı)
- */
 export function AppStoreConnectIcon({ className = 'w-4 h-4', ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
   return (
     <img
@@ -67,9 +58,6 @@ export function AppStoreConnectIcon({ className = 'w-4 h-4', ...props }: React.I
   );
 }
 
-/**
- * Resmi Apple App Store Vektörel Logosu (Official Apple App Store Mark)
- */
 export function AppStoreIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   return (
     <svg
@@ -84,9 +72,6 @@ export function AppStoreIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   );
 }
 
-/**
- * Flutter Projesinin Gerçek Uygulama İkonu (Bulunamazsa Baş Harf Gradient Avatar)
- */
 export function ProjectAppIcon({
   path,
   name,

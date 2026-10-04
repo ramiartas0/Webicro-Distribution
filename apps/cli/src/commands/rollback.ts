@@ -57,7 +57,6 @@ export const rollbackCommand = new Command('rollback')
 
       const executedActions: string[] = [];
 
-      // 1. Veritabanı Durumu Güncellemesi
       releaseRepo.updateStatus(releaseId, 'FAILED');
       auditRepo.create({
         releaseId,
@@ -75,7 +74,6 @@ export const rollbackCommand = new Command('rollback')
       });
       executedActions.push(`1. Veritabanı Durumu: ${record.status} -> ${chalk.red('FAILED')} (Geri Alındı)`);
 
-      // 2. Git Tag Silme
       if (options.deleteTag) {
         try {
           const git = simpleGit(process.cwd());
@@ -98,9 +96,8 @@ export const rollbackCommand = new Command('rollback')
         executedActions.push(`2. Git Etiketi: Korundu (Silmek için: git tag -d ${tagName} && git push origin :refs/tags/${tagName})`);
       }
 
-      // 3. pubspec.yaml Geri Alma
       if (options.revertPubspec) {
-        // Önceki başarılı sürümü bul
+
         const allReleases = releaseRepo.findAll(20);
         const previousSuccess = allReleases.find(r => r.releaseId !== releaseId && r.status === 'RELEASED');
         const fallbackTarget = previousSuccess
@@ -122,7 +119,6 @@ export const rollbackCommand = new Command('rollback')
 
       clack.note(executedActions.join('\n'), 'Gerçekleştirilen İşlemler');
 
-      // 4. Mağaza Geri Alma Playbook'u
       const playbooks = [
         chalk.bold.yellow('📱 Google Play Console Geri Alma Playbook:'),
         '  • Google Play doğrudan önceki sürüme geri dönmeyi desteklemez.',

@@ -21,7 +21,6 @@ describe('Core State Machine & Release ID', () => {
     sm.transitionTo('VALIDATING');
     expect(sm.currentStatus).toBe('VALIDATING');
 
-    // Illegal jump from VALIDATING to RELEASED should throw
     expect(() => sm.transitionTo('RELEASED')).toThrow();
   });
 });

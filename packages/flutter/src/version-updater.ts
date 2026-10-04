@@ -8,7 +8,7 @@ export class PubspecVersionUpdater {
     const pubspecPath = join(cwd, 'pubspec.yaml');
     const content = await readFile(pubspecPath, 'utf8');
     const parsed = parse(content);
-    
+
     if (typeof parsed !== 'object' || parsed === null) {
       throw new Error('Invalid pubspec.yaml format');
     }
@@ -23,10 +23,9 @@ export class PubspecVersionUpdater {
   async updateVersion(versionString: string, cwd: string = process.cwd()): Promise<void> {
     const pubspecPath = join(cwd, 'pubspec.yaml');
     const content = await readFile(pubspecPath, 'utf8');
-    
-    // Updates version line e.g. version: 2.5.0+250 preserving comments and structure in pubspec.yaml
+
     const updatedContent = content.replace(/^version:\s*.*$/m, `version: ${versionString}`);
-    
+
     await writeFile(pubspecPath, updatedContent, 'utf8');
   }
 }

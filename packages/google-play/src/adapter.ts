@@ -85,7 +85,6 @@ export class GooglePlayAdapter {
         const tracksData = (await tracksRes.json()) as { tracks?: TrackItem[] };
         const tracks = tracksData.tracks ?? [];
 
-        // Track öncelik sırası: production > beta > alpha > internal
         const trackPriority: Record<string, number> = {
           production: 4,
           beta: 3,
@@ -106,7 +105,7 @@ export class GooglePlayAdapter {
                   latestVersionCode = vCode;
                   bestTrack = tName;
                   statusRelease = release.status ?? '';
-                  // release.name örn: "15 (1.0.11)" -> "1.0.11"
+
                   if (release.name) {
                     const match = release.name.match(/\((.*?)\)/);
                     versionName = match ? match[1] : release.name;
@@ -124,7 +123,6 @@ export class GooglePlayAdapter {
         }
       }
 
-      // Edit'i temizle
       if (editId) {
         await fetch(`https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`, {
           method: 'DELETE',
@@ -210,7 +208,7 @@ export class GooglePlayAdapter {
       const token = await getGoogleAccessToken(this.config);
       const trackName = this.config.track ?? 'internal';
       const fraction = this.config.userFraction ?? 1.0;
-      
+
       let status = 'completed';
       if (fraction < 1.0 && trackName !== 'internal') {
         status = 'inProgress';

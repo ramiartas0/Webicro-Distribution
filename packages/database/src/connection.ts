@@ -20,9 +20,7 @@ export class DatabaseConnection {
   }
 
   public runMigrations(): void {
-    // In a real app we'd have a migrations table, 
-    // for this setup we will just run the initial migration safely
-    // using IF NOT EXISTS within the sql.
+
     const createMigrationsTable = this.db.prepare(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

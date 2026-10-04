@@ -44,7 +44,7 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
       } catch (err: unknown) {
         lastError = err;
         const errMsg = err instanceof Error ? err.message : String(err);
-        // Eğer hata 404 (model not found / deprecated) veya 503 (high demand) ise sonraki modele geç
+
         if (errMsg.includes('404') || errMsg.includes('503') || errMsg.includes('not found') || errMsg.includes('high demand')) {
           continue;
         }

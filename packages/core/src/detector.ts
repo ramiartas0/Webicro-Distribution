@@ -10,11 +10,6 @@ export interface ProjectMetadata {
   buildNumber: number;
 }
 
-/**
- * Hedef Flutter projesinin kök dizininden proje adını,
- * Android paket kimliğini (applicationId/namespace),
- * iOS bundle ID'sini ve sürüm bilgilerini tespit eder.
- */
 export function detectProjectMetadata(projectPath: string): ProjectMetadata {
   let name = path.basename(projectPath);
   let pkg = '';
@@ -22,7 +17,6 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
   let version = '1.0.0';
   let buildNumber = 1;
 
-  // 1. release.config.yaml dosyasından kontrol et
   try {
     const configPath = path.join(projectPath, 'release.config.yaml');
     if (fs.existsSync(configPath)) {
@@ -31,10 +25,9 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
       if (cfg.project?.package) pkg = cfg.project.package;
     }
   } catch {
-    // Yapılandırma yoksa veya geçersizse devam et
+
   }
 
-  // 2. pubspec.yaml dosyasından kontrol et
   try {
     const pubspecPath = path.join(projectPath, 'pubspec.yaml');
     if (fs.existsSync(pubspecPath)) {
@@ -50,10 +43,9 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
       }
     }
   } catch {
-    // Devam et
+
   }
 
-  // 3. Android build.gradle veya build.gradle.kts dosyasından applicationId / namespace ara
   if (!pkg) {
     const gradlePaths = [
       path.join(projectPath, 'android/app/build.gradle'),
@@ -74,13 +66,12 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
             break;
           }
         } catch {
-          // Devam et
+
         }
       }
     }
   }
 
-  // 4. iOS Runner project.pbxproj dosyasından PRODUCT_BUNDLE_IDENTIFIER oku
   const pbxPath = path.join(projectPath, 'ios/Runner.xcodeproj/project.pbxproj');
   if (fs.existsSync(pbxPath)) {
     try {
@@ -94,7 +85,7 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
         }
       }
     } catch {
-      // Devam et
+
     }
   }
 

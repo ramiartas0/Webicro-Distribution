@@ -43,15 +43,15 @@ export class ReleaseNotifier {
   private formatSlackDiscordMessage(payload: NotificationPayload) {
     const color = payload.status === 'SUCCESS' ? '#00FF00' : (payload.status === 'FAILED' ? '#FF0000' : '#FFFF00');
     let text = `*Release Update: ${payload.project}* \nVersion: ${payload.version} (${payload.buildNumber})\nStatus: ${payload.status}\n`;
-    
+
     if (payload.iosStatus) text += `iOS: ${payload.iosStatus}\n`;
     if (payload.androidStatus) text += `Android: ${payload.androidStatus}\n`;
     if (payload.error) text += `\nError: ${payload.error}`;
     if (payload.notes) text += `\nNotes: ${payload.notes}`;
 
     return {
-      content: text, // Discord fallback
-      embeds: [      // Discord / Slack
+      content: text,
+      embeds: [
         {
           title: `Release ${payload.status}: ${payload.project}`,
           description: text,

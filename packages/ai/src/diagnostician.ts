@@ -7,13 +7,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 export class AIDiagnostician {
-  /**
-   * Bilinen hata kalıplarını sıfır gecikmeyle (heuristics) teşhis eder
-   */
+
   public static diagnoseHeuristics(ctx: AIDiagnosisContext): AIDiagnosisResult | null {
     const combinedText = `${ctx.failedStep || ''} ${ctx.errorText} ${(ctx.recentLogs || []).join(' ')}`.toLowerCase();
 
-    // 1. Google Play Fotoğraf & Video İzin Beyan Formu Hatası
     if (
       combinedText.includes('photo and video permissions') ||
       (combinedText.includes('permission_denied') && combinedText.includes('photo')) ||
@@ -41,7 +38,6 @@ export class AIDiagnostician {
       };
     }
 
-    // 2. Google Play Versiyon Kodu Çakışması
     if (
       combinedText.includes('already has version code') ||
       combinedText.includes('version code') && combinedText.includes('already been used') ||
@@ -65,7 +61,6 @@ export class AIDiagnostician {
       };
     }
 
-    // 3. Android İmza / Keystore / Sertifika Hatası
     if (
       combinedText.includes('keystore file not found') ||
       combinedText.includes('keystore password was incorrect') ||
@@ -90,7 +85,6 @@ export class AIDiagnostician {
       };
     }
 
-    // 4. Flutter Dart Kod Analizi / Test Hatası
     if (
       combinedText.includes('target flutter_analyze failed') ||
       combinedText.includes('flutter analyze') && combinedText.includes('error') ||
@@ -114,7 +108,6 @@ export class AIDiagnostician {
       };
     }
 
-    // 5. iOS CocoaPods / Xcode Hatası
     if (
       combinedText.includes('pod install') ||
       combinedText.includes('cocoapods could not find') ||
@@ -139,7 +132,6 @@ export class AIDiagnostician {
       };
     }
 
-    // 6. Apple App Store Kimlik & Yetkilendirme Hatası
     if (
       combinedText.includes('app store connect') &&
       (combinedText.includes('401') || combinedText.includes('unauthorized') || combinedText.includes('forbidden'))
@@ -166,9 +158,6 @@ export class AIDiagnostician {
     return null;
   }
 
-  /**
-   * LLM kullanarak derinlemesine kök neden analizi yapar
-   */
   public static async diagnoseWithLLM(
     ctx: AIDiagnosisContext,
     options?: {
@@ -262,9 +251,6 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
     return this.fallbackDiagnosis(ctx);
   }
 
-  /**
-   * Hem heuristics hem LLM'i birleştiren ana teşhis metodu
-   */
   public static async diagnose(
     ctx: AIDiagnosisContext,
     options?: {
@@ -273,13 +259,12 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
       model?: string;
     }
   ): Promise<AIDiagnosisResult> {
-    // 1. Önce bilinen kritik kurallara bak (anında ve %100 isabet)
+
     const heuristic = this.diagnoseHeuristics(ctx);
     if (heuristic) {
       return heuristic;
     }
 
-    // 2. Kural yakalayamazsa LLM ile derinlemesine teşhis yap
     return this.diagnoseWithLLM(ctx, options);
   }
 

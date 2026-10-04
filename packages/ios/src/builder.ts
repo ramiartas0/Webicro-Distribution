@@ -15,7 +15,6 @@ export class IosBuilder {
     const startTime = Date.now();
     const workDir = cwd ?? process.cwd();
 
-    // Xcode 16+ IPHONEOS_DEPLOYMENT_TARGET >= 15.0 uyumlulugu
     await this.ensureDeploymentTarget(workDir);
 
     if (config.clean) {
@@ -25,7 +24,7 @@ export class IosBuilder {
     await execAsync('flutter pub get', { cwd: workDir });
 
     let buildCommand = `flutter build ipa --release --build-name=${config.buildName} --build-number=${config.buildNumber}`;
-    
+
     if (config.flavor) {
       buildCommand += ` --flavor ${config.flavor}`;
     }
@@ -70,7 +69,6 @@ export class IosBuilder {
       let content = await fs.readFile(podfilePath, 'utf8');
       let modified = false;
 
-      // 1. platform :ios, '15.0' kontrolü
       if (!/platform\s+:ios,\s*['"]1[5-9]\.0['"]/i.test(content)) {
         if (/platform\s+:ios/i.test(content)) {
           content = content.replace(/platform\s+:ios,\s*['"][^'"]+['"]/i, "platform :ios, '15.0'");
@@ -78,7 +76,6 @@ export class IosBuilder {
         }
       }
 
-      // 2. post_install hook'unda IPHONEOS_DEPLOYMENT_TARGET kontrolü
       if (!content.includes("config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'")) {
         if (content.includes('flutter_additional_ios_build_settings(target)')) {
           content = content.replace(
@@ -99,7 +96,7 @@ export class IosBuilder {
         await fs.writeFile(podfilePath, content, 'utf8');
       }
     } catch {
-      // Podfile yoksa veya okunamazsa devam et
+
     }
   }
 }

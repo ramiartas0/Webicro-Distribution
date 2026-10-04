@@ -13,7 +13,6 @@ export function parseRemoteWebUrl(remoteUrl: string): {
   }
   const trimmed = remoteUrl.trim();
 
-  // SSH format: git@github.com:owner/repo.git
   const sshMatch = trimmed.match(/^git@([^:]+):(.+?)(?:\.git)?$/);
   if (sshMatch && sshMatch[1] && sshMatch[2]) {
     const host = sshMatch[1].toLowerCase();
@@ -33,7 +32,6 @@ export function parseRemoteWebUrl(remoteUrl: string): {
     };
   }
 
-  // HTTPS format: https://github.com/owner/repo.git
   try {
     const parsed = new URL(trimmed);
     const host = parsed.host.toLowerCase();
@@ -90,7 +88,6 @@ export class GitOperations {
         return null;
       }
 
-      // origin varsa öncelikli al, yoksa ilkini al
       const origin = remotes.find((r) => r.name === 'origin') || remotes[0];
       if (!origin) return null;
 
@@ -157,7 +154,6 @@ export class GitOperations {
     const { rootGit, rel } = await this.getRootContext();
     const branch = await this.getCurrentBranch();
 
-    // 1. Projeye ait uncommitted dosyaları bul (repo köküne göre yollar)
     const status = await rootGit.status();
     const rawFiles = status.files
       .map((f) => f.path)
@@ -172,7 +168,7 @@ export class GitOperations {
     }
 
     if (filesToStage.length === 0) {
-      // Değişiklik yoksa mevcut HEAD hash'ini al
+
       const head = await rootGit.revparse(['HEAD']);
       return {
         commitHash: head.trim(),
@@ -182,10 +178,8 @@ export class GitOperations {
       };
     }
 
-    // 2. Sadece bu projeye ait dosyaları stage et (repo kökünden)
     await rootGit.add(filesToStage);
 
-    // 3. Commit mesajını oluştur
     const commitMessage =
       options.customMessage ||
       `chore(release): ${options.projectName} v${options.version}${
@@ -195,14 +189,13 @@ export class GitOperations {
     const commitResult = await rootGit.commit(commitMessage, filesToStage);
     const commitHash = commitResult.commit || (await rootGit.revparse(['HEAD'])).trim();
 
-    // 4. Tag oluştur (eğer istenmişse)
     let tagName: string | undefined;
     if (options.createTag !== false) {
       tagName = `${options.projectName}-v${options.version}`;
       try {
         await rootGit.addTag(tagName);
       } catch (tagErr: unknown) {
-        // Tag zaten varsa force güncelleme yapmayıp uyaralım veya sessiz geçelim
+
         const errMsg = tagErr instanceof Error ? tagErr.message : String(tagErr);
         if (!errMsg.includes('already exists')) {
           throw tagErr;
@@ -210,7 +203,6 @@ export class GitOperations {
       }
     }
 
-    // 5. Remote'a push et (eğer istenmişse)
     let pushed = false;
     if (options.push !== false) {
       const remoteInfo = await this.getRemoteInfo();
@@ -222,7 +214,7 @@ export class GitOperations {
           }
           pushed = true;
         } catch (pushErr: unknown) {
-          // Push hatası commit ve tag'i geçersiz kılmaz, ancak flag false kalır
+
           console.warn(`[GitOperations] Push uyarısı:`, pushErr);
         }
       }
@@ -237,4 +229,3 @@ export class GitOperations {
     };
   }
 }
-

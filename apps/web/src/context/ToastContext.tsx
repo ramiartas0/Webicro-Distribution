@@ -73,7 +73,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ toast, dismiss, toasts }}>
       {children}
-      {/* Toast Viewport (Sağ Alt Köşe Monokrom Bildirimler) */}
+      { }
       <div
         aria-live="polite"
         aria-label="Bildirimler"
@@ -89,7 +89,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 isError ? 'border-destructive/40 shadow-destructive/5' : 'border-border shadow-black/5'
               }`}
             >
-              {/* İkon */}
+              { }
               <div className="shrink-0 mt-0.5">
                 {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-foreground" />}
                 {t.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
@@ -98,7 +98,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 {t.type === 'default' && <Bell className="w-4 h-4 text-foreground" />}
               </div>
 
-              {/* Metin İçeriği */}
+              { }
               <div className="flex-1 min-w-0 pr-1">
                 {t.title && (
                   <h4 className={`text-xs font-semibold leading-tight mb-1 truncate ${isError ? 'text-destructive' : 'text-foreground'}`}>
@@ -110,7 +110,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 </div>
               </div>
 
-              {/* Kapat Butonu */}
+              { }
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}

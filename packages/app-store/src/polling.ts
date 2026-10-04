@@ -22,10 +22,8 @@ export async function waitForBuildProcessing(
     }
 
     const data = await res.json() as { data: { id: string, attributes: { processingState: string } }[] };
-    
-    if (!data.data || data.data.length === 0) {
-      // Build might not be visible yet
-    } else {
+
+    if (data.data && data.data.length > 0) {
       const build = data.data[0];
       if (build) {
         const state = build.attributes.processingState;

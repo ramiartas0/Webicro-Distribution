@@ -8,21 +8,21 @@ export class ChangelogGenerator {
     const features: string[] = [];
     const fixes: string[] = [];
     const improvements: string[] = [];
-    
+
     for (const commit of commits) {
       const scope = options.includeScopes && commit.scope ? `**${commit.scope}:** ` : '';
       let message = `${scope}${commit.message}`;
-      
+
       if (options.repoUrl && commit.hash) {
         const shortHash = commit.hash.substring(0, 7);
         message += ` ([${shortHash}](${options.repoUrl}/commit/${commit.hash}))`;
       }
-      
+
       if (commit.isBreakingChange) {
         breakingChanges.push(message);
         continue;
       }
-      
+
       switch (commit.type) {
         case 'feat':
           features.push(message);
@@ -36,9 +36,9 @@ export class ChangelogGenerator {
           break;
       }
     }
-    
+
     const sections: ChangelogSection[] = [];
-    
+
     if (breakingChanges.length > 0) {
       sections.push({ title: 'Breaking Changes', items: breakingChanges });
     }
@@ -51,25 +51,24 @@ export class ChangelogGenerator {
     if (fixes.length > 0) {
       sections.push({ title: 'Bug Fixes', items: fixes });
     }
-    
-    // Ensure 2-digit month and day
+
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    
+
     return {
       version,
       date: `${year}-${month}-${day}`,
       sections,
     };
   }
-  
+
   public generateMarkdown(version: string, commits: ParsedCommit[], options: ChangelogOptions = {}): string {
     const release = this.generate(version, commits, options);
     return formatReleaseMarkdown(release);
   }
-  
+
   public async updateChangelogFile(filePath: string, version: string, commits: ParsedCommit[], options: ChangelogOptions = {}): Promise<string> {
     const markdown = this.generateMarkdown(version, commits, options);
     await prependToChangelogFile(filePath, markdown);

@@ -1,7 +1,7 @@
 export interface ProjectConfig {
   name: string;
   package: string;
-  path?: string; // Flutter project path, default cwd
+  path?: string;
 }
 
 export interface VersionConfig {
@@ -19,7 +19,7 @@ export interface BuildConfig {
 export interface AndroidConfig {
   enabled: boolean;
   track: 'internal' | 'alpha' | 'beta' | 'production';
-  rollout: number; // 0-100
+  rollout: number;
 }
 
 export interface IosConfig {
@@ -32,7 +32,7 @@ export interface AiConfig {
   provider: 'gemini' | 'openai' | 'anthropic';
   generateReleaseNotes: boolean;
   generateLocalizations: boolean;
-  languages: string[]; // ['en', 'tr']
+  languages: string[];
 }
 
 export interface StoresConfig {

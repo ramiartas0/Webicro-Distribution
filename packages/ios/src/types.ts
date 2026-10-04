@@ -1,6 +1,6 @@
 export interface IosBuildConfig {
-  buildName: string; // "2.5.0"
-  buildNumber: number; // 250
+  buildName: string;
+  buildNumber: number;
   clean?: boolean;
   exportOptionsPlist?: string;
   flavor?: string;

@@ -48,7 +48,7 @@ export class SecretScanner {
 
     for (const file of files) {
       const fullPath = path.join(repoPath, file);
-      
+
       try {
         if (file.endsWith('.jks') || file.endsWith('.keystore')) {
            issues.push({
@@ -78,7 +78,7 @@ export class SecretScanner {
           }
         }
       } catch (error: unknown) {
-        // Skip unreadable files (e.g. binaries without text encoding)
+
       }
     }
 

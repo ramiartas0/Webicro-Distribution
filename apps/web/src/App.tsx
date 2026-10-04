@@ -174,11 +174,11 @@ export function resolveGoogleTrack(
   projectPath?: string,
   configuredTrack?: string
 ): GoogleTrack {
-  // 1. Google Play Console'da yayında olan aktif kanal
+
   if (isValidGoogleTrack(storeTrack)) {
     return storeTrack;
   }
-  // 2. Bu proje için kullanıcının son seçtiği kanal (localStorage)
+
   if (projectPath) {
     try {
       const saved = localStorage.getItem(`webicro_track_${projectPath}`);
@@ -186,14 +186,14 @@ export function resolveGoogleTrack(
         return saved;
       }
     } catch {
-      // localStorage erişim hatası
+
     }
   }
-  // 3. Projenin config dosyasındaki kanal
+
   if (isValidGoogleTrack(configuredTrack)) {
     return configuredTrack;
   }
-  // 4. Varsayılan güvenli kanal
+
   return 'internal';
 }
 
@@ -261,12 +261,11 @@ export default function App() {
         return saved === 'dark';
       }
     } catch {
-      // localStorage erisim hatasinda varsayilana don
+
     }
-    return false; // Varsayilan olarak Light Mode
+    return false;
   });
-  
-  // Proje Listesi ve Aktif Proje
+
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [activeProjectPath, setActiveProjectPath] = useState<string>('');
   const [isSyncingStores, setIsSyncingStores] = useState<boolean>(false);
@@ -282,11 +281,9 @@ export default function App() {
   const [showScanModal, setShowScanModal] = useState<boolean>(false);
   const [scanPathInput, setScanPathInput] = useState<string>('');
 
-  // Modallar
   const [showStoreTestModal, setShowStoreTestModal] = useState<boolean>(false);
   const [showWikiModal, setShowWikiModal] = useState<boolean>(false);
 
-  // API Bağlantı Formları (Kendi API'ne Bağlan)
   const [activeStoreTab, setActiveStoreTab] = useState<'google' | 'apple' | 'ai'>('google');
   const [googleJsonInput, setGoogleJsonInput] = useState<string>('');
   const [googlePathInput, setGooglePathInput] = useState<string>('');
@@ -297,7 +294,6 @@ export default function App() {
   const [isSavingApple, setIsSavingApple] = useState<boolean>(false);
   const [saveGlobal, setSaveGlobal] = useState<boolean>(false);
 
-  // Yapay Zeka (AI) Motoru State'leri
   const [aiProvider, setAiProvider] = useState<'gemini' | 'openai' | 'anthropic' | 'conventional'>('gemini');
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState<string>('');
   const [geminiModelInput, setGeminiModelInput] = useState<string>('gemini-3.1-flash-lite');
@@ -340,7 +336,6 @@ export default function App() {
   const [isAutoFixing, setIsAutoFixing] = useState<boolean>(false);
   const [autoFixSuccessMsg, setAutoFixSuccessMsg] = useState<string | null>(null);
 
-  // Proje Detayları (Fallback ve uydurma veriler kaldırıldı)
   const [projectName, setProjectName] = useState<string>('');
   const [projectPackage, setProjectPackage] = useState<string>('');
   const [gitBranch, setGitBranch] = useState<string>('');
@@ -373,12 +368,9 @@ export default function App() {
   const [gitPushSuccessMsg, setGitPushSuccessMsg] = useState<string | null>(null);
   const [autoGitSync, setAutoGitSync] = useState<boolean>(true);
 
-
-  // Proje geçişlerinde verilerin karışmasını engelleyen senkron referanslar
   const activePathRef = useRef<string>('');
   const requestSeqRef = useRef<number>(0);
 
-  // Mağaza Bilgileri
   const [googlePlayInfo, setGooglePlayInfo] = useState<{
     connected: boolean;
     serviceAccount: string;
@@ -398,7 +390,6 @@ export default function App() {
     issuerId: 'Yapılandırılmadı',
   });
 
-  // Test Sonuçları
   const [googleTestResult, setGoogleTestResult] = useState<StoreTestResult>({
     testing: false,
     tested: false,
@@ -410,7 +401,6 @@ export default function App() {
     success: false,
   });
 
-  // Dağıtım Form Seçenekleri & Hızlı Platform Seçimi
   type TargetPlatformMode = 'all' | 'android' | 'ios';
   const [platformMode, setPlatformMode] = useState<TargetPlatformMode>('android');
   const [targetAndroid, setTargetAndroid] = useState<boolean>(true);
@@ -439,21 +429,19 @@ export default function App() {
       try {
         localStorage.setItem(`webicro_platform_mode_${p}`, mode);
       } catch {
-        // ignore
+
       }
     }
   }, [activeProjectPath]);
 
   const [googleTrack, setGoogleTrack] = useState<'internal' | 'alpha' | 'beta' | 'production'>('internal');
 
-  // AI Sürüm Notları (Varsayılan olarak boş başlar, AI veya manuel doldurulur)
   const [releaseNotesTR, setReleaseNotesTR] = useState<string>('');
   const [releaseNotesEN, setReleaseNotesEN] = useState<string>('');
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
   const [copiedLang, setCopiedLang] = useState<'tr' | 'en' | null>(null);
   const [isLogsCopied, setIsLogsCopied] = useState<boolean>(false);
 
-  // 6 Sıralı Kurumsal Dağıtım Aşaması (Sequential Pipeline)
   const initialStages: PipelineStep[] = [
     { id: 1, name: 'Hazırlık ve Git Analizi', status: 'pending' },
     { id: 2, name: 'Sürümleme ve Sürüm Notları', status: 'pending' },
@@ -463,10 +451,8 @@ export default function App() {
     { id: 6, name: 'Mağaza Dağıtımı ve İnceleme', status: 'pending' },
   ];
 
-  // Çoklu Proje Boru Hattı Haritası (Her projenin bağımsız pipeline durumu)
   const [projectPipelines, setProjectPipelines] = useState<Record<string, ProjectPipelineState>>({});
 
-  // Aktif seçili proje için türetilen boru hattı durumları
   const currentPipeline = projectPipelines[activeProjectPath];
   const isCurrentProjectReleasing = Boolean(currentPipeline?.isReleasing);
   const currentSteps = currentPipeline?.stages && currentPipeline.stages.length > 0 ? currentPipeline.stages : initialStages;
@@ -475,16 +461,13 @@ export default function App() {
   const isCurrentCompleted = Boolean(currentPipeline?.completed);
   const currentDistributedVersion = currentPipeline?.targetVersion || '';
 
-  // Ana Sekme Görünümü (Dashboard / Ferah Sayfa Geçmişi)
   const [activeMainTab, setActiveMainTab] = useState<'dashboard' | 'history'>('dashboard');
   const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [historySearchQuery, setHistorySearchQuery] = useState<string>('');
 
-  // Geçmiş ve Denetim Kayıtları
   const [historyReleases, setHistoryReleases] = useState<ReleaseHistoryItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
 
-  // Türkçe Durum ve Eylem Çeviri Fonksiyonları
   const getReleaseStatusBadge = useCallback((status: string) => {
     switch (status) {
       case 'RELEASED':
@@ -588,7 +571,6 @@ export default function App() {
     }
   }, []);
 
-  // Merkezi veritabanındaki 1.0.0 kayıtlarını ve detayları akıllı çözümle
   const getResolvedReleaseInfo = useCallback((rel: ReleaseHistoryItem) => {
     let ver = rel.version;
     let bNum = rel.buildNumber;
@@ -608,13 +590,12 @@ export default function App() {
           proj = parsed.project;
         }
       } catch {
-        // Sessiz
+
       }
     }
     return { version: ver, buildNumber: bNum, project: proj };
   }, [auditLogs]);
 
-  // Denetim Günlüğü Detaylarını Türkçe ve Kullanıcı Dostu Render Et
   const renderAuditDetails = useCallback((rawDetails: string | null) => {
     if (!rawDetails) return null;
     try {
@@ -668,7 +649,6 @@ export default function App() {
     );
   }, []);
 
-  // Filtrelenmiş Dağıtım Listesi (Arama ve Durum Filtreleri)
   const filteredReleases = useMemo(() => {
     return historyReleases.filter((rel) => {
       if (historyStatusFilter === 'success' && rel.status !== 'RELEASED') return false;
@@ -687,7 +667,6 @@ export default function App() {
     });
   }, [historyReleases, historyStatusFilter, historySearchQuery, getResolvedReleaseInfo]);
 
-  // Filtrelenmiş Denetim Günlüğü Listesi (Arama ve Durum Filtreleri)
   const filteredAuditLogs = useMemo(() => {
     return auditLogs.filter((log) => {
       if (historyStatusFilter === 'success' && log.result !== 'SUCCESS') return false;
@@ -707,31 +686,28 @@ export default function App() {
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // Otomatik aşağı kaydırma
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentLogs]);
 
-  // Tema Değişimi
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
       try {
         localStorage.setItem('webicro_theme', 'dark');
       } catch {
-        // ignore
+
       }
     } else {
       document.documentElement.classList.remove('dark');
       try {
         localStorage.setItem('webicro_theme', 'light');
       } catch {
-        // ignore
+
       }
     }
   }, [isDark]);
 
-  // Sürüm Hesaplama
   const calculateNextVersion = useCallback(() => {
     if (bumpType === 'custom' && customVersion) return customVersion;
     const parts = currentVersion.split('.').map((p) => parseInt(p, 10) || 0);
@@ -747,7 +723,6 @@ export default function App() {
   const nextVersion = calculateNextVersion();
   const nextBuildNumber = currentBuildNumber + 1;
 
-  // KALICI KİMLİK BİLGİLERİNİ YÜKLE
   const loadStoreCredentials = useCallback(async () => {
     try {
       const res = await authFetch('/api/stores/credentials');
@@ -832,7 +807,6 @@ export default function App() {
     }
   }, [googlePathInput, appleKeyIdInput, appleIssuerIdInput]);
 
-  // Modal veya sekme açıldığında sağlayıcı modellerini ve bağlı mağaza uygulamalarını getir
   useEffect(() => {
     if (showStoreTestModal && activeStoreTab === 'ai' && aiProvider !== 'conventional') {
       void fetchAiModels(aiProvider);
@@ -842,7 +816,6 @@ export default function App() {
     }
   }, [showStoreTestModal, activeStoreTab, aiProvider, appStoreInfo.connected, appleConnectApps.length]);
 
-  // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
     try {
       const pRes = await authFetch('/api/projects');
@@ -850,12 +823,11 @@ export default function App() {
         const pData = await pRes.json() as { activePath: string; projects: ProjectEntry[] };
         const fetchedProjects = pData.projects || [];
         setProjects(fetchedProjects);
-        
+
         const currentActive = pData.activePath || fetchedProjects[0]?.path || '';
         setActiveProjectPath(currentActive);
         activePathRef.current = currentActive;
 
-        // İlk projenin temel bilgilerini anında göster
         const initialProj = fetchedProjects.find(p => p.path === currentActive);
         if (initialProj) {
           setProjectName(initialProj.name);
@@ -887,7 +859,7 @@ export default function App() {
     try {
       const res = await authFetch(`/api/project?path=${encodeURIComponent(pathToFetch)}`);
       if (!res.ok) return;
-      if (thisSeq !== requestSeqRef.current) return; // Kullanıcı bu sırada başka projeye tıkladıysa eski yanıtı at
+      if (thisSeq !== requestSeqRef.current) return;
 
       const data = await res.json() as {
         project?: {
@@ -1005,7 +977,6 @@ export default function App() {
     }
   };
 
-  // KALICI PİPELİNE DURUMUNU YÜKLE (Sayfa yenilendiğinde veya projeye dönüldüğünde)
   const loadPipelineStatus = useCallback(async () => {
     try {
       const res = await authFetch('/api/release/status');
@@ -1040,7 +1011,6 @@ export default function App() {
     }
   }, []);
 
-  // CANLI SSE DİNLEYİCİSİ (Boru Hattı Senkronizasyonu & Sayfa Yenilense Bile Canlı Kalır)
   useEffect(() => {
     void loadProjectsAndActive();
     const sessionToken = getSessionToken();
@@ -1129,7 +1099,6 @@ export default function App() {
             )
           );
 
-          // Dağıtım bittiğinde mağaza sürümlerini ve proje detaylarını anında senkronize et
           void handleSyncStores();
           void fetchProjectDetails();
         } else if (payload.type === 'pipeline_failed' && payload.pipeline) {
@@ -1181,7 +1150,6 @@ export default function App() {
     };
   }, [loadProjectsAndActive, loadPipelineStatus]);
 
-  // CANLI MAĞAZA SENKRONİZASYONU
   const handleSyncStores = async () => {
     setIsSyncingStores(true);
     try {
@@ -1204,7 +1172,6 @@ export default function App() {
     }
   };
 
-  // YEREL PUBSPEC.YAML SÜRÜMÜNÜ MAĞAZADAKİ CANLI SÜRÜME EŞİTLE
   const handleSyncStoreVersion = async (source: 'smart' | 'google_play' | 'app_store' = 'smart') => {
     const target = activePathRef.current || activeProjectPath;
     if (!target) return;
@@ -1240,7 +1207,6 @@ export default function App() {
     }
   };
 
-  // APP STORE CONNECT HESABINDAKİ TÜM UYGULAMALARI SORGULA
   const fetchAppleApps = async () => {
     setIsLoadingAppleApps(true);
     try {
@@ -1258,7 +1224,6 @@ export default function App() {
     }
   };
 
-  // PROJE DEĞİŞİKLİKLERİNİ GİT'E KAYDET VE GITHUB'A PUSH ET
   const handleGitCommitPush = async () => {
     if (!activeProjectPath) return;
     setIsGitPushing(true);
@@ -1311,15 +1276,12 @@ export default function App() {
     }
   };
 
-  // PROJE DEĞİŞTİR (Sıralamayı bozmadan, anında ve karışıklık olmadan geçiş yap)
   const handleSwitchProject = async (targetPath: string) => {
     if (targetPath === activeProjectPath) return;
 
-    // 1. Aktif yolu hemen güncelle
     setActiveProjectPath(targetPath);
     activePathRef.current = targetPath;
 
-    // 2. Anında Optimistic Update: Hedef projenin verilerini sidebar listesinden anında ekrana yansıt
     const targetProj = projects.find(p => p.path === targetPath);
     if (targetProj) {
       setProjectName(targetProj.name);
@@ -1331,17 +1293,14 @@ export default function App() {
       setGoogleTrack(autoTrack);
     }
 
-    // 3. Eski projenin commit'lerini ve sürüm notlarını anında sıfırla (veriler ASLA karışmasın)
     setCommits([]);
     setReleaseNotesTR('');
     setReleaseNotesEN('');
 
-    // 4. Arka plandan taze detayları ve kimlik bilgilerini çek
     await fetchProjectDetails(targetPath);
     await loadStoreCredentials();
   };
 
-  // TÜM FLUTTER PROJELERİNİ OTOMATİK KEŞFET VEYA BELİRTİLEN DİZİNİ TARA
   const handleAutoDiscover = async (customPath?: string) => {
     setIsDiscovering(true);
     try {
@@ -1362,7 +1321,6 @@ export default function App() {
     }
   };
 
-  // YENİ PROJE EKLE
   const handleAddNewProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjectPath.trim()) return;
@@ -1390,7 +1348,6 @@ export default function App() {
     }
   };
 
-  // PROJEYİ LİSTEDEN KALDIR
   const handleRemoveProject = async (e: React.MouseEvent, projectPath: string, projectName: string) => {
     e.stopPropagation();
     if (!window.confirm(`"${projectName}" projesini listeden kaldırmak istediğinize emin misiniz?`)) {
@@ -1417,7 +1374,6 @@ export default function App() {
     }
   };
 
-  // GEÇMİŞ SÜRÜMLERİ YÜKLE (Aktif Proje veya Tüm Sistem)
   const [historyFilter, setHistoryFilter] = useState<'current' | 'all'>('all');
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
 
@@ -1439,7 +1395,6 @@ export default function App() {
     }
   };
 
-  // KENDİ GOOGLE PLAY APISINI BAĞLA VE KALICI KAYDET
   const handleSaveGooglePlay = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSavingGoogle(true);
@@ -1502,7 +1457,6 @@ export default function App() {
     }
   };
 
-  // KENDİ APPLE APP STORE APISINI BAĞLA VE KALICI KAYDET
   const handleSaveAppleStore = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSavingApple(true);
@@ -1568,7 +1522,6 @@ export default function App() {
     }
   };
 
-  // AI SÜRÜM NOTLARI ÜRETİMİ
   const handleGenerateAI = async (selectedProvider?: 'gemini' | 'openai' | 'anthropic' | 'conventional') => {
     setIsGeneratingAI(true);
     const targetProvider = selectedProvider || aiProvider;
@@ -1614,7 +1567,6 @@ export default function App() {
     }
   };
 
-  // SAĞLAYICIDAN MODELLERİ DİNAMİK LİSTELE
   const fetchAiModels = async (provider: 'gemini' | 'openai' | 'anthropic', customKey?: string) => {
     setIsLoadingAiModels(true);
     try {
@@ -1775,7 +1727,6 @@ export default function App() {
     setTimeout(() => setIsLogsCopied(false), 2000);
   };
 
-  // YAPAY ZEKA HATA TEŞHİSİNİ TETİKLE
   const fetchDiagnosisForPipeline = useCallback(async (projectPath: string, errorText: string, logs?: string[]) => {
     setIsDiagnosing(true);
     try {
@@ -1811,7 +1762,6 @@ export default function App() {
     }
   }, []);
 
-  // OTOMATİK HATA DÜZELTME (ÖR: ANDROIDMANIFEST MEDYA İZİNLERİNİ TEMİZLE VE YENİDEN BAŞLAT)
   const handleAutoFix = async (action: string) => {
     if (!activeProjectPath) return;
     setIsAutoFixing(true);
@@ -1846,7 +1796,6 @@ export default function App() {
     }
   };
 
-  // DAĞITIMI BAŞLAT (HER PROJE İÇİN BAĞIMSIZ VE İZOLE ORKESTRASYON)
   const handleStartRelease = async () => {
     if (isCurrentProjectReleasing) return;
     if (!releaseNotesTR.trim() || !releaseNotesEN.trim()) {
@@ -1885,7 +1834,6 @@ export default function App() {
       `[${new Date().toLocaleTimeString()}] Dağıtım Modu: ${platformLabel}`,
     ];
 
-    // Bu proje için izole optimistic durum güncellemesi
     setProjectPipelines((prev) => ({
       ...prev,
       [targetPath]: {
@@ -1902,7 +1850,6 @@ export default function App() {
       },
     }));
 
-    // Sol listedeki ilgili projeyi anında dağıtılıyor rozetiyle işaretle
     setProjects((prev) =>
       prev.map((item) =>
         item.path === targetPath
@@ -1997,7 +1944,6 @@ export default function App() {
     }
   };
 
-  // DAĞITIMI SIFIRLA / İPTAL ET (Askıda kalan veya takılan süreci temizler)
   const handleCancelRelease = async (projectPathToCancel?: string) => {
     const targetPath = projectPathToCancel || activeProjectPath;
     if (!targetPath) return;
@@ -2038,9 +1984,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans selection:bg-primary selection:text-primary-foreground">
-      {/* ===================== SOL SIDEBAR (STORE KARŞILAŞTIRMALI PROJELER) ===================== */}
+      { }
       <aside className="w-80 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0 select-none h-screen">
-        {/* LOGO & MARKA */}
+        { }
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
@@ -2070,7 +2016,7 @@ export default function App() {
             </Tooltip>
           </div>
 
-          {/* EYLEMLER: PROJELERİ TARA & MAĞAZALARI TARA & MANUEL EKLE */}
+          { }
           <div className="grid grid-cols-3 gap-1.5">
             <Tooltip content="Sistemdeki Flutter projelerini otomatik tara" position="bottom">
               <button
@@ -2106,7 +2052,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* PROJELER LİSTESİ BAŞLIĞI */}
+        { }
         <div className="px-3 pt-3 pb-1 flex items-center justify-between text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
           <span className="flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-primary" />
@@ -2115,7 +2061,7 @@ export default function App() {
           <span className="text-[10px] lowercase text-foreground font-mono font-medium">store live</span>
         </div>
 
-        {/* PROJE KARTLARI (STORE KARŞILAŞTIRMALI) */}
+        { }
         <div className="flex-1 p-2 space-y-2 overflow-y-auto">
           {projects.map((p) => {
             const isSelected = p.path === activeProjectPath;
@@ -2136,14 +2082,14 @@ export default function App() {
                     : 'border-sidebar-border/80 bg-sidebar/50 hover:bg-sidebar-accent/60 hover:border-sidebar-border shadow-xs'
                 }`}
               >
-                {/* AKTİF VEYA DAĞITILAN PROJE SOL VURGU ÇİZGİSİ */}
+                { }
                 {isReleasingThis ? (
                   <div className="absolute left-0 top-2 bottom-2 w-1.5 bg-primary rounded-r-full animate-pulse" />
                 ) : isSelected ? (
                   <div className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-primary rounded-r-full" />
                 ) : null}
 
-                {/* PROJE BAŞLIĞI VE İKONU */}
+                { }
                 <div className="flex items-center gap-2.5 mb-2.5">
                   <ProjectAppIcon path={p.path} name={p.name} className="w-8 h-8 rounded-lg shadow-xs shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -2167,7 +2113,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* YEREL SÜRÜM & MAĞAZA DURUM ROZETİ */}
+                { }
                 <div className="flex items-center justify-between py-1 px-2 rounded-lg bg-muted/40 border border-border/40 text-[11px] mb-2">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Yerel</span>
@@ -2189,9 +2135,9 @@ export default function App() {
                   )}
                 </div>
 
-                {/* CANLI MAĞAZA KARŞILAŞTIRMA DETAYLARI (2 KOLONLU MİKRO GRID) */}
+                { }
                 <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                  {/* GOOGLE PLAY */}
+                  { }
                   <div className="p-1.5 rounded-lg bg-background/50 border border-border/40 flex flex-col justify-between">
                     <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mb-0.5">
                       <GooglePlayIcon className="w-2.5 h-2.5 shrink-0" />
@@ -2216,7 +2162,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* APPLE APP STORE */}
+                  { }
                   <div className="p-1.5 rounded-lg bg-background/50 border border-border/40 flex flex-col justify-between">
                     <div className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground mb-0.5">
                       <AppStoreConnectIcon className="w-2.5 h-2.5 shrink-0" />
@@ -2251,7 +2197,7 @@ export default function App() {
           })}
         </div>
 
-        {/* ALT KISIM: SİSTEM DOĞRULAMA & WIKI & GEÇMİŞ */}
+        { }
         <div className="p-3 border-t border-sidebar-border bg-sidebar-accent/20 space-y-1">
           <Tooltip content="Google Play ve App Store API anahtarlarını test et ve doğrula" position="right">
             <button
@@ -2301,9 +2247,9 @@ export default function App() {
         </div>
       </aside>
 
-      {/* ===================== SAĞ PANEL (AKTİF PROJE YÖNETİMİ & DAĞITIM BORU HATTI) ===================== */}
+      { }
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-        {/* ÜST BAŞLIK & PROJE ÖZETİ & ANA SEKME BUTONLARI */}
+        { }
         <header className="px-6 py-3.5 border-b border-border bg-card/60 backdrop-blur sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <ProjectAppIcon path={activeProjectPath} name={projectName || 'Proje'} className="w-10 h-10 rounded-xl shadow-sm border border-border" />
@@ -2349,7 +2295,7 @@ export default function App() {
                     </span>
                   </Tooltip>
 
-                  {/* Değişen Dosyaların Tooltip/Popover Listesi */}
+                  { }
                   {!isGitClean && uncommittedFiles.length > 0 && (
                     <div className="absolute left-0 top-full mt-1.5 hidden group-hover:block z-50 min-w-56 max-w-sm p-2.5 rounded-lg bg-popover/95 backdrop-blur border border-border shadow-xl text-[11px] animate-in fade-in-50 zoom-in-95">
                       <div className="font-semibold text-foreground mb-1.5 flex items-center justify-between border-b border-border/50 pb-1">
@@ -2367,7 +2313,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* TEK TIKLA GİT'E KAYDET & PUSH ET BUTONU */}
+                { }
                 {!isGitClean && uncommittedFiles.length > 0 && (
                   <Tooltip content="Değişen dosyaları commit edip doğrudan GitHub'a push eder" position="bottom">
                     <button

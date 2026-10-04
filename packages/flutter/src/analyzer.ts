@@ -8,7 +8,7 @@ export class FlutterAnalyzer {
   async analyze(cwd?: string): Promise<FlutterAnalyzeResult> {
     try {
       const { stdout } = await execAsync('flutter analyze', { cwd });
-      
+
       return {
         hasErrors: false,
         errorCount: 0,
@@ -18,11 +18,10 @@ export class FlutterAnalyzer {
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'stdout' in error && typeof (error as Record<string, unknown>).stdout === 'string') {
         const stdout = (error as Record<string, unknown>).stdout as string;
-        
-        // Basic parsing for error and warning counts
+
         const errorMatch = stdout.match(/(\d+) issue\(s\) found/);
         const totalIssues = errorMatch ? parseInt(errorMatch[1], 10) : 0;
-        
+
         const errorLineMatch = stdout.match(/error •/g);
         const errorCount = errorLineMatch ? errorLineMatch.length : 0;
         const warningCount = totalIssues - errorCount;
@@ -34,7 +33,7 @@ export class FlutterAnalyzer {
           output: stdout,
         };
       }
-      
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return {
         hasErrors: true,

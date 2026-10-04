@@ -13,12 +13,12 @@ export function isSafeProjectPath(targetPath?: string | null): boolean {
   if (!targetPath) return false;
   try {
     const resolved = path.resolve(targetPath);
-    // Geçici çalışma dizinleri (os.tmpdir) testler ve derlemeler için güvenlidir
+
     const tmp = os.tmpdir();
     if (resolved === tmp || resolved.startsWith(tmp + path.sep)) {
       return true;
     }
-    // Sistem kök dizinleri yasaklıdır
+
     const forbiddenPrefixes = ['/etc', '/bin', '/sbin', '/usr', '/var', '/System', '/Library', '/private', '/dev'];
     for (const prefix of forbiddenPrefixes) {
       if (resolved === prefix || resolved.startsWith(prefix + path.sep)) {
@@ -155,9 +155,6 @@ export function mapStepNameToStageId(stepName: string): number {
   return 6;
 }
 
-/**
- * Proje dizininden paket adını ve versiyonunu otomatik tespit eder
- */
 function detectProjectMetadata(projectPath: string): {
   name: string;
   package: string;
@@ -171,7 +168,6 @@ function detectProjectMetadata(projectPath: string): {
   let version = '1.0.0';
   let buildNumber = 1;
 
-  // 1. release.config.yaml'dan bak
   try {
     const configPath = path.join(projectPath, 'release.config.yaml');
     if (fs.existsSync(configPath)) {
@@ -180,10 +176,9 @@ function detectProjectMetadata(projectPath: string): {
       if (cfg.project?.package) pkg = cfg.project.package;
     }
   } catch {
-    // Sessiz devam
+
   }
 
-  // 2. pubspec.yaml'dan bak
   try {
     const pubspecPath = path.join(projectPath, 'pubspec.yaml');
     if (fs.existsSync(pubspecPath)) {
@@ -199,10 +194,9 @@ function detectProjectMetadata(projectPath: string): {
       }
     }
   } catch {
-    // Sessiz devam
+
   }
 
-  // 3. Android build.gradle dosyasından applicationId veya namespace ara
   if (!pkg) {
     const gradlePaths = [
       path.join(projectPath, 'android/app/build.gradle'),
@@ -223,13 +217,12 @@ function detectProjectMetadata(projectPath: string): {
             break;
           }
         } catch {
-          // Sessiz
+
         }
       }
     }
   }
 
-  // 4. iOS Runner project.pbxproj dosyasından PRODUCT_BUNDLE_IDENTIFIER oku (Android paket adından bağımsız olarak her zaman oku!)
   const pbxPath = path.join(projectPath, 'ios/Runner.xcodeproj/project.pbxproj');
   if (fs.existsSync(pbxPath)) {
     try {
@@ -243,7 +236,7 @@ function detectProjectMetadata(projectPath: string): {
         }
       }
     } catch {
-      // Sessiz
+
     }
   }
 
@@ -254,27 +247,21 @@ function detectProjectMetadata(projectPath: string): {
   return { name, package: pkg, iosBundleId: iosBundleId || undefined, version, buildNumber };
 }
 
-/**
- * Herhangi bir makinede/ortamda Flutter projelerini (pubspec.yaml içeren) otomatik keşfeder.
- * Asla hardcoded kişisel klasör yolu içermez; kullanıcının ev dizini, masaüstü, projeler
- * ve çalışma alanı kardeş dizinlerini standart olarak tarar.
- */
 export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] {
   const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
-  
+
   let roots: string[] = [];
 
   if (customRoots && customRoots.length > 0) {
     roots = customRoots.filter(r => fs.existsSync(r));
   } else {
-    // 1. Çalışma dizini ve üst dizini (mevcut monorepo / kardeş dizinler)
+
     roots.push(process.cwd());
     const parentDir = path.resolve(process.cwd(), '..');
     if (fs.existsSync(parentDir)) {
       roots.push(parentDir);
     }
 
-    // 2. Standart kullanıcı proje klasörleri (varsa dinamik ekle)
     if (home && fs.existsSync(home)) {
       const standardDevDirs = [
         'Projects',
@@ -327,7 +314,7 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
       const pubspecPath = path.join(dir, 'pubspec.yaml');
       if (fs.existsSync(pubspecPath) && path.resolve(dir) !== path.resolve(process.cwd())) {
         foundPaths.add(path.resolve(dir));
-        return; // Flutter projesinin alt klasörlerini ayrıca taramaya gerek yok
+        return;
       }
 
       const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -339,7 +326,7 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
         }
       }
     } catch {
-      // Hata oluşursa atla
+
     }
   }
 
@@ -365,15 +352,10 @@ export function discoverFlutterProjects(customRoots?: string[]): ProjectEntry[] 
   return results;
 }
 
-/**
- * Mükerrer (duplicate) Flutter projelerini eler.
- * Mağazada yayında olan (live), sürüm karşılığı bulunan ve daha güncel olan projeyi korur.
- * ÖNEMLİ: Sıralama aktif projeye göre değişmez, orijinal eklenme/liste sırasını stabil korur.
- */
 export function deduplicateProjects(projects: ProjectEntry[], _activePath?: string): ProjectEntry[] {
   const scoreProject = (p: ProjectEntry): number => {
     let score = 0;
-    // 1. Mağazada canlı sürüm varsa yüksek öncelik
+
     const gpLive = p.stores?.googlePlay?.status === 'live';
     const asLive = p.stores?.appStore?.status === 'live';
     if (gpLive || asLive) {
@@ -382,20 +364,19 @@ export function deduplicateProjects(projects: ProjectEntry[], _activePath?: stri
     if (gpLive && asLive) {
       score += 2000;
     }
-    // 2. Karşılaştırma durumu
+
     if (p.stores?.comparisonStatus === 'UPDATE_READY' || p.stores?.comparisonStatus === 'UP_TO_DATE') {
       score += 1500;
     }
-    // 3. Build numarası ve versiyon
+
     score += (p.buildNumber || 0);
-    // 4. Pubspec varlığı
+
     if (p.hasPubspec) {
       score += 100;
     }
     return score;
   };
 
-  // Skorlara göre azalan sırada sırala (en kaliteli / en güncel / canlı olan adayları önce değerlendir)
   const sorted = [...projects].sort((a, b) => scoreProject(b) - scoreProject(a));
 
   const seenPackages = new Set<string>();
@@ -410,7 +391,6 @@ export function deduplicateProjects(projects: ProjectEntry[], _activePath?: stri
     const normName = p.name.trim().toLowerCase().replace(/[-_]/g, '');
     const normPkg = p.package ? p.package.trim().toLowerCase() : '';
 
-    // Eğer aynı paket adına veya aynı normalize isme sahip proje daha önce eklendiyse, kopyayı atla
     if (normPkg && seenPackages.has(normPkg)) {
       continue;
     }
@@ -424,7 +404,6 @@ export function deduplicateProjects(projects: ProjectEntry[], _activePath?: stri
     selected.push(p);
   }
 
-  // Orijinal dizideki sırayı (stable order) koruyarak döndür (Böylece seçim yapıldığında liste zıplamaz)
   const originalIndexMap = new Map<string, number>();
   projects.forEach((p, idx) => {
     originalIndexMap.set(path.resolve(p.path), idx);
@@ -437,13 +416,9 @@ export function deduplicateProjects(projects: ProjectEntry[], _activePath?: stri
   });
 }
 
-/**
- * Verilen Flutter projesinin en kaliteli uygulama ikonunu (App Icon) bulur
- */
 export function findProjectAppIcon(projectPath: string): string | null {
   if (!fs.existsSync(projectPath)) return null;
 
-  // 1. iOS AppIcon setindeki yüksek çözünürlüklü ikonlar
   const iosAppIconDir = path.join(projectPath, 'ios/Runner/Assets.xcassets/AppIcon.appiconset');
   if (fs.existsSync(iosAppIconDir)) {
     const preferredIos = [
@@ -472,11 +447,10 @@ export function findProjectAppIcon(projectPath: string): string | null {
         }
       }
     } catch {
-      // devam et
+
     }
   }
 
-  // 2. Android mipmap ikonları
   const androidResDir = path.join(projectPath, 'android/app/src/main/res');
   if (fs.existsSync(androidResDir)) {
     const mipmapDirs = [
@@ -495,7 +469,6 @@ export function findProjectAppIcon(projectPath: string): string | null {
     }
   }
 
-  // 3. assets/ dizinindeki logo veya icon dosyaları
   const assetCandidates = [
     'assets/images/logo-k.png',
     'assets/images/logo.png',
@@ -545,9 +518,6 @@ export interface StoreCredentials {
   ai?: AICredentials;
 }
 
-/**
- * Proje dizininden veya global yapılandırmadan kayıtlı mağaza kimlik bilgilerini getirir
- */
 export function getStoreCredentials(projectDir?: string): StoreCredentials {
   const candidates: string[] = [];
   if (projectDir) {
@@ -571,12 +541,11 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
           return parsed;
         }
       } catch {
-        // Devam et
+
       }
     }
   }
 
-  // Fallback: Ortam değişkenleri ve yerel anahtarlar
   const creds: StoreCredentials = {};
 
   const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
@@ -598,7 +567,7 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
         };
       }
     } catch {
-      // Sessiz
+
     }
   }
 
@@ -618,13 +587,9 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
     };
   }
 
-  // Güvenlik: Ortam değişkenlerinden okunan secret'lar izinsiz kalıcı diske yazılmaz.
   return creds;
 }
 
-/**
- * Mağaza kimlik bilgilerini projeye veya global dizine güvenli (0600) olarak kaydeder
- */
 export function saveStoreCredentials(creds: StoreCredentials, projectDir?: string): void {
   const targetDir = projectDir ? path.join(projectDir, '.release') : path.join(process.cwd(), '.release');
   if (!fs.existsSync(targetDir)) {
@@ -636,7 +601,7 @@ export function saveStoreCredentials(creds: StoreCredentials, projectDir?: strin
     fs.chmodSync(filePath, 0o600);
     fs.chmodSync(targetDir, 0o700);
   } catch {
-    // İşletim sistemi dosya izinleri desteği
+
   }
 }
 
@@ -762,14 +727,14 @@ async function fetchGooglePlayWebLive(packageName: string): Promise<GooglePlayWe
 }
 
 const storeComparisonCache = new Map<string, { data: StoreComparison; timestamp: number }>();
-const STORE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 dakika
+const STORE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function normalizeAppStr(str?: string): string {
   if (!str) return '';
   return str
     .toLowerCase()
     .replace(/[-_.\s]/g, '')
-    .replace(/(.)\1+/g, '$1'); // ardışık tekrar eden harfleri tekilleştir (piyyuu -> piyu)
+    .replace(/(.)\1+/g, '$1');
 }
 
 function findBestMatchedAppleApp(
@@ -784,7 +749,6 @@ function findBestMatchedAppleApp(
 ): { id: string; name: string; bundleId: string; sku?: string } | null {
   if (apps.length === 0) return null;
 
-  // 1. Kullanıcı manuel override seçmişse
   if (params.overrideBundleId) {
     const overrideMatch = apps.find(a => a.bundleId.toLowerCase() === params.overrideBundleId?.toLowerCase());
     if (overrideMatch) return overrideMatch;
@@ -793,14 +757,12 @@ function findBestMatchedAppleApp(
   const targetIos = (params.iosBundleId || '').toLowerCase();
   const targetPkg = (params.pkgName || '').toLowerCase();
 
-  // 2. Direct match (tam bundleId veya pkg eşleşmesi)
   const direct = apps.find(a => {
     const bId = a.bundleId.toLowerCase();
     return (targetIos && bId === targetIos) || (targetPkg && bId === targetPkg);
   });
   if (direct) return direct;
 
-  // 3. Normalized match (piyyuu vs piyuu tek harf toleransı)
   const normPkg = normalizeAppStr(params.pkgName);
   const normIos = normalizeAppStr(params.iosBundleId);
   const normMatch = apps.find(a => {
@@ -809,7 +771,6 @@ function findBestMatchedAppleApp(
   });
   if (normMatch) return normMatch;
 
-  // 4. Özel anahtar kelime ve semantik eşleştirmeler (caller-id hariç tutulur)
   const projBaseName = params.projectDir ? path.basename(params.projectDir).toLowerCase() : '';
   const pAll = [params.projectName, projBaseName, params.pkgName, params.iosBundleId]
     .filter(Boolean)
@@ -817,7 +778,7 @@ function findBestMatchedAppleApp(
     .toLowerCase();
 
   if (pAll.includes('caller')) {
-    // Caller ID için App Store'da callerid yoksa eşleştirme yapma
+
     return null;
   }
 
@@ -838,7 +799,6 @@ function findBestMatchedAppleApp(
     if (kMatch) return kMatch;
   }
 
-  // 5. Proje adı ve bundle benzerliği ile genel arama
   const fuzzy = apps.find(a => {
     const normBundle = a.bundleId.replace(/[-_.]/g, '').toLowerCase();
     const normName = a.name.replace(/[\s-_]/g, '').toLowerCase();
@@ -849,9 +809,6 @@ function findBestMatchedAppleApp(
   return null;
 }
 
-/**
- * Projeyi Google Play ve Apple App Store ile canlı karşılaştırır
- */
 export async function compareProjectWithStores(
   pkgName: string,
   localBuildNumber: number,
@@ -888,7 +845,6 @@ export async function compareProjectWithStores(
 
   const creds = getStoreCredentials(projectDir);
 
-  // 1. GOOGLE PLAY KARŞILAŞTIRMASI
   let googleFound = false;
   if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
     try {
@@ -920,11 +876,10 @@ export async function compareProjectWithStores(
         };
       }
     } catch {
-      // Fallback
+
     }
   }
 
-  // Web Fallback: Service Account yoksa veya hata verdiyse Play Store sayfasından doğrula
   if (!googleFound && comparison.googlePlay.status !== 'live') {
     const webRes = await fetchGooglePlayWebLive(pkgName);
     if (webRes.status === 'live') {
@@ -940,7 +895,6 @@ export async function compareProjectWithStores(
     }
   }
 
-  // 2. APPLE APP STORE KARŞILAŞTIRMASI
   let appleTargetBundleId = overrideBundleId || pkgName;
   let detectedIosBundleId: string | undefined;
   let detectedProjectName: string | undefined;
@@ -954,11 +908,10 @@ export async function compareProjectWithStores(
         appleTargetBundleId = pMeta.iosBundleId;
       }
     } catch {
-      // ignore
+
     }
   }
 
-  // App Store Connect API varsa hesaptaki kayıtlı uygulamalarla akıllı eşleştirme yap
   let connectApps: { id: string; name: string; bundleId: string; sku?: string }[] = [];
   if (creds.appStore && creds.appStore.keyId && creds.appStore.issuerId && (creds.appStore.privateKeyPath || creds.appStore.privateKey)) {
     try {
@@ -990,7 +943,6 @@ export async function compareProjectWithStores(
         comparison.appStore.appId = matchedApp.id;
       }
 
-      // App Store Connect'ten en son build'i sorgula
       const targetAdapter = new AppStoreAdapter({
         keyId: creds.appStore.keyId,
         issuerId: creds.appStore.issuerId,
@@ -1010,11 +962,10 @@ export async function compareProjectWithStores(
         };
       }
     } catch {
-      // Connect API hatası olursa iTunes sonucu denenir
+
     }
   }
 
-  // Öncelik A: Resmi Apple iTunes API (Canlı mağaza sürümü sorgusu)
   const itunesRes = await fetchAppleStoreLive(appleTargetBundleId);
   if (itunesRes.status === 'live' && itunesRes.version) {
     comparison.appStore = {
@@ -1032,7 +983,6 @@ export async function compareProjectWithStores(
     };
   }
 
-  // 3. KARŞILAŞTIRMA KARARI
   const playLive = comparison.googlePlay.status === 'live';
   const appleLive = comparison.appStore.status === 'live';
 
@@ -1040,14 +990,12 @@ export async function compareProjectWithStores(
     let storeIsHigher = false;
     let storeIsEqual = false;
 
-    // Apple sürümü ile karşılaştır
     if (appleLive && comparison.appStore.version) {
       const cmp = compareSemver(localVersion, comparison.appStore.version);
       if (cmp < 0) storeIsHigher = true;
       else if (cmp === 0) storeIsEqual = true;
     }
 
-    // Google Play sürüm ve build numarası ile karşılaştır
     if (playLive) {
       if (comparison.googlePlay.version) {
         const cmp = compareSemver(localVersion, comparison.googlePlay.version);
@@ -1109,9 +1057,6 @@ export async function compareProjectWithStores(
   return comparison;
 }
 
-/**
- * .env dosyasını güvenli bir şekilde process.env'e yükler
- */
 function loadEnvFile(envPath: string): void {
   if (!fs.existsSync(envPath)) return;
   try {
@@ -1132,7 +1077,7 @@ function loadEnvFile(envPath: string): void {
       }
     }
   } catch {
-    // Sessiz devam et
+
   }
 }
 
@@ -1141,12 +1086,10 @@ export const uiCommand = new Command('ui')
   .option('-p, --port <number>', 'Port to run the dashboard on', '3100')
   .action((options: { port: string }) => {
     const port = parseInt(options.port, 10);
-    
-    // .env dosyasını yükle
+
     const rootEnvPath = path.resolve(process.cwd(), '.env');
     loadEnvFile(rootEnvPath);
 
-    // Aktif Proje Yönetimi
     let activeProjectDir = process.cwd();
     const projectsFile = path.resolve(process.cwd(), '.release/projects.json');
 
@@ -1157,10 +1100,9 @@ export const uiCommand = new Command('ui')
           list = JSON.parse(fs.readFileSync(projectsFile, 'utf8')) as ProjectEntry[];
         }
       } catch {
-        // Hata
+
       }
 
-      // Eğer liste boşsa veya listede hiç gerçek Flutter projesi yoksa otomatik keşfet
       const hasRealFlutterApp = list.some(p => p.hasPubspec && p.path !== process.cwd());
       if (!hasRealFlutterApp) {
         const discovered = discoverFlutterProjects();
@@ -1193,7 +1135,6 @@ export const uiCommand = new Command('ui')
         ];
       }
 
-      // Metadata'ları her zaman güncel tut ve eski emojili rozetleri temizle
       for (const p of list) {
         if (fs.existsSync(p.path)) {
           const meta = detectProjectMetadata(p.path);
@@ -1208,12 +1149,10 @@ export const uiCommand = new Command('ui')
         }
       }
 
-      // Eğer gerçek Flutter projeleri varsa, dağıtım aracının kendi kök dizinini listeden çıkar
       if (list.some(p => p.hasPubspec && path.resolve(p.path) !== path.resolve(process.cwd()))) {
         list = list.filter(p => path.resolve(p.path) !== path.resolve(process.cwd()));
       }
 
-      // Mükerrer (duplicate) projeleri temizle: Mağazada canlı ve güncel olanı koru
       list = deduplicateProjects(list, activeProjectDir);
 
       return list;
@@ -1226,16 +1165,14 @@ export const uiCommand = new Command('ui')
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(projectsFile, JSON.stringify(deduped, null, 2), 'utf8');
       } catch {
-        // Hata
+
       }
     };
 
-    // apps/web/dist konumunu bul
     const webDistPath = path.resolve(__dirname, '../../web/dist');
     const fallbackPath = path.resolve(process.cwd(), 'apps/web/dist');
     const staticDir = fs.existsSync(webDistPath) ? webDistPath : fallbackPath;
 
-    // Veritabanı bağlantısı
     const dbDir = path.resolve(process.cwd(), '.release');
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
@@ -1245,7 +1182,6 @@ export const uiCommand = new Command('ui')
     const releaseRepo = new ReleaseRepository(dbConn.getDb());
     const auditRepo = new AuditLogRepository(dbConn.getDb());
 
-    // SSE İstemcileri ve Canlı Dağıtım Durumu (Proje bazlı bağımsız harita)
     const sseClients: http.ServerResponse[] = [];
     const activePipelines = new Map<string, ActivePipelineStatus>();
     const activeAbortControllers = new Map<string, AbortController>();
@@ -1267,17 +1203,15 @@ export const uiCommand = new Command('ui')
       '.svg': 'image/svg+xml',
     };
 
-    // Güvenlik: Her başlatmada tekil, tahmin edilemez oturum tokenı üretilir
     const serverSessionToken = crypto.randomBytes(24).toString('hex');
 
     const server = http.createServer(async (req, res) => {
-      // Güvenlik Başlıkları
+
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' data:; connect-src 'self' ws: http://localhost:* http://127.0.0.1:*; img-src 'self' data: blob:;");
 
-      // Host Başlığı Doğrulaması (DNS Rebinding Önlemi)
       const host = req.headers.host || '';
       const allowedHosts = [`localhost:${port}`, `127.0.0.1:${port}`, 'localhost', '127.0.0.1'];
       if (!allowedHosts.includes(host)) {
@@ -1286,7 +1220,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // Origin Kontrolü (CORS * Yerine Sıkı Origin Guard)
       const origin = req.headers.origin;
       if (origin) {
         const allowedOrigins = [
@@ -1314,7 +1247,6 @@ export const uiCommand = new Command('ui')
       const url = new URL(req.url || '/', `http://${req.headers.host}`);
       const pathname = url.pathname;
 
-      // API ve SSE İstekleri İçin Oturum Tokenı Doğrulaması
       if (pathname.startsWith('/api/')) {
         const authHeader = req.headers.authorization;
         const customToken = req.headers['x-session-token'];
@@ -1330,12 +1262,9 @@ export const uiCommand = new Command('ui')
         }
       }
 
-      // ======================== API ENDPOINTS ========================
-
-      // 1. GET /api/projects - Proje Listesi, Aktif Proje ve Mağaza Karşılaştırmaları
       if (req.method === 'GET' && pathname === '/api/projects') {
         const list = getStoredProjects();
-        // Eğer herhangi bir projede stores verisi yoksa hafifçe karşılaştır
+
         for (const p of list) {
           if (!p.stores && p.package) {
             p.stores = await compareProjectWithStores(
@@ -1351,7 +1280,7 @@ export const uiCommand = new Command('ui')
         if (!list.some(p => path.resolve(p.path) === path.resolve(activeProjectDir)) && list[0]) {
           activeProjectDir = list[0].path;
         }
-        // Her proje için kendi bağımsız boru hattı durumunu işaretle
+
         for (const p of list) {
           const pipeline = activePipelines.get(path.resolve(p.path));
           if (pipeline) {
@@ -1373,7 +1302,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 1.1 POST /api/projects/sync-stores - Mağazalardan Canlı Karşılaştırmayı Yenile
       if (req.method === 'POST' && pathname === '/api/projects/sync-stores') {
         const list = getStoredProjects();
         for (const p of list) {
@@ -1399,7 +1327,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 1.2 GET /api/projects/icon - Projenin Gerçek Uygulama İkonunu Servis Et
       if (req.method === 'GET' && pathname === '/api/projects/icon') {
         try {
           const targetProjPath = url.searchParams.get('path');
@@ -1435,7 +1362,6 @@ export const uiCommand = new Command('ui')
         }
       }
 
-      // 1.2 POST /api/projects/auto-discover - Çevredeki veya Belirtilen Dizindeki Flutter Projelerini Tara
       if (req.method === 'POST' && pathname === '/api/projects/auto-discover') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1456,7 +1382,6 @@ export const uiCommand = new Command('ui')
               }
             }
 
-            // Eğer tek proje varsa ve o da webicro_distribution ise, ilk gerçek Flutter projesini aktif yap
             if (currentList.length > 1 && activeProjectDir === process.cwd()) {
               const firstReal = currentList.find(p => p.hasPubspec && p.path !== process.cwd());
               if (firstReal) {
@@ -1464,7 +1389,6 @@ export const uiCommand = new Command('ui')
               }
             }
 
-            // Tüm projeler için mağaza canlı karşılaştırmalarını yenile
             for (const p of currentList) {
               if (p.package) {
                 p.stores = await compareProjectWithStores(p.package, p.buildNumber || 1, p.version || '1.0.0', p.path);
@@ -1489,7 +1413,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 2. POST /api/projects/switch - Aktif Proje Değiştirme
       if (req.method === 'POST' && pathname === '/api/projects/switch') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1512,7 +1435,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3. POST /api/projects/add - Yeni Proje Ekleme
       if (req.method === 'POST' && pathname === '/api/projects/add') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1559,7 +1481,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3.1 POST /api/projects/remove - Projeyi Listeden Kaldırma
       if (req.method === 'POST' && pathname === '/api/projects/remove') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1588,7 +1509,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3.2 POST /api/project/sync-store-version - Yerel pubspec.yaml sürümünü mağazadaki sürüme eşitleme
       if (req.method === 'POST' && pathname === '/api/project/sync-store-version') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1657,10 +1577,9 @@ export const uiCommand = new Command('ui')
                 }
               }
             } else {
-              // 'smart' - Her iki mağaza arasındaki en yüksek sürüm ve build numarasını al
+
               sourceLabel = 'Akıllı Eşitleme (En Yüksek Mağaza)';
 
-              // Google Play kontrolü
               if (comparison.googlePlay.status === 'live') {
                 if (comparison.googlePlay.version) {
                   const cleanGp = comparison.googlePlay.version.replace(/^v/, '');
@@ -1674,7 +1593,6 @@ export const uiCommand = new Command('ui')
                 }
               }
 
-              // Apple App Store kontrolü
               if (comparison.appStore.status === 'live') {
                 if (comparison.appStore.version) {
                   const cleanAppVer = comparison.appStore.version.replace(/^v/, '');
@@ -1695,7 +1613,6 @@ export const uiCommand = new Command('ui')
 
             const formatted = `${targetVersion}+${targetBuildNumber}`;
 
-            // pubspec.yaml dosyasını güncelle
             const pubspecPath = path.join(targetDir, 'pubspec.yaml');
             if (fs.existsSync(pubspecPath)) {
               let content = fs.readFileSync(pubspecPath, 'utf8');
@@ -1707,7 +1624,6 @@ export const uiCommand = new Command('ui')
               fs.writeFileSync(pubspecPath, content, 'utf8');
             }
 
-            // Projeler listesini güncelle
             if (projItem) {
               projItem.version = targetVersion;
               projItem.buildNumber = targetBuildNumber;
@@ -1741,7 +1657,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3.3 GET /api/stores/apple-apps - App Store Connect Hesabındaki Tüm Uygulamalar
       if (req.method === 'GET' && pathname === '/api/stores/apple-apps') {
         try {
           const creds = getStoreCredentials(activeProjectDir);
@@ -1769,7 +1684,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3.4 POST /api/project/set-apple-mapping - Proje için App Store Connect Uygulamasını Manuel Eşleme
       if (req.method === 'POST' && pathname === '/api/project/set-apple-mapping') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1777,7 +1691,7 @@ export const uiCommand = new Command('ui')
           try {
             const payload = JSON.parse(body || '{}') as {
               projectPath?: string;
-              bundleId?: string; // Boş/undefined ise otomatik eşleştirmeye döner
+              bundleId?: string;
               appName?: string;
             };
 
@@ -1796,7 +1710,6 @@ export const uiCommand = new Command('ui')
             projItem.appStoreOverrideBundleId = payload.bundleId || undefined;
             projItem.appStoreAppName = payload.appName || undefined;
 
-            // Projeyi anında yeni eşlemeyle yeniden karşılaştır
             const meta = detectProjectMetadata(targetDir);
             projItem.stores = await compareProjectWithStores(
               projItem.package || meta.package,
@@ -1825,7 +1738,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 3.5 POST /api/project/git-commit-push - Projedeki değişiklikleri GitHub'a commit ve push et
       if (req.method === 'POST' && pathname === '/api/project/git-commit-push') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -1865,7 +1777,6 @@ export const uiCommand = new Command('ui')
               push: payload.push !== false,
             });
 
-            // Güncel git durumunu al
             const gitAnalyzer = new GitAnalyzer(targetDir);
             const analysis = await gitAnalyzer.analyze();
 
@@ -1904,7 +1815,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 4. GET /api/project - Aktif Proje Detayları, Git ve Sürüm
       if (req.method === 'GET' && pathname === '/api/project') {
         try {
           const reqPath = url.searchParams.get('path');
@@ -1914,26 +1824,24 @@ export const uiCommand = new Command('ui')
             activeProjectDir = currentTarget;
           }
 
-          // 4.1 Config yükle
           let releaseConfig = null;
           try {
             releaseConfig = ConfigLoader.loadFromFile(path.join(currentTarget, 'release.config.yaml'));
           } catch {
-            // Root config'e bak
+
             try {
               releaseConfig = ConfigLoader.loadFromFile();
             } catch {
-              // Varsayılan
+
             }
           }
 
-          // 4.2 Pubspec.yaml ara ve oku
           const updater = new PubspecVersionUpdater();
           let pubspecInfo = null;
           try {
             pubspecInfo = await updater.readPubspec(currentTarget);
           } catch {
-            // pubspec yok
+
           }
 
           const projectName = pubspecInfo?.name || releaseConfig?.project?.name || path.basename(currentTarget);
@@ -1941,7 +1849,6 @@ export const uiCommand = new Command('ui')
           const [verStr = '1.0.0', buildStr = '1'] = fullVersion.split('+');
           const currentBuildNumber = Number(buildStr) || 1;
 
-          // 4.3 Gerçek Git Analizi
           const gitAnalyzer = new GitAnalyzer(currentTarget);
           let gitAnalysis;
           try {
@@ -1960,7 +1867,6 @@ export const uiCommand = new Command('ui')
             };
           }
 
-          // 4.4 Sürüm Çözümleme (SemVer)
           const resolver = new VersionResolver();
           let suggestedVersion = '1.1.0';
           let suggestedBuild = currentBuildNumber + 1;
@@ -1979,7 +1885,6 @@ export const uiCommand = new Command('ui')
             suggestedVersion = `${parts[0] || 1}.${(parts[1] || 0) + 1}.0`;
           }
 
-          // 4.5 Kalıcı ve Proje Bazlı Mağaza Kimlik Bilgileri
           const creds = getStoreCredentials(currentTarget);
           const googlePlayConnected = Boolean(creds.googlePlay?.serviceAccountEmail || creds.googlePlay?.keyPath);
           const googlePlayEmail = creds.googlePlay?.serviceAccountEmail || 'Bağlı değil (Anahtar yapılandırılmadı)';
@@ -2032,7 +1937,7 @@ export const uiCommand = new Command('ui')
               currentBuildNumber,
               verStr,
               currentTarget,
-              false // Hızlı yanıt için cache kullan (forceRefresh: false)
+              false
             ),
             stores: {
               googlePlay: {
@@ -2055,7 +1960,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5. GET /api/stores/credentials - Kayıtlı Kimlik Bilgilerini Getir
       if (req.method === 'GET' && pathname === '/api/stores/credentials') {
         const creds = getStoreCredentials(activeProjectDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2091,7 +1995,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.0 POST /api/ai/save - Yapay Zeka Sağlayıcı ve Anahtarlarını Kaydet
       if (req.method === 'POST' && pathname === '/api/ai/save') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2151,7 +2054,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.0.1 POST /api/ai/test - Yapay Zeka API Bağlantısını Canlı Test Et
       if (req.method === 'POST' && pathname === '/api/ai/test') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2189,7 +2091,6 @@ export const uiCommand = new Command('ui')
               model,
             });
 
-            // Küçük bir test bağlamı ile ping yap
             const testContext = {
               version: '1.0.0',
               commits: [{
@@ -2229,7 +2130,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.0.2 POST /api/ai/models - Sağlayıcı API Anahtarına Göre Desteklenen Modelleri Dinamik Listele
       if (req.method === 'POST' && pathname === '/api/ai/models') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2291,7 +2191,7 @@ export const uiCommand = new Command('ui')
                         };
                       });
                     if (fetched.length > 0) {
-                      // Ultra hızlı gemini-3.1-flash-lite en başa, sonra diğer önerilenler
+
                       fetched.sort((a, b) => {
                         if (a.id === 'gemini-3.1-flash-lite') return -1;
                         if (b.id === 'gemini-3.1-flash-lite') return 1;
@@ -2301,7 +2201,7 @@ export const uiCommand = new Command('ui')
                     }
                   }
                 } catch {
-                  // Fallback listesine devam et
+
                 }
               }
 
@@ -2339,7 +2239,7 @@ export const uiCommand = new Command('ui')
                     }
                   }
                 } catch {
-                  // Fallback
+
                 }
               }
 
@@ -2378,7 +2278,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.0.3 POST /api/ai/diagnose-error - Canlı Dağıtım Hatası Teşhisi ve Kök Neden Analizi
       if (req.method === 'POST' && pathname === '/api/ai/diagnose-error') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2420,7 +2319,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.0.4 POST /api/release/autofix - Akıllı Hata Otomatik Düzeltme İşlemi (Örn: AndroidManifest Fotoğraf İzinleri)
       if (req.method === 'POST' && pathname === '/api/release/autofix') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2473,7 +2371,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.1 POST /api/stores/save-google - Google Play Service Account JSON Kaydet ve Doğrula
       if (req.method === 'POST' && pathname === '/api/stores/save-google') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2515,7 +2412,6 @@ export const uiCommand = new Command('ui')
               return;
             }
 
-            // Test et
             const activeMeta = detectProjectMetadata(activeProjectDir);
             const auth = createGoogleAuth({
               packageName: activeMeta.package || 'com.example.app',
@@ -2532,7 +2428,6 @@ export const uiCommand = new Command('ui')
               authError = tErr instanceof Error ? tErr.message : String(tErr);
             }
 
-            // Kalıcı kaydet
             const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
             const creds = getStoreCredentials(targetDir);
             creds.googlePlay = {
@@ -2562,7 +2457,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.2 POST /api/stores/save-apple - Apple App Store Connect API Anahtarlarını Kaydet ve Doğrula
       if (req.method === 'POST' && pathname === '/api/stores/save-apple') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2588,7 +2482,6 @@ export const uiCommand = new Command('ui')
               return;
             }
 
-            // JWT token test et
             let token = '';
             try {
               const activeMeta = detectProjectMetadata(activeProjectDir);
@@ -2605,7 +2498,6 @@ export const uiCommand = new Command('ui')
               return;
             }
 
-            // Canlı Apple API Testi
             let liveApiOk = false;
             let sampleAppCount = 0;
             let appleErrMsg = '';
@@ -2627,7 +2519,6 @@ export const uiCommand = new Command('ui')
               appleErrMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
             }
 
-            // Kalıcı kaydet
             const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
             const creds = getStoreCredentials(targetDir);
             creds.appStore = {
@@ -2660,7 +2551,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 5.3 POST /api/stores/test-google - Google Play Canlı Doğrulama
       if (req.method === 'POST' && pathname === '/api/stores/test-google') {
         try {
           const creds = getStoreCredentials(activeProjectDir);
@@ -2718,7 +2608,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 6. POST /api/stores/test-apple - Gerçek Apple App Store Connect Canlı Doğrulama
       if (req.method === 'POST' && pathname === '/api/stores/test-apple') {
         try {
           const creds = getStoreCredentials(activeProjectDir);
@@ -2812,7 +2701,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 7. POST /api/ai/generate & /api/ai/release-notes - Gerçek Git Commit'lerinden Sürüm Notu Üretimi
       if (req.method === 'POST' && (pathname === '/api/ai/generate' || pathname === '/api/ai/release-notes')) {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -2827,7 +2715,7 @@ export const uiCommand = new Command('ui')
             };
             const version = payload.version || '1.0.0';
             const targetDir = payload.projectPath || activeProjectDir;
-            
+
             const gitAnalyzer = new GitAnalyzer(targetDir);
             const gitAnalysis = await gitAnalyzer.analyze();
             const commits = gitAnalysis.commitsSinceLastTag;
@@ -2866,7 +2754,6 @@ export const uiCommand = new Command('ui')
               }
             }
 
-            // Hızlı Önbellek (Fast Cache) Kontrolü
             const latestCommitHash = commits[0]?.hash || 'none';
             const cacheKey = `${targetDir}:${version}:${latestCommitHash}:${requestedProvider}:${model || 'default'}`;
             const cached = releaseNotesCache.get(cacheKey);
@@ -2898,7 +2785,7 @@ export const uiCommand = new Command('ui')
               const aiController = new AIController(provider, validatorAdapter);
               notes = await aiController.generate(version, commits, ['tr', 'en']);
             } catch (genErr) {
-              // LLM veya API hatasi durumunda guvenli fallback: Conventional Commits
+
               console.warn('AI uretim hatasi, Conventional Commits cozucu devreye aliniyor:', genErr);
               provider = createAIProvider({ provider: 'conventional' });
               const fallbackController = new AIController(provider, validatorAdapter);
@@ -2937,17 +2824,14 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 8. GET /api/history - Gerçek SQLite Veritabanı Geçmişi (Tüm Projeler veya Seçili Proje)
       if (req.method === 'GET' && pathname === '/api/history') {
         try {
           const queryProj = url.searchParams.get('projectPath');
           const targetDir = queryProj ? path.resolve(queryProj) : (activeProjectDir ? path.resolve(activeProjectDir) : null);
 
-          // Toplanacak release ve audit log havuzları
           const allReleasesMap = new Map<string, ReleaseRecord>();
           const allAuditLogs: AuditLogRecord[] = [];
 
-          // 1. Merkezi veritabanındaki kayıtları ekle
           try {
             const centralReleases = releaseRepo.findAll(100);
             for (const r of centralReleases) {
@@ -2956,10 +2840,9 @@ export const uiCommand = new Command('ui')
             const centralLogs = auditRepo.findAll(100);
             allAuditLogs.push(...centralLogs);
           } catch {
-            // Merkezi db okuma hatası sessiz
+
           }
 
-          // 2. Hedef proje ve kayıtlı tüm projelerin .release/release.db dosyalarını da tara
           const candidateDirs: string[] = [];
           if (targetDir) {
             candidateDirs.push(targetDir);
@@ -2991,16 +2874,14 @@ export const uiCommand = new Command('ui')
                 allAuditLogs.push(...pLogs);
                 pConn.close();
               } catch {
-                // Proje db okuma hatası sessiz
+
               }
             }
           }
 
-          // Tüm kayıtları listele (tarihe göre en yeni en üstte)
           const finalReleases = Array.from(allReleasesMap.values());
           finalReleases.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-          // Audit logları tekilleştir ve sırala
           const seenAudit = new Set<string>();
           const dedupedLogs = allAuditLogs.filter(log => {
             const key = `${log.releaseId}_${log.action}_${log.timestamp}`;
@@ -3023,7 +2904,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 8.5 GET /api/release/status - Proje Bazlı veya Genel Boru Hattı Durumunu Getir
       if (req.method === 'GET' && pathname === '/api/release/status') {
         const queryPath = url.searchParams.get('projectPath');
         const target = path.resolve(queryPath || activeProjectDir);
@@ -3038,7 +2918,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 8.6 POST /api/release/cancel - Belirtilen Projenin Dağıtımını Sıfırla / İptal Et
       if (req.method === 'POST' && pathname === '/api/release/cancel') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -3075,7 +2954,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 9. GET /api/release/events - SSE (Server-Sent Events) Canlı Akış
       if (req.method === 'GET' && pathname === '/api/release/events') {
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
@@ -3084,7 +2962,6 @@ export const uiCommand = new Command('ui')
         });
         res.write('retry: 3000\n\n');
 
-        // Bağlanan istemciye tüm aktif pipeline durumlarını hemen senkronize et
         const pipelinesList = Array.from(activePipelines.values());
         for (const pl of pipelinesList) {
           res.write(`data: ${JSON.stringify({ type: 'sync', pipeline: pl, projectPath: pl.projectPath })}\n\n`);
@@ -3101,7 +2978,6 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // 10. POST /api/release/start - Canlı Release Pipeline Başlatma (Her Proje İçin Bağımsız Boru Hattı)
       if (req.method === 'POST' && pathname === '/api/release/start') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -3143,7 +3019,6 @@ export const uiCommand = new Command('ui')
 
             const releaseTargetDir = path.resolve(options.projectPath || activeProjectDir);
 
-            // Eğer BU PROJE için zaten aktif bir dağıtım yürütülüyorsa izin verme
             const existingPipeline = activePipelines.get(releaseTargetDir);
             if (existingPipeline?.isReleasing) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -3238,7 +3113,6 @@ export const uiCommand = new Command('ui')
               const logLine = `[${new Date().toLocaleTimeString()}] [${event.status}] ${event.step} ${event.message ? '- ' + event.message : ''}`;
               currentStatus.logs.push(logLine);
 
-              // Sıralı ilerleme mantığı: stageId'den öncekiler 'success' (eğer skipped değilse), aktif aşama 'running' / 'success' / 'skipped', sonrakiler 'pending'
               for (const st of currentStatus.stages) {
                 if (st.id < stageId) {
                   if (st.status !== 'skipped') {
@@ -3316,7 +3190,6 @@ export const uiCommand = new Command('ui')
                 }
                 currentStatus.logs.push(`[${new Date().toLocaleTimeString()}] Tüm süreç başarıyla tamamlandı! (Sürüm: ${summary.version})`);
 
-                // DAĞITIM BİTTİĞİNDE MAĞAZA VERİLERİNİ OTOMATİK SENKRONİZE ET
                 try {
                   const storedProjects = getStoredProjects();
                   const currentProject = storedProjects.find(p => p.path === releaseTargetDir);
@@ -3353,7 +3226,6 @@ export const uiCommand = new Command('ui')
                 }
                 currentStatus.logs.push(`[${new Date().toLocaleTimeString()}] HATA: ${errMsg}`);
 
-                // Yapay Zeka Hata Teşhisini ve Kök Neden Analizini Otomatik Başlat
                 try {
                   const creds = getStoreCredentials(releaseTargetDir);
                   const diagnosis = await AIDiagnostician.diagnose({
@@ -3393,10 +3265,9 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      // ======================== STATİK DOSYA SUNUCUSU ========================
       let reqPath = req.url === '/' || !req.url ? '/index.html' : req.url;
       reqPath = reqPath.split('?')[0] || '/index.html';
-      
+
       let filePath = path.join(staticDir, reqPath);
       if (!fs.existsSync(filePath)) {
         filePath = path.join(staticDir, 'index.html');
@@ -3435,7 +3306,6 @@ export const uiCommand = new Command('ui')
       clack.log.info(chalk.dim(`Oturum Tokenı: ${serverSessionToken.substring(0, 8)}... (Yalnızca yerel loopback erişimine izin verilir)`));
       clack.log.info(chalk.dim('Durdurmak için Ctrl+C tuşlarına basın.'));
 
-      // Tarayıcıyı otomatik aç
       const startCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
       exec(`${startCmd} "${launchUrl}"`);
     });
