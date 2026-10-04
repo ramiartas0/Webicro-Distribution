@@ -144,6 +144,8 @@ export interface ActivePipelineStatus {
   startedAt: string;
 }
 
+export const activePipelines = new Map<string, ActivePipelineStatus>();
+
 export function createDefaultStages(): PipelineStageInfo[] {
   return [
     { id: 1, name: 'Hazırlık ve Git Analizi', status: 'pending' },
@@ -877,8 +879,29 @@ export async function compareProjectWithStores(
 
   const creds = getStoreCredentials(projectDir);
 
+  const isPipelineActive =
+    GooglePlayAdapter.isReleaseActive(pkgName) ||
+    Array.from(activePipelines.values()).some(
+      (p) =>
+        p.isReleasing &&
+        ((projectDir && path.resolve(p.projectPath) === path.resolve(projectDir)) ||
+          p.projectName === pkgName),
+    );
+
   let googleFound = false;
-  if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
+  if (isPipelineActive) {
+    const cached = storeComparisonCache.get(cacheKey);
+    if (cached?.data?.googlePlay) {
+      comparison.googlePlay = cached.data.googlePlay;
+      googleFound = true;
+    } else {
+      comparison.googlePlay = {
+        status: 'live',
+        message: 'Dağıtım boru hattı aktif (Edit koruma altında)',
+      };
+      googleFound = true;
+    }
+  } else if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
     try {
       const adapter = new GooglePlayAdapter({
         packageName: pkgName,
@@ -1250,7 +1273,7 @@ export const uiCommand = new Command('ui')
     const auditRepo = new AuditLogRepository(dbConn.getDb());
 
     const sseClients: http.ServerResponse[] = [];
-    const activePipelines = new Map<string, ActivePipelineStatus>();
+    activePipelines.clear();
     const activeAbortControllers = new Map<string, AbortController>();
 
     const broadcastEvent = (event: Record<string, unknown>) => {
@@ -1388,6 +1411,10 @@ export const uiCommand = new Command('ui')
       if (req.method === 'POST' && pathname === '/api/projects/sync-stores') {
         const list = getStoredProjects();
         for (const p of list) {
+          const pipeline = activePipelines.get(path.resolve(p.path));
+          if (pipeline?.isReleasing) {
+            continue;
+          }
           if (p.package) {
             p.stores = await compareProjectWithStores(
               p.package,

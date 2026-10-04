@@ -13,6 +13,21 @@ export class GooglePlayAdapter {
   private packageName: string;
   private config: GooglePlayConfig;
 
+  /** Aktif sürüm yayını devam eden paket adları ve açık Edit ID'leri (çakışma ve silinmeleri önler) */
+  private static readonly activeReleaseEdits = new Map<string, string>();
+
+  public static isReleaseActive(packageName: string): boolean {
+    return GooglePlayAdapter.activeReleaseEdits.has(packageName);
+  }
+
+  public static setActiveReleaseEditForTesting(packageName: string, editId: string | null): void {
+    if (editId) {
+      GooglePlayAdapter.activeReleaseEdits.set(packageName, editId);
+    } else {
+      GooglePlayAdapter.activeReleaseEdits.delete(packageName);
+    }
+  }
+
   constructor(config: GooglePlayConfig) {
     this.config = config;
     this.packageName = config.packageName;
@@ -35,6 +50,16 @@ export class GooglePlayAdapter {
   }
 
   public async getSafeLatestVersionCode(): Promise<GooglePlaySafeTrackResult> {
+    // Eğer bu paket için aktif bir dağıtım yayını (release edit) devam ediyorsa,
+    // yeni bir Edit oluşturmak Play Console tarafından mevcut aktif yayının SİLİNMESİNE yol açar.
+    if (GooglePlayAdapter.activeReleaseEdits.has(this.packageName)) {
+      return {
+        status: 'found',
+        versionCode: 0,
+        message: 'Aktif dağıtım süreci devam ediyor (Edit koruma altında)',
+      };
+    }
+
     let editId = '';
     let token = '';
     try {
@@ -343,6 +368,7 @@ export class GooglePlayAdapter {
     notes?: GooglePlayReleaseNotes[],
   ): Promise<GooglePlayUploadResult> {
     const editId = await this.createEdit();
+    GooglePlayAdapter.activeReleaseEdits.set(this.packageName, editId);
     let versionCode = 0;
     try {
       versionCode = await this.uploadBundle(editId, aabPath);
@@ -360,6 +386,8 @@ export class GooglePlayAdapter {
         ).catch(() => {});
       }
       throw error;
+    } finally {
+      GooglePlayAdapter.activeReleaseEdits.delete(this.packageName);
     }
 
     const trackName = this.config.track ?? 'internal';
@@ -382,11 +410,13 @@ export class GooglePlayAdapter {
     notes?: GooglePlayReleaseNotes[],
   ): Promise<GooglePlayDraftResult> {
     const editId = await this.createEdit();
+    GooglePlayAdapter.activeReleaseEdits.set(this.packageName, editId);
     let versionCode = 0;
     try {
       versionCode = await this.uploadBundle(editId, aabPath);
       await this.assignTrack(editId, versionCode, notes);
     } catch (error: unknown) {
+      GooglePlayAdapter.activeReleaseEdits.delete(this.packageName);
       await this.discardDraft(editId).catch(() => {});
       throw error;
     }
@@ -402,6 +432,7 @@ export class GooglePlayAdapter {
   }
 
   public async discardDraft(editId: string): Promise<void> {
+    GooglePlayAdapter.activeReleaseEdits.delete(this.packageName);
     try {
       const token = await getGoogleAccessToken(this.config).catch(() => '');
       if (token) {
@@ -417,7 +448,11 @@ export class GooglePlayAdapter {
   }
 
   public async commitDraft(editId: string, versionCode: number): Promise<GooglePlayUploadResult> {
-    await this.commit(editId);
+    try {
+      await this.commit(editId);
+    } finally {
+      GooglePlayAdapter.activeReleaseEdits.delete(this.packageName);
+    }
     const trackName = this.config.track ?? 'internal';
     const fraction = this.config.userFraction ?? 1.0;
     let status = 'completed';
