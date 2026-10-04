@@ -14,6 +14,8 @@ export interface OrchestratorOptions {
   bump?: 'major' | 'minor' | 'patch';
   manualVersion?: string;
   dryRun?: boolean;
+  validateOnly?: boolean;
+  buildOnly?: boolean;
   skipAndroid?: boolean;
   skipIos?: boolean;
   skipTests?: boolean;

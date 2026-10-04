@@ -33,6 +33,7 @@ describe('ReleaseOrchestrator - Dry Run Simulation', () => {
     // Dry-run simulation test on isolated directory
     const summary = await orchestrator.execute({
       targetDir: tempDir,
+      packageName: 'com.example.dryrun',
       dryRun: true,
       skipTests: true,
       skipGit: true,

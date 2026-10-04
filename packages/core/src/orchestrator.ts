@@ -29,6 +29,7 @@ import { ReleaseNotifier } from '@webicro/notifications';
 import { generateReleaseId } from './release-id.js';
 import { ReleaseStateMachine } from './state-machine.js';
 import { ReleasePlanner } from './release-planner.js';
+import { detectProjectMetadata } from './detector.js';
 import type { OrchestratorOptions, ReleaseExecutionSummary, ReleaseStepEvent } from './types.js';
 
 export class OrchestratorError extends AppError {
@@ -137,33 +138,18 @@ export class ReleaseOrchestrator {
     try {
       checkAbort();
       this.stateMachine.transitionTo('ANALYZING');
-      
-      // 1. Environment Check & Config Load
-      emitAndRecord('Environment Check', 'IN_PROGRESS');
-      let config = null;
-      try {
-        const candidateConfig = options.configPath || (targetDir && fs.existsSync(path.join(targetDir, 'release.config.yaml')) ? path.join(targetDir, 'release.config.yaml') : undefined);
-        config = ConfigLoader.loadFromFile(candidateConfig);
-      } catch {
-        // Varsayılan devam et
-      }
-      emitAndRecord('Environment Check', 'SUCCESS', 'Flutter, Node ve konfigürasyon doğrulandı');
 
-      // 2. Database initialization & Migration run
-      emitAndRecord('Database Init', 'IN_PROGRESS');
-      emitAndRecord('Database Init', 'SUCCESS', 'SQLite bağlantısı ve şema hazır');
-
-      // 3. Release ID generation (or resume existing)
-      const projectName = config?.project?.name || (targetDir ? path.basename(targetDir) : 'Project');
+      // 0. Release ID & Initial DB Record (Foreign Key Integrity)
+      const detectedMeta = detectProjectMetadata(targetDir);
       let currentRecord = releaseRepo.findByReleaseId(releaseId);
       if (!currentRecord) {
         const releasePayload = {
           releaseId,
-          project: projectName,
+          project: detectedMeta.name || (targetDir ? path.basename(targetDir) : 'Project'),
           version: options.manualVersion || '1.0.0',
           buildNumber: 1,
           status: 'ANALYZING' as const,
-          configSnapshot: config ? JSON.stringify(config) : null,
+          configSnapshot: null,
         };
         currentRecord = releaseRepo.create(releasePayload);
         globalReleaseRepo?.create(releasePayload);
@@ -173,11 +159,47 @@ export class ReleaseOrchestrator {
           action: 'RELEASE_STARTED',
           actor: process.env['USER'] || 'system',
           result: 'SUCCESS' as const,
-          details: JSON.stringify({ project: projectName, targetDir, isResume: Boolean(existingReleaseId) }),
+          details: JSON.stringify({ targetDir, isResume: Boolean(existingReleaseId) }),
         };
         auditRepo.create(auditPayload);
         globalAuditRepo?.create(auditPayload);
       }
+      
+      // 1. Environment Check & Config Load
+      emitAndRecord('Environment Check', 'IN_PROGRESS');
+      let config = null;
+      try {
+        let candidateConfig: string | undefined = options.configPath;
+        if (!candidateConfig && targetDir) {
+          const directYaml = path.join(targetDir, 'release.config.yaml');
+          const directYml = path.join(targetDir, 'release.config.yml');
+          if (fs.existsSync(directYaml)) {
+            candidateConfig = directYaml;
+          } else if (fs.existsSync(directYml)) {
+            candidateConfig = directYml;
+          }
+        }
+        if (candidateConfig) {
+          config = ConfigLoader.loadFromFile(candidateConfig);
+        }
+      } catch {
+        // Varsayılan devam et
+      }
+
+      const projectName = config?.project?.name || detectedMeta.name || (targetDir ? path.basename(targetDir) : 'Project');
+      const resolvedPackage = options.packageName || config?.project?.package || detectedMeta.package;
+
+      const shouldBuildAndroid = !options.skipAndroid && (config?.android?.enabled !== false);
+      if (shouldBuildAndroid && !resolvedPackage && !options.dryRun && !options.validateOnly) {
+        emitAndRecord('Environment Check', 'FAILED', undefined, 'Android paket kimliği tespit edilemedi');
+        throw new AppError('Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.', 'CONFIG_ERROR');
+      }
+
+      emitAndRecord('Environment Check', 'SUCCESS', 'Flutter, Node ve konfigürasyon doğrulandı');
+
+      // 2. Database initialization & Migration run
+      emitAndRecord('Database Init', 'IN_PROGRESS');
+      emitAndRecord('Database Init', 'SUCCESS', 'SQLite bağlantısı ve şema hazır');
 
       // 4. Git Analysis & Security Check
       emitAndRecord('Git Analysis', 'IN_PROGRESS');
@@ -327,7 +349,7 @@ export class ReleaseOrchestrator {
 
       // 11. Flutter Doctor / Analyze (Fail-Closed)
       emitAndRecord('Flutter Check', 'IN_PROGRESS');
-      if (options.dryRun) {
+      if (options.dryRun && !options.validateOnly) {
         emitAndRecord('Flutter Check', 'SUCCESS', 'Simülasyon Modu: Flutter ortamı doğrulandı');
       } else {
         try {
@@ -376,10 +398,22 @@ export class ReleaseOrchestrator {
         emitAndRecord('Run Tests', 'SKIPPED', 'Testler kullanıcı tercihiyle atlandı');
       }
 
+      // Eğer yalnızca doğrulama modu istendiyse, derleme ve mağaza adımlarına geçmeden sonlandır
+      if (options.validateOnly) {
+        emitAndRecord('Validation Complete', 'SUCCESS', 'Doğrulama Modu: Flutter ortamı, statik analiz ve testler başarıyla doğrulandı');
+        const durationMs = Date.now() - this.startTime;
+        return {
+          releaseId,
+          version: resolution.formatted,
+          status: 'VALIDATING',
+          durationMs,
+          releaseNotes,
+        };
+      }
+
       // 13 & 14. Android Build & Verify
       checkAbort();
       let androidArtifact: ArtifactManifest | undefined;
-      const shouldBuildAndroid = !options.skipAndroid && (config?.android?.enabled !== false);
       if (shouldBuildAndroid) {
         const previousAndroid = existingReleaseId ? artifactRepo.findByReleaseAndPlatform(releaseId, 'android') : undefined;
         if (previousAndroid && fs.existsSync(previousAndroid.filePath)) {
@@ -530,6 +564,20 @@ export class ReleaseOrchestrator {
       this.stateMachine.transitionTo('ARTIFACT_READY');
       releaseRepo.updateStatus(releaseId, 'ARTIFACT_READY');
 
+      if (options.buildOnly) {
+        emitAndRecord('Build Complete', 'SUCCESS', 'Yalnızca Derleme Modu: Artifact paketleri başarıyla üretildi ve doğrulandı');
+        const durationMs = Date.now() - this.startTime;
+        return {
+          releaseId,
+          version: resolution.formatted,
+          status: 'ARTIFACT_READY',
+          androidArtifact,
+          iosArtifact,
+          durationMs,
+          releaseNotes,
+        };
+      }
+
       if (!options.dryRun && (!options.skipAndroid || !options.skipIos)) {
         this.stateMachine.transitionTo('UPLOADING');
         releaseRepo.updateStatus(releaseId, 'UPLOADING');
@@ -557,7 +605,12 @@ export class ReleaseOrchestrator {
           }
         }
 
-        const resolvedPackage = options.packageName || config?.project?.package || 'com.webicro.app';
+        if (!resolvedPackage) {
+          emitAndRecord('Google Play Upload', 'FAILED', undefined, 'Android paket kimliği tespit edilemedi');
+          throw new AppError('Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.', 'CONFIG_ERROR');
+        }
+
+        const effectiveTrack = options.googleTrack || config?.android?.track || 'internal';
 
         if (options.dryRun) {
           if (creds.googlePlay && (creds.googlePlay.serviceAccountJson || creds.googlePlay.keyPath)) {
@@ -566,14 +619,15 @@ export class ReleaseOrchestrator {
                 packageName: resolvedPackage,
                 serviceAccountJson: creds.googlePlay.serviceAccountJson,
                 serviceAccountJsonPath: creds.googlePlay.keyPath,
+                track: effectiveTrack,
               });
               await adapter.authenticate();
-              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Play Console (${resolvedPackage}) kimlik bilgileri doğrulandı`);
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Play Console (${resolvedPackage}) kimlik bilgileri doğrulandı [Kanal: ${effectiveTrack}]`);
             } catch {
-              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) yapılandırması hazır`);
+              emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) yapılandırması hazır [Kanal: ${effectiveTrack}]`);
             }
           } else {
-            emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) hazır`);
+            emitAndRecord('Google Play Upload', 'SUCCESS', `Simülasyon Modu: Google Play (${resolvedPackage}) hazır [Kanal: ${effectiveTrack}]`);
           }
           googlePlayStatus = 'SIMULATED';
         } else {
@@ -583,7 +637,7 @@ export class ReleaseOrchestrator {
                 packageName: resolvedPackage,
                 serviceAccountJson: creds.googlePlay.serviceAccountJson,
                 serviceAccountJsonPath: creds.googlePlay.keyPath,
-                track: options.googleTrack || 'internal',
+                track: effectiveTrack,
                 userFraction: options.rollout ? options.rollout / 100 : undefined,
               });
 
