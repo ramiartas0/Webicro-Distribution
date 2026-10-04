@@ -97,5 +97,19 @@ describe('AIDiagnostician', () => {
     expect(diagnosis?.categoryTitle).toContain('Edit Oturumu Silinme');
     expect(diagnosis?.rootCause).toContain('(Edit) oturumu');
   });
+
+  it('Unexpected end of JSON input hatasini STORE_API olarak dogru tespit etmeli', () => {
+    const errorText = 'HATA: Unexpected end of JSON input';
+    const diagnosis = AIDiagnostician.diagnoseHeuristics({
+      failedStep: 'App Store Upload',
+      errorText,
+      recentLogs: [errorText],
+    });
+
+    expect(diagnosis).not.toBeNull();
+    expect(diagnosis?.category).toBe('STORE_API');
+    expect(diagnosis?.source).toBe('app_store');
+    expect(diagnosis?.categoryTitle).toContain('JSON Ayrıştırma');
+  });
 });
 

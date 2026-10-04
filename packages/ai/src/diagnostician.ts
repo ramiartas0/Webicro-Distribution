@@ -224,6 +224,32 @@ export class AIDiagnostician {
       };
     }
 
+    if (
+      combinedText.includes('unexpected end of json input') ||
+      combinedText.includes('unexpected token < in json') ||
+      (combinedText.includes('syntaxerror') && combinedText.includes('json'))
+    ) {
+      const isAppStore =
+        (ctx.failedStep?.toLowerCase().includes('apple') ?? false) ||
+        (ctx.failedStep?.toLowerCase().includes('app store') ?? false);
+      return {
+        category: 'STORE_API',
+        categoryTitle: 'Mağaza API Boş Yanıt / HTTP 204 JSON Ayrıştırma Hatası',
+        source: isAppStore ? 'app_store' : 'unknown',
+        sourceLabel: 'Mağaza REST API Entegrasyonu (Empty / 204 No Content Response)',
+        rootCause:
+          'Mağaza API çağrısı (özellikle Apple App Store Connect build ilişkisi bağlama gibi HTTP 204 No Content dönen uç noktalar) boş gövde döndürdüğünde istemci bunu JSON olarak ayrıştırmaya çalıştı.',
+        explanation:
+          'Derleme ve yükleme adımları tamamen başarıyla geçmiştir. Apple App Store Connect API, build ile sürüm ilişkisini bağlarken gövdesi olmayan bir HTTP 204 No Content yanıtı döndürür. İstemcinin boş yanıtı JSON olarak ayrıştırmaya çalışması bu hataya yol açmıştır. Uygulama kaynak kodunda veya derlemede bir sorun bulunmamaktadır.',
+        autoFixAvailable: false,
+        autoFixAction: 'NONE',
+        solutionSteps: [
+          'Dağıtım motorundaki fetchApi istemcisi HTTP 204 ve boş gövdeli yanıtları güvenli bir şekilde ele alacak şekilde güncellendi.',
+          'Dağıtımı yeniden başlattığınızda derleme ve yükleme aşamaları başarıyla geçip sürüm doğrudan bağlanacaktır.',
+        ],
+      };
+    }
+
     return null;
   }
 

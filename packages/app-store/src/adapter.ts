@@ -50,6 +50,23 @@ export class AppStoreAdapter {
       throw new AppStoreError(`API request failed: ${res.statusText} ${errText}`);
     }
 
+    if (res.status === 204) {
+      return null;
+    }
+
+    if (typeof res.text === 'function') {
+      const text = await res.text().catch(() => '');
+      if (!text || !text.trim()) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        return text;
+      }
+    }
+
     return res.json();
   }
 

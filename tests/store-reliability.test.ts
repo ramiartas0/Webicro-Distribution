@@ -184,10 +184,10 @@ describe('Store Adapters Reliability & Isolation', () => {
       if (options?.body) {
         sentBody = JSON.parse(options.body as string);
       }
-      return {
-        ok: true,
-        json: async () => ({ data: { id: 'version-123' } }),
-      };
+      return new Response(JSON.stringify({ data: { id: 'version-123' } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     });
 
     const adapter = new AppStoreAdapter({
@@ -239,5 +239,30 @@ describe('Store Adapters Reliability & Isolation', () => {
     GooglePlayAdapter.setActiveReleaseEditForTesting('com.webicro.protecttest', null);
     expect(GooglePlayAdapter.isReleaseActive('com.webicro.protecttest')).toBe(false);
   });
+
+  it('AppStoreAdapter HTTP 204 No Content (attachBuildToVersion) yanitini parse hatasi vermeden basariyla tamamlamali', async () => {
+    const { AppStoreAdapter } = await import('../packages/app-store/src/adapter.js');
+
+    let patchCalled = false;
+    vi.stubGlobal('fetch', async () => {
+      patchCalled = true;
+      return new Response(null, { status: 204, statusText: 'No Content' });
+    });
+
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    await expect(
+      adapter.attachBuildToVersion('version-123', 'build-456'),
+    ).resolves.toBeUndefined();
+    expect(patchCalled).toBe(true);
+  });
 });
+
 
