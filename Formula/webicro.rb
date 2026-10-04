@@ -1,6 +1,6 @@
 class Webicro < Formula
   desc "AI-Powered Flutter Release Orchestrator & Multi-Store Distribution CLI/GUI"
-  homepage "https://github.com/webicro/distribution"
+  homepage "https://github.com/ramiartas0/webicro-distribution"
   url "https://registry.npmjs.org/@webicro/cli/-/@webicro/cli-1.0.0.tgz"
   sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" # placeholder for published tarball
   license "MIT"

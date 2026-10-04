@@ -1,6 +1,6 @@
 # 🚀 Webicro Distribution — Local-First Flutter Release Orchestrator
 
-[![CI Pipeline](https://github.com/webicro/webicro_distribution/actions/workflows/ci.yml/badge.svg)](https://github.com/webicro/webicro_distribution/actions/workflows/ci.yml)
+[![CI Pipeline](https://github.com/ramiartas0/webicro-distribution/actions/workflows/ci.yml/badge.svg)](https://github.com/ramiartas0/webicro-distribution/actions/workflows/ci.yml)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-Strict%20Mode-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -85,7 +85,7 @@ packages/
 Herhangi bir yapılandırmayla uğraşmadan tek komutla kurup kullanmaya başlayabilirsiniz:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/webicro/distribution/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ramiartas0/webicro-distribution/main/scripts/install.sh | bash
 ```
 
 ### 2. macOS Homebrew ile Kurulum
