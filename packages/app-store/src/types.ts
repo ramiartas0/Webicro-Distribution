@@ -13,3 +13,10 @@ export interface AppStoreUploadResult {
   status: string;
   submittedForReview: boolean;
 }
+
+export interface AppStoreUploadHooks {
+  /** Abort edildiginde altool sureci sonlandirilir ve build polling durur. */
+  signal?: AbortSignal;
+  /** altool ciktisi ve Apple build isleme durumu icin canli ilerleme mesajlari. */
+  onProgress?: (message: string) => void;
+}

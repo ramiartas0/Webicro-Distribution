@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { AppStoreConfig, AppStoreUploadResult } from './types.js';
+import type { AppStoreConfig, AppStoreUploadHooks, AppStoreUploadResult } from './types.js';
 import { generateAppStoreToken } from './auth.js';
 import { waitForBuildProcessing } from './polling.js';
 
@@ -15,17 +15,21 @@ export class AppStoreError extends Error {
 
 export class AppStoreAdapter {
   private token: string | null = null;
+  private tokenIssuedAt = 0;
+  /** JWT 20 dk gecerli uretilir; 15 dk dolunca guvenlik payi ile yenilenir. */
+  private static readonly TOKEN_REFRESH_MS = 15 * 60 * 1000;
   private readonly baseUrl = 'https://api.appstoreconnect.apple.com/v1';
 
   constructor(private readonly config: AppStoreConfig) {}
 
   public authenticate(): string {
     this.token = generateAppStoreToken(this.config);
+    this.tokenIssuedAt = Date.now();
     return this.token;
   }
 
   private getToken(): string {
-    if (!this.token) {
+    if (!this.token || Date.now() - this.tokenIssuedAt > AppStoreAdapter.TOKEN_REFRESH_MS) {
       return this.authenticate();
     }
     return this.token;
@@ -262,35 +266,81 @@ export class AppStoreAdapter {
     buildNumberString: string,
     whatsNew?: Record<string, string>,
     submitReview?: boolean,
+    hooks?: AppStoreUploadHooks,
   ): Promise<AppStoreUploadResult> {
+    const signal = hooks?.signal;
+    const report = hooks?.onProgress;
+    const throwIfAborted = (): void => {
+      if (signal?.aborted) {
+        throw new AppStoreError('App Store yüklemesi diğer mağazadaki hata nedeniyle iptal edildi.');
+      }
+    };
+
+    throwIfAborted();
     this.ensureAuthKeyFile();
     const appId = await this.getAppId();
+    throwIfAborted();
 
+    report?.('altool ile IPA Apple sunucularına yükleniyor...');
     await new Promise<void>((resolve, reject) => {
-      const cmd = spawn('xcrun', [
-        'altool',
-        '--upload-app',
-        '-f',
-        ipaPath,
-        '-t',
-        'ios',
-        '--apiKey',
-        this.config.keyId,
-        '--apiIssuer',
-        this.config.issuerId,
-      ]);
+      const cmd = spawn(
+        'xcrun',
+        [
+          'altool',
+          '--upload-app',
+          '-f',
+          ipaPath,
+          '-t',
+          'ios',
+          '--apiKey',
+          this.config.keyId,
+          '--apiIssuer',
+          this.config.issuerId,
+        ],
+        { signal },
+      );
 
-      cmd.stdout.on('data', (data) => console.log(`altool: ${data}`));
-      cmd.stderr.on('data', (data) => console.error(`altool err: ${data}`));
+      const forward = (prefix: string, data: Buffer): void => {
+        const text = data.toString();
+        if (prefix === 'altool err') console.error(`${prefix}: ${text}`);
+        else console.log(`${prefix}: ${text}`);
+        for (const raw of text.split('\n')) {
+          const line = raw.trim();
+          if (line) report?.(`altool: ${line}`);
+        }
+      };
+      cmd.stdout.on('data', (data: Buffer) => forward('altool', data));
+      cmd.stderr.on('data', (data: Buffer) => forward('altool err', data));
 
+      cmd.on('error', (err: Error) => {
+        if (err.name === 'AbortError') {
+          reject(
+            new AppStoreError('App Store yüklemesi diğer mağazadaki hata nedeniyle iptal edildi.'),
+          );
+        } else {
+          reject(new AppStoreError(`altool başlatılamadı: ${err.message}`));
+        }
+      });
       cmd.on('close', (code) => {
         if (code === 0) resolve();
-        else reject(new AppStoreError(`altool exited with code ${code}`));
+        else if (!signal?.aborted) reject(new AppStoreError(`altool exited with code ${code}`));
       });
     });
 
-    const token = this.getToken();
-    const buildId = await waitForBuildProcessing(appId, buildNumberString, token);
+    report?.('IPA yüklendi. Apple build işlemesi bekleniyor (genelde 5-30 dk)...');
+    let buildId: string;
+    try {
+      buildId = await waitForBuildProcessing(appId, buildNumberString, () => this.getToken(), {
+        signal,
+        onProgress: report,
+      });
+    } catch (err: unknown) {
+      if (signal?.aborted) {
+        throw new AppStoreError('App Store yüklemesi diğer mağazadaki hata nedeniyle iptal edildi.');
+      }
+      throw err;
+    }
+    throwIfAborted();
 
     const versionId = await this.createAppStoreVersion(appId, versionString).catch(async (e) => {
       const versions = (await this.fetchApi(

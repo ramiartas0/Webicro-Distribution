@@ -1,5 +1,5 @@
 import { mkdir, copyFile, stat, writeFile } from 'fs/promises';
-import { join, basename } from 'path';
+import { join, basename, resolve, isAbsolute } from 'path';
 import type { ArtifactManifest } from './types.js';
 import { calculateFileHash } from './hasher.js';
 
@@ -15,7 +15,10 @@ export class ArtifactManager {
     sourcePath: string,
     version: string,
   ): Promise<ArtifactManifest> {
-    const targetDir = join(process.cwd(), this.artifactsBaseDir, version, platform);
+    const base = isAbsolute(this.artifactsBaseDir)
+      ? this.artifactsBaseDir
+      : resolve(process.cwd(), this.artifactsBaseDir);
+    const targetDir = resolve(base, version, platform);
     await mkdir(targetDir, { recursive: true });
 
     const fileName = basename(sourcePath);

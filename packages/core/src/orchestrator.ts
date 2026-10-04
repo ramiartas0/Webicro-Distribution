@@ -40,6 +40,7 @@ import { generateReleaseId } from './release-id.js';
 import { ReleaseStateMachine } from './state-machine.js';
 import { ReleasePlanner } from './release-planner.js';
 import { detectProjectMetadata } from './detector.js';
+import { runParallelWithAbort } from './parallel-store.js';
 import type { OrchestratorOptions, ReleaseExecutionSummary, ReleaseStepEvent } from './types.js';
 
 export class OrchestratorError extends AppError {
@@ -881,7 +882,12 @@ export class ReleaseOrchestrator {
 
       let googleAdapter: GooglePlayAdapter | null = null;
       let appStoreAdapter: AppStoreAdapter | null = null;
-      let googleDraft: GooglePlayDraftResult | null = null;
+      // Taslak olusur olusmaz buraya yazilir; hata aninda rollback bu kayit uzerinden yapilir.
+      const draftHolder: { draft: GooglePlayDraftResult | null } = { draft: null };
+      // Canli ilerleme: yalnizca dinleyicilere iletilir, DB'ye satir eklemez (polling sik mesaj uretir).
+      const emitProgress = (step: string, message: string): void => {
+        this.emit({ step, status: 'IN_PROGRESS', message });
+      };
 
       const effectiveAndroidVersion = options.androidVersion || resolution.versionString;
       const effectiveIosVersion = options.iosVersion || resolution.versionString;
@@ -939,6 +945,7 @@ export class ReleaseOrchestrator {
             androidArtifact.filePath,
             playNotes.length > 0 ? playNotes : undefined,
           );
+          draftHolder.draft = draftRes;
           emitAndRecord(
             'Google Play Upload',
             'IN_PROGRESS',
@@ -976,7 +983,9 @@ export class ReleaseOrchestrator {
       };
 
       // App Store Görevi
-      const executeAppStoreTask = async (): Promise<AppStoreUploadResult | null> => {
+      const executeAppStoreTask = async (
+        signal?: AbortSignal,
+      ): Promise<AppStoreUploadResult | null> => {
         if (!willUploadIos || !appStoreAdapter || !iosArtifact) {
           if (!options.skipIos) {
             emitAndRecord(
@@ -995,6 +1004,12 @@ export class ReleaseOrchestrator {
           iosArtifact.filePath,
           effectiveIosVersion,
           effectiveIosBuildNumber,
+          undefined,
+          undefined,
+          {
+            signal,
+            onProgress: (m: string) => emitProgress('App Store Upload', m),
+          },
         );
         storeSubmissionRepo.create({
           releaseId,
@@ -1013,17 +1028,20 @@ export class ReleaseOrchestrator {
         return uploadRes;
       };
 
-      let pendingDraftToDiscard: GooglePlayDraftResult | null = null;
       try {
         // PARALEL ÇALIŞTIRMA: Her iki mağaza eşzamanlı olarak yüklenir
-        const [playResult] = await Promise.all([
-          executeGooglePlayTask(),
-          executeAppStoreTask(),
-        ]);
+        // Biri hata verirse diğerinin sinyali derhal iptal edilir (altool SIGTERM, vb.)
+        const { first: playResult } = await runParallelWithAbort(
+          executeGooglePlayTask,
+          executeAppStoreTask,
+          {
+            parentSignal: options.signal,
+            abortOnFailure: atomicRelease,
+          },
+        );
 
         // Eğer iki aşamalı (atomic) ise ve Google taslağı bekliyorsa, şimdi kesinleştir (commit)
         if (playResult && 'editId' in playResult && atomicRelease && googleAdapter) {
-          pendingDraftToDiscard = playResult;
           emitAndRecord(
             'Google Play Upload',
             'IN_PROGRESS',
@@ -1054,13 +1072,13 @@ export class ReleaseOrchestrator {
             'SUCCESS',
             `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
           );
-          pendingDraftToDiscard = null;
+          draftHolder.draft = null;
         }
       } catch (uploadAllErr: unknown) {
-        // Hata durumunda rollback & geri alma:
-        if (pendingDraftToDiscard && googleAdapter) {
+        // Hata durumunda iki asamali atomik rollback:
+        if (draftHolder.draft && googleAdapter) {
           try {
-            await googleAdapter.discardDraft(pendingDraftToDiscard.editId);
+            await googleAdapter.discardDraft(draftHolder.draft.editId);
             emitAndRecord(
               'Google Play Upload',
               'FAILED',
