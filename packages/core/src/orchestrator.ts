@@ -256,9 +256,14 @@ export class ReleaseOrchestrator {
       emitAndRecord('Changelog Generation', 'IN_PROGRESS');
       try {
         const changelogGen = new ChangelogGenerator();
-        const changelogPath = path.join(targetDir, 'CHANGELOG.md');
-        await changelogGen.updateChangelogFile(changelogPath, resolution.versionString, gitAnalysis.commitsSinceLastTag);
-        emitAndRecord('Changelog Generation', 'SUCCESS', `CHANGELOG.md güncellendi (${gitAnalysis.commitsSinceLastTag.length} commit)`);
+        if (!options.dryRun) {
+          const changelogPath = path.join(targetDir, 'CHANGELOG.md');
+          await changelogGen.updateChangelogFile(changelogPath, resolution.versionString, gitAnalysis.commitsSinceLastTag);
+          emitAndRecord('Changelog Generation', 'SUCCESS', `CHANGELOG.md güncellendi (${gitAnalysis.commitsSinceLastTag.length} commit)`);
+        } else {
+          changelogGen.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag);
+          emitAndRecord('Changelog Generation', 'SUCCESS', `Simülasyon Modu: Changelog hazırlandı (${gitAnalysis.commitsSinceLastTag.length} commit)`);
+        }
       } catch (err: unknown) {
         emitAndRecord('Changelog Generation', 'SUCCESS', 'Changelog biçimlendirildi');
       }
@@ -309,11 +314,15 @@ export class ReleaseOrchestrator {
 
       // 10. Update pubspec.yaml version
       emitAndRecord('Pubspec Update', 'IN_PROGRESS');
-      try {
-        await updater.updateVersion(resolution.formatted, targetDir);
-        emitAndRecord('Pubspec Update', 'SUCCESS', `pubspec.yaml -> ${resolution.formatted}`);
-      } catch {
-        emitAndRecord('Pubspec Update', 'SKIPPED', 'pubspec.yaml bulunamadı veya güncellenemedi');
+      if (options.dryRun) {
+        emitAndRecord('Pubspec Update', 'SUCCESS', `Simülasyon Modu: pubspec.yaml -> ${resolution.formatted} (simüle edildi)`);
+      } else {
+        try {
+          await updater.updateVersion(resolution.formatted, targetDir);
+          emitAndRecord('Pubspec Update', 'SUCCESS', `pubspec.yaml -> ${resolution.formatted}`);
+        } catch {
+          emitAndRecord('Pubspec Update', 'SKIPPED', 'pubspec.yaml bulunamadı veya güncellenemedi');
+        }
       }
 
       // 11. Flutter Doctor / Analyze (Fail-Closed)
