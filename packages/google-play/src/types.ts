@@ -18,6 +18,13 @@ export interface GooglePlayReleaseNotes {
   text: string;
 }
 
+export interface GooglePlayDraftResult {
+  editId: string;
+  versionCode: number;
+  track: string;
+  userFraction: number;
+}
+
 export interface GooglePlaySafeTrackResult {
   status: 'found' | 'not_found' | 'auth_error' | 'error';
   versionCode?: number;

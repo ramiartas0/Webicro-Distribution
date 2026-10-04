@@ -82,6 +82,27 @@ export class AppStoreAdapter {
     return app.id;
   }
 
+  public async validateAppExists(): Promise<{ appId: string; appName?: string }> {
+    const data = (await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`)) as {
+      data: { id: string; attributes?: { name?: string } }[];
+    };
+    if (!data.data || data.data.length === 0) {
+      throw new AppStoreError(
+        `App Store Connect üzerinde '${this.config.bundleId}' Bundle ID'sine sahip bir uygulama kaydı bulunamadı. Lütfen developer.apple.com veya App Store Connect üzerinde bu Bundle ID için uygulama oluşturulduğundan emin olun.`,
+      );
+    }
+    const app = data.data[0];
+    if (!app) {
+      throw new AppStoreError(
+        `App Store Connect üzerinde '${this.config.bundleId}' Bundle ID'sine sahip bir uygulama kaydı bulunamadı.`,
+      );
+    }
+    return {
+      appId: app.id,
+      appName: app.attributes?.name,
+    };
+  }
+
   public async getLatestBuild(): Promise<{ version: string; buildNumber: string } | null> {
     const appId = await this.getAppId();
     const data = (await this.fetchApi(

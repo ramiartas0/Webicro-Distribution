@@ -3589,6 +3589,9 @@ export const uiCommand = new Command('ui')
               iosVersion?: string;
               iosBuildNumber?: number;
               decoupledVersions?: boolean;
+              parallelStoreUpload?: boolean;
+              atomicRelease?: boolean;
+              validateStoresPreflight?: boolean;
             };
 
             const trNotes = options.notesTr?.trim();
@@ -3801,6 +3804,9 @@ export const uiCommand = new Command('ui')
                 iosVersion: options.iosVersion,
                 iosBuildNumber: options.iosBuildNumber,
                 decoupledVersions: options.decoupledVersions,
+                parallelStoreUpload: options.parallelStoreUpload !== false,
+                atomicRelease: options.atomicRelease !== false,
+                validateStoresPreflight: options.validateStoresPreflight !== false,
                 signal: abortCtrl.signal,
               });
 

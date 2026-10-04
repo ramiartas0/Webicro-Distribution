@@ -2350,6 +2350,9 @@ export default function App() {
           skipGit: !autoGitSync,
           createGitTag: autoGitSync,
           pushGit: autoGitSync,
+          parallelStoreUpload: true,
+          atomicRelease: true,
+          validateStoresPreflight: true,
         }),
       });
 
@@ -4068,6 +4071,24 @@ export default function App() {
                       )}
                     </div>
                   </div>
+
+                  {targetAndroid && targetIos && (
+                    <div className="mt-3 p-3 rounded-lg bg-secondary/50 border border-border text-xs flex items-start gap-2.5 text-muted-foreground">
+                      <ShieldCheck className="w-4 h-4 shrink-0 text-foreground mt-0.5" />
+                      <div className="space-y-0.5">
+                        <strong className="text-foreground font-semibold block text-[11px]">
+                          {language === 'tr'
+                            ? 'Eşzamanlı Paralel Yükleme ve Atomik Dağıtım Güvencesi'
+                            : 'Concurrent Parallel Upload & Two-Phase Atomic Assurance'}
+                        </strong>
+                        <p className="text-[11px] leading-relaxed">
+                          {language === 'tr'
+                            ? 'Google Play ve App Store yüklemeleri eşzamanlı olarak yürütülür. Uçuş öncesi (Pre-flight) kimlik kontrolleri yapılır ve her iki mağaza da doğrulanıp onaylanmadan Google Play yayını kesinleştirilmez. Olası bir hata durumunda taslak yayın otomatik olarak iptal edilir ve mağazalar arası asimetri engellenir.'
+                            : 'Google Play and App Store uploads run concurrently. Pre-flight credentials and bundle IDs are verified first, and Google Play is not committed until both stores succeed. In case of any failure, drafts are automatically discarded to prevent cross-store version drift.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* AI SÜRÜM NOTLARI */}

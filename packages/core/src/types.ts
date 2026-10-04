@@ -37,6 +37,9 @@ export interface OrchestratorOptions {
   iosVersion?: string;
   iosBuildNumber?: number;
   decoupledVersions?: boolean;
+  parallelStoreUpload?: boolean;
+  atomicRelease?: boolean;
+  validateStoresPreflight?: boolean;
   signal?: AbortSignal;
 }
 

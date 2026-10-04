@@ -28,8 +28,13 @@ import { IosBuilder } from '@webicro/ios';
 import { ArtifactManager } from '@webicro/artifacts';
 import type { ArtifactManifest } from '@webicro/artifacts';
 import { SecretScanner } from '@webicro/security';
-import { GooglePlayAdapter, type GooglePlayReleaseNotes } from '@webicro/google-play';
-import { AppStoreAdapter } from '@webicro/app-store';
+import {
+  GooglePlayAdapter,
+  type GooglePlayReleaseNotes,
+  type GooglePlayDraftResult,
+  type GooglePlayUploadResult,
+} from '@webicro/google-play';
+import { AppStoreAdapter, type AppStoreUploadResult } from '@webicro/app-store';
 import { ReleaseNotifier } from '@webicro/notifications';
 import { generateReleaseId } from './release-id.js';
 import { ReleaseStateMachine } from './state-machine.js';
@@ -772,190 +777,301 @@ export class ReleaseOrchestrator {
       }
 
       checkAbort();
-      let googlePlayStatus = 'SKIPPED';
-      if (!options.skipAndroid) {
-        emitAndRecord('Google Play Upload', 'IN_PROGRESS');
-        const candidateCredPaths = [
-          path.join(targetDir, '.release/credentials.json'),
-          path.join(process.cwd(), '.release/credentials.json'),
-        ];
-        let creds: { googlePlay?: { serviceAccountJson?: string; keyPath?: string } } = {};
-        for (const cPath of candidateCredPaths) {
-          if (fs.existsSync(cPath)) {
-            try {
-              const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8'));
-              if (parsed.googlePlay) {
-                creds = parsed;
-                break;
-              }
-            } catch {}
-          }
-        }
 
-        if (!resolvedPackage) {
-          emitAndRecord(
-            'Google Play Upload',
-            'FAILED',
-            undefined,
-            'Android paket kimliği tespit edilemedi',
-          );
+      const candidateCredPaths = [
+        path.join(targetDir, '.release/credentials.json'),
+        path.join(process.cwd(), '.release/credentials.json'),
+      ];
+      let creds: {
+        googlePlay?: { serviceAccountJson?: string; keyPath?: string };
+        appStore?: {
+          keyId?: string;
+          issuerId?: string;
+          privateKey?: string;
+          privateKeyPath?: string;
+        };
+      } = {};
+      for (const cPath of candidateCredPaths) {
+        if (fs.existsSync(cPath)) {
+          try {
+            const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8'));
+            if (parsed.googlePlay || parsed.appStore) {
+              creds = {
+                googlePlay: parsed.googlePlay || creds.googlePlay,
+                appStore: parsed.appStore || creds.appStore,
+              };
+            }
+          } catch {}
+        }
+      }
+
+      const willUploadAndroid = Boolean(
+        !options.skipAndroid && androidArtifact && creds.googlePlay,
+      );
+      const willUploadIos = Boolean(
+        !options.skipIos &&
+          iosArtifact &&
+          creds.appStore?.keyId &&
+          creds.appStore?.issuerId,
+      );
+
+      const effectiveIosBundleId =
+        resolvedIosBundleId ||
+        options.iosBundleId ||
+        detectedMeta.iosBundleId ||
+        resolvedPackage;
+
+      // 1. ADIM: UÇUŞ ÖNCESİ MAĞAZA VE KİMLİK DOĞRULAMASI (Pre-flight Fail-Early Validation)
+      if (options.validateStoresPreflight !== false) {
+        if (willUploadAndroid && !resolvedPackage) {
           throw new AppError(
             'Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.',
             'CONFIG_ERROR',
           );
         }
 
-        const effectiveTrack = options.googleTrack || config?.android?.track || 'internal';
-
-        if (androidArtifact && creds.googlePlay) {
-          try {
-            const adapter = new GooglePlayAdapter({
-              packageName: resolvedPackage,
-              serviceAccountJson: creds.googlePlay.serviceAccountJson,
-              serviceAccountJsonPath: creds.googlePlay.keyPath,
-              track: effectiveTrack,
-              userFraction: options.rollout ? options.rollout / 100 : undefined,
-            });
-
-            const playNotes: GooglePlayReleaseNotes[] = [];
-            if (options.notesTr) {
-              playNotes.push({ language: 'tr-TR', text: options.notesTr });
-            }
-            if (options.notesEn) {
-              playNotes.push({ language: 'en-US', text: options.notesEn });
-            }
-
-            const effectiveAndroidVersion = options.androidVersion || resolution.versionString;
-            const uploadRes = await adapter.uploadAndRelease(
-              androidArtifact.filePath,
-              playNotes.length > 0 ? playNotes : undefined,
+        if (willUploadIos) {
+          if (!effectiveIosBundleId) {
+            throw new AppError(
+              'App Store Connect yüklemesi için geçerli bir iOS Bundle ID (PRODUCT_BUNDLE_IDENTIFIER) bulunamadı.',
+              'CONFIG_ERROR',
             );
-            storeSubmissionRepo.create({
-              releaseId,
-              store: 'google_play',
-              version: effectiveAndroidVersion,
-              status: uploadRes.status,
-              externalId: String(uploadRes.versionCode),
-              error: null,
-            });
-            googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
-            const trackDisplayNames: Record<string, string> = {
-              internal: 'Dahili test',
-              alpha: 'Kapalı test',
-              beta: 'Açık test',
-              production: 'Üretim',
-            };
-            const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
-            emitAndRecord(
-              'Google Play Upload',
-              'SUCCESS',
-              `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
-            );
-          } catch (uploadErr: unknown) {
-            const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-            emitAndRecord('Google Play Upload', 'FAILED', undefined, msg);
-            throw uploadErr;
           }
-        } else {
-          emitAndRecord(
-            'Google Play Upload',
-            'SKIPPED',
-            'Android artifact veya Service Account bulunamadı',
-          );
-        }
-      } else {
-        emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
-      }
 
-      checkAbort();
-      let appStoreStatus = 'SKIPPED';
-      if (!options.skipIos) {
-        emitAndRecord('App Store Upload', 'IN_PROGRESS');
-        const candidateCredPaths = [
-          path.join(targetDir, '.release/credentials.json'),
-          path.join(process.cwd(), '.release/credentials.json'),
-        ];
-        let creds: {
-          appStore?: {
-            keyId?: string;
-            issuerId?: string;
-            privateKey?: string;
-            privateKeyPath?: string;
-          };
-        } = {};
-        for (const cPath of candidateCredPaths) {
-          if (fs.existsSync(cPath)) {
-            try {
-              const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8'));
-              if (parsed.appStore) {
-                creds = parsed;
-                break;
-              }
-            } catch {}
-          }
-        }
-
-        if (iosArtifact && creds.appStore?.keyId && creds.appStore?.issuerId) {
+          // Pre-flight kontrolü: App Store Connect üzerinde uygulama gerçekten kayıtlı mı?
           try {
-            const effectiveIosVersion = options.iosVersion || resolution.versionString;
-            const effectiveIosBuildNumber =
-              options.iosBuildNumber !== undefined
-                ? String(options.iosBuildNumber)
-                : resolution.buildNumberString;
-
-            const effectiveBundleId =
-              resolvedIosBundleId ||
-              options.iosBundleId ||
-              detectedMeta.iosBundleId ||
-              resolvedPackage;
-
-            if (!effectiveBundleId) {
-              throw new AppError(
-                'App Store Connect yüklemesi için geçerli bir iOS Bundle ID (PRODUCT_BUNDLE_IDENTIFIER) bulunamadı.',
-                'CONFIG_ERROR',
-              );
-            }
-
-            const adapter = new AppStoreAdapter({
-              keyId: creds.appStore.keyId,
-              issuerId: creds.appStore.issuerId,
-              bundleId: effectiveBundleId,
-              privateKeyPath: creds.appStore.privateKeyPath,
-              privateKeyContent: creds.appStore.privateKey,
+            const preflightAppStore = new AppStoreAdapter({
+              keyId: creds.appStore!.keyId!,
+              issuerId: creds.appStore!.issuerId!,
+              bundleId: effectiveIosBundleId,
+              privateKeyPath: creds.appStore!.privateKeyPath,
+              privateKeyContent: creds.appStore!.privateKey,
             });
-            const uploadRes = await adapter.uploadAndRelease(
-              iosArtifact.filePath,
-              effectiveIosVersion,
-              effectiveIosBuildNumber,
-            );
-            storeSubmissionRepo.create({
-              releaseId,
-              store: 'app_store',
-              version: effectiveIosVersion,
-              status: uploadRes.status,
-              externalId: uploadRes.buildId,
-              error: null,
-            });
-            appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
+            await preflightAppStore.validateAppExists();
+          } catch (preflightErr: unknown) {
+            const preflightMsg =
+              preflightErr instanceof Error ? preflightErr.message : String(preflightErr);
             emitAndRecord(
               'App Store Upload',
-              'SUCCESS',
-              `App Store Connect'e yüklendi: Paket ${effectiveBundleId} (${uploadRes.buildId})`,
+              'FAILED',
+              undefined,
+              `Uçuş öncesi doğrulama hatası: ${preflightMsg}`,
             );
-          } catch (uploadErr: unknown) {
-            const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-            emitAndRecord('App Store Upload', 'FAILED', undefined, msg);
-            throw uploadErr;
+            if (willUploadAndroid) {
+              emitAndRecord(
+                'Google Play Upload',
+                'SKIPPED',
+                'App Store kimlik doğrulaması başarısız olduğu için Google Play yüklemesi başlatılmadı (Atomik Güvence).',
+              );
+            }
+            throw new AppError(
+              `[UÇUŞ ÖNCESİ MAĞAZA DOĞRULAMA HATASI]: ${preflightMsg}. Google Play'e tek taraflı yükleme yapılmasını ve mağazalar arası sürüm uyumsuzluğunu önlemek amacıyla dağıtım güvenli şekilde durduruldu.`,
+              'VALIDATION_ERROR',
+            );
           }
-        } else {
-          emitAndRecord(
-            'App Store Upload',
-            'SKIPPED',
-            'iOS artifact veya API anahtarları bulunamadı',
-          );
         }
-      } else {
-        emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
+      }
+
+      // 2. ADIM: PARALEL & ATOMİK MAĞAZA YÜKLEME ORKESTRASYONU
+      let googlePlayStatus = 'SKIPPED';
+      let appStoreStatus = 'SKIPPED';
+
+      const isBothStoresTargeted = willUploadAndroid && willUploadIos;
+      const atomicRelease = options.atomicRelease !== false && isBothStoresTargeted;
+
+      let googleAdapter: GooglePlayAdapter | null = null;
+      let appStoreAdapter: AppStoreAdapter | null = null;
+      let googleDraft: GooglePlayDraftResult | null = null;
+
+      const effectiveAndroidVersion = options.androidVersion || resolution.versionString;
+      const effectiveIosVersion = options.iosVersion || resolution.versionString;
+      const effectiveIosBuildNumber =
+        options.iosBuildNumber !== undefined
+          ? String(options.iosBuildNumber)
+          : resolution.buildNumberString;
+
+      if (willUploadAndroid) {
+        const effectiveTrack = options.googleTrack || config?.android?.track || 'internal';
+        googleAdapter = new GooglePlayAdapter({
+          packageName: resolvedPackage,
+          serviceAccountJson: creds.googlePlay!.serviceAccountJson,
+          serviceAccountJsonPath: creds.googlePlay!.keyPath,
+          track: effectiveTrack,
+          userFraction: options.rollout ? options.rollout / 100 : undefined,
+        });
+      }
+
+      if (willUploadIos) {
+        appStoreAdapter = new AppStoreAdapter({
+          keyId: creds.appStore!.keyId!,
+          issuerId: creds.appStore!.issuerId!,
+          bundleId: effectiveIosBundleId,
+          privateKeyPath: creds.appStore!.privateKeyPath,
+          privateKeyContent: creds.appStore!.privateKey,
+        });
+      }
+
+      // Google Play Görevi
+      const executeGooglePlayTask = async (): Promise<
+        GooglePlayDraftResult | GooglePlayUploadResult | null
+      > => {
+        if (!willUploadAndroid || !googleAdapter || !androidArtifact) {
+          if (!options.skipAndroid) {
+            emitAndRecord(
+              'Google Play Upload',
+              'SKIPPED',
+              'Android artifact veya Service Account bulunamadı',
+            );
+          } else {
+            emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
+          }
+          return null;
+        }
+
+        emitAndRecord('Google Play Upload', 'IN_PROGRESS');
+        const playNotes: GooglePlayReleaseNotes[] = [];
+        if (options.notesTr) playNotes.push({ language: 'tr-TR', text: options.notesTr });
+        if (options.notesEn) playNotes.push({ language: 'en-US', text: options.notesEn });
+
+        if (atomicRelease) {
+          // İki aşamalı taahhüt: Önce taslak (draft) olarak yükle, App Store tamamlanmadan commit etme
+          const draftRes = await googleAdapter.uploadDraftOnly(
+            androidArtifact.filePath,
+            playNotes.length > 0 ? playNotes : undefined,
+          );
+          emitAndRecord(
+            'Google Play Upload',
+            'IN_PROGRESS',
+            `AAB paketi yüklendi (v${draftRes.versionCode}), App Store tamamlanması bekleniyor (Atomik Taslak)...`,
+          );
+          return draftRes;
+        } else {
+          const uploadRes = await googleAdapter.uploadAndRelease(
+            androidArtifact.filePath,
+            playNotes.length > 0 ? playNotes : undefined,
+          );
+          storeSubmissionRepo.create({
+            releaseId,
+            store: 'google_play',
+            version: effectiveAndroidVersion,
+            status: uploadRes.status,
+            externalId: String(uploadRes.versionCode),
+            error: null,
+          });
+          googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
+          const trackDisplayNames: Record<string, string> = {
+            internal: 'Dahili test',
+            alpha: 'Kapalı test',
+            beta: 'Açık test',
+            production: 'Üretim',
+          };
+          const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+          emitAndRecord(
+            'Google Play Upload',
+            'SUCCESS',
+            `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+          );
+          return uploadRes;
+        }
+      };
+
+      // App Store Görevi
+      const executeAppStoreTask = async (): Promise<AppStoreUploadResult | null> => {
+        if (!willUploadIos || !appStoreAdapter || !iosArtifact) {
+          if (!options.skipIos) {
+            emitAndRecord(
+              'App Store Upload',
+              'SKIPPED',
+              'iOS artifact veya API anahtarları bulunamadı',
+            );
+          } else {
+            emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
+          }
+          return null;
+        }
+
+        emitAndRecord('App Store Upload', 'IN_PROGRESS');
+        const uploadRes = await appStoreAdapter.uploadAndRelease(
+          iosArtifact.filePath,
+          effectiveIosVersion,
+          effectiveIosBuildNumber,
+        );
+        storeSubmissionRepo.create({
+          releaseId,
+          store: 'app_store',
+          version: effectiveIosVersion,
+          status: uploadRes.status,
+          externalId: uploadRes.buildId,
+          error: null,
+        });
+        appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
+        emitAndRecord(
+          'App Store Upload',
+          'SUCCESS',
+          `App Store Connect'e yüklendi: Paket ${effectiveIosBundleId} (${uploadRes.buildId})`,
+        );
+        return uploadRes;
+      };
+
+      let pendingDraftToDiscard: GooglePlayDraftResult | null = null;
+      try {
+        // PARALEL ÇALIŞTIRMA: Her iki mağaza eşzamanlı olarak yüklenir
+        const [playResult] = await Promise.all([
+          executeGooglePlayTask(),
+          executeAppStoreTask(),
+        ]);
+
+        // Eğer iki aşamalı (atomic) ise ve Google taslağı bekliyorsa, şimdi kesinleştir (commit)
+        if (playResult && 'editId' in playResult && atomicRelease && googleAdapter) {
+          pendingDraftToDiscard = playResult;
+          emitAndRecord(
+            'Google Play Upload',
+            'IN_PROGRESS',
+            'App Store başarıyla tamamlandı. Google Play yayını kesinleştiriliyor (Commit)...',
+          );
+          const uploadRes = await googleAdapter.commitDraft(
+            playResult.editId,
+            playResult.versionCode,
+          );
+          storeSubmissionRepo.create({
+            releaseId,
+            store: 'google_play',
+            version: effectiveAndroidVersion,
+            status: uploadRes.status,
+            externalId: String(uploadRes.versionCode),
+            error: null,
+          });
+          googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
+          const trackDisplayNames: Record<string, string> = {
+            internal: 'Dahili test',
+            alpha: 'Kapalı test',
+            beta: 'Açık test',
+            production: 'Üretim',
+          };
+          const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+          emitAndRecord(
+            'Google Play Upload',
+            'SUCCESS',
+            `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+          );
+          pendingDraftToDiscard = null;
+        }
+      } catch (uploadAllErr: unknown) {
+        // Hata durumunda rollback & geri alma:
+        if (pendingDraftToDiscard && googleAdapter) {
+          try {
+            await googleAdapter.discardDraft(pendingDraftToDiscard.editId);
+            emitAndRecord(
+              'Google Play Upload',
+              'FAILED',
+              undefined,
+              'Diğer mağaza yüklemesi başarısız olduğu için Google Play taslak yayını iptal edildi (Rollback). Mağazalar arası uyumsuzluk önlendi.',
+            );
+          } catch {}
+        }
+        const errFinalMsg =
+          uploadAllErr instanceof Error ? uploadAllErr.message : String(uploadAllErr);
+        throw new AppError(errFinalMsg, 'NETWORK_ERROR', { cause: uploadAllErr });
       }
 
       let finalStatus: ReleaseStatus = 'ARTIFACT_READY';

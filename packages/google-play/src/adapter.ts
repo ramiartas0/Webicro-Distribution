@@ -4,6 +4,7 @@ import type {
   GooglePlayReleaseNotes,
   GooglePlayUploadResult,
   GooglePlaySafeTrackResult,
+  GooglePlayDraftResult,
 } from './types.js';
 import { getGoogleAccessToken } from './auth.js';
 import { GooglePlayError } from '@webicro/shared';
@@ -361,6 +362,62 @@ export class GooglePlayAdapter {
       throw error;
     }
 
+    const trackName = this.config.track ?? 'internal';
+    const fraction = this.config.userFraction ?? 1.0;
+    let status = 'completed';
+    if (fraction < 1.0 && trackName !== 'internal') {
+      status = 'inProgress';
+    }
+
+    return {
+      versionCode,
+      track: trackName,
+      userFraction: status === 'inProgress' ? fraction : 1.0,
+      status,
+    };
+  }
+
+  public async uploadDraftOnly(
+    aabPath: string,
+    notes?: GooglePlayReleaseNotes[],
+  ): Promise<GooglePlayDraftResult> {
+    const editId = await this.createEdit();
+    let versionCode = 0;
+    try {
+      versionCode = await this.uploadBundle(editId, aabPath);
+      await this.assignTrack(editId, versionCode, notes);
+    } catch (error: unknown) {
+      await this.discardDraft(editId).catch(() => {});
+      throw error;
+    }
+
+    const trackName = this.config.track ?? 'internal';
+    const fraction = this.config.userFraction ?? 1.0;
+    return {
+      editId,
+      versionCode,
+      track: trackName,
+      userFraction: fraction,
+    };
+  }
+
+  public async discardDraft(editId: string): Promise<void> {
+    try {
+      const token = await getGoogleAccessToken(this.config).catch(() => '');
+      if (token) {
+        await fetch(
+          `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        ).catch(() => {});
+      }
+    } catch {}
+  }
+
+  public async commitDraft(editId: string, versionCode: number): Promise<GooglePlayUploadResult> {
+    await this.commit(editId);
     const trackName = this.config.track ?? 'internal';
     const fraction = this.config.userFraction ?? 1.0;
     let status = 'completed';
