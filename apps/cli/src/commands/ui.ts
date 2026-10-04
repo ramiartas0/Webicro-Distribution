@@ -538,10 +538,9 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
 
   const creds: StoreCredentials = {};
 
-  const defaultKeyPath = path.join(process.env['HOME'] || '~', '.secrets/google-play-key.json');
-  const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'] || defaultKeyPath;
+  const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'];
 
-  if (fs.existsSync(googleKeyPath)) {
+  if (googleKeyPath && fs.existsSync(googleKeyPath)) {
     try {
       const keyContent = JSON.parse(fs.readFileSync(googleKeyPath, 'utf8')) as {
         client_email?: string;
@@ -2840,6 +2839,74 @@ export const uiCommand = new Command('ui')
             res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
           }
         });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/stores/disconnect-google') {
+        try {
+          const creds = getStoreCredentials(activeProjectDir);
+          delete creds.googlePlay;
+          saveStoreCredentials(creds, activeProjectDir);
+          const globalCreds = getStoreCredentials();
+          delete globalCreds.googlePlay;
+          saveStoreCredentials(globalCreds);
+
+          const list = getStoredProjects();
+          for (const p of list) {
+            if (p.stores?.googlePlay) {
+              p.stores.googlePlay = {
+                status: 'not_configured',
+                message: 'Google Play Service Account bağlantısı kaldırıldı',
+              };
+            }
+          }
+          saveStoredProjects(list);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'Google Play API kimlik bilgisi başarıyla kaldırıldı.',
+            }),
+          );
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/stores/disconnect-apple') {
+        try {
+          const creds = getStoreCredentials(activeProjectDir);
+          delete creds.appStore;
+          saveStoreCredentials(creds, activeProjectDir);
+          const globalCreds = getStoreCredentials();
+          delete globalCreds.appStore;
+          saveStoreCredentials(globalCreds);
+
+          const list = getStoredProjects();
+          for (const p of list) {
+            if (p.stores?.appStore) {
+              p.stores.appStore = {
+                status: 'not_configured',
+                message: 'App Store Connect API bağlantısı kaldırıldı',
+              };
+            }
+          }
+          saveStoredProjects(list);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: 'App Store Connect API kimlik bilgisi başarıyla kaldırıldı.',
+            }),
+          );
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
         return;
       }
 

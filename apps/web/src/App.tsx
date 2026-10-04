@@ -1732,6 +1732,72 @@ export default function App() {
     }
   };
 
+  const handleDisconnectGooglePlay = async () => {
+    try {
+      const res = await authFetch('/api/stores/disconnect-google', {
+        method: 'POST',
+      });
+      if (res.ok) {
+        toast.success(
+          language === 'tr'
+            ? 'Google Play bağlantısı başarıyla kaldırıldı.'
+            : 'Google Play connection disconnected.',
+          'Google Play API',
+        );
+        setGooglePlayInfo({
+          connected: false,
+          serviceAccount: language === 'tr' ? 'Bağlı değil' : 'Not connected',
+          projectId: '',
+          keyPath: '',
+        });
+        setGoogleJsonInput('');
+        setGooglePathInput('');
+        setGoogleTestResult({ testing: false, tested: false, success: false });
+        await loadProjectsAndActive();
+      }
+    } catch (err) {
+      toast.error(
+        language === 'tr'
+          ? `Bağlantı kaldırılamadı: ${String(err)}`
+          : `Failed to disconnect: ${String(err)}`,
+        'Google Play API',
+      );
+    }
+  };
+
+  const handleDisconnectAppStore = async () => {
+    try {
+      const res = await authFetch('/api/stores/disconnect-apple', {
+        method: 'POST',
+      });
+      if (res.ok) {
+        toast.success(
+          language === 'tr'
+            ? 'App Store Connect bağlantısı başarıyla kaldırıldı.'
+            : 'App Store Connect connection disconnected.',
+          'App Store Connect API',
+        );
+        setAppStoreInfo({
+          connected: false,
+          keyId: '',
+          issuerId: '',
+        });
+        setAppleKeyIdInput('');
+        setAppleIssuerIdInput('');
+        setApplePrivateKeyInput('');
+        setAppleTestResult({ testing: false, tested: false, success: false });
+        await loadProjectsAndActive();
+      }
+    } catch (err) {
+      toast.error(
+        language === 'tr'
+          ? `Bağlantı kaldırılamadı: ${String(err)}`
+          : `Failed to disconnect: ${String(err)}`,
+        'App Store Connect API',
+      );
+    }
+  };
+
   const handleGenerateAI = async (
     selectedProvider?: 'gemini' | 'openai' | 'anthropic' | 'conventional',
   ) => {
@@ -4862,19 +4928,30 @@ export default function App() {
                       {googlePlayInfo.serviceAccount}
                     </span>
                   </div>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                      googlePlayInfo.connected
-                        ? 'bg-secondary text-foreground border-border'
-                        : 'bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {googlePlayInfo.connected
-                      ? t('labels.connectionReadyBadge')
-                      : language === 'tr'
-                        ? 'Bekliyor'
-                        : 'Pending'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        googlePlayInfo.connected
+                          ? 'bg-secondary text-foreground border-border'
+                          : 'bg-muted text-muted-foreground border-border'
+                      }`}
+                    >
+                      {googlePlayInfo.connected
+                        ? t('labels.connectionReadyBadge')
+                        : language === 'tr'
+                          ? 'Bekliyor'
+                          : 'Pending'}
+                    </span>
+                    {googlePlayInfo.connected && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDisconnectGooglePlay()}
+                        className="text-[10px] text-destructive hover:underline font-semibold cursor-pointer"
+                      >
+                        {language === 'tr' ? 'Bağlantıyı Kaldır' : 'Disconnect'}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
@@ -4985,19 +5062,30 @@ export default function App() {
                       {appStoreInfo.keyId || t('common.notConfigured')}
                     </span>
                   </div>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                      appStoreInfo.connected
-                        ? 'bg-secondary text-foreground border-border'
-                        : 'bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {appStoreInfo.connected
-                      ? language === 'tr'
-                        ? 'Bağlantı Hazır'
-                        : 'Connected'
-                      : t('common.notConfigured')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        appStoreInfo.connected
+                          ? 'bg-secondary text-foreground border-border'
+                          : 'bg-muted text-muted-foreground border-border'
+                      }`}
+                    >
+                      {appStoreInfo.connected
+                        ? language === 'tr'
+                          ? 'Bağlantı Hazır'
+                          : 'Connected'
+                        : t('common.notConfigured')}
+                    </span>
+                    {appStoreInfo.connected && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDisconnectAppStore()}
+                        className="text-[10px] text-destructive hover:underline font-semibold cursor-pointer"
+                      >
+                        {language === 'tr' ? 'Bağlantıyı Kaldır' : 'Disconnect'}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
