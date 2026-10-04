@@ -1,0 +1,43 @@
+{
+  "name": "@webicro/core",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@webicro/shared": "workspace:*",
+    "@webicro/database": "workspace:*",
+    "@webicro/audit": "workspace:*",
+    "@webicro/config": "workspace:*",
+    "@webicro/git": "workspace:*",
+    "@webicro/versioning": "workspace:*",
+    "@webicro/changelog": "workspace:*",
+    "@webicro/validation": "workspace:*",
+    "@webicro/ai": "workspace:*",
+    "@webicro/flutter": "workspace:*",
+    "@webicro/android": "workspace:*",
+    "@webicro/ios": "workspace:*",
+    "@webicro/artifacts": "workspace:*",
+    "@webicro/security": "workspace:*",
+    "@webicro/google-play": "workspace:*",
+    "@webicro/app-store": "workspace:*",
+    "@webicro/notifications": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts"
+}

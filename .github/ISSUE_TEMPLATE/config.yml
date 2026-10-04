@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Webicro Documentation & Wiki
+    url: https://github.com/ramiartas0/Webicro-Distribution/blob/main/README.md
+    about: Read comprehensive guides, architectural diagrams, and command reference.
+  - name: Community Discussions
+    url: https://github.com/ramiartas0/Webicro-Distribution/discussions
+    about: Ask questions, share ideas, and connect with other contributors.

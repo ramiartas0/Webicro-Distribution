@@ -1,0 +1,44 @@
+{
+  "name": "webicro-distribution",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-Powered Flutter Release Orchestrator",
+  "author": "Webicro",
+  "homepage": "https://www.webicro.com",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm -r --filter './packages/*' run build && pnpm --filter @webicro/web run build && pnpm --filter @webicro/cli run build && node scripts/copy-web-dist.js",
+    "ui": "node apps/cli/dist/index.js ui",
+    "cli": "node apps/cli/dist/index.js",
+    "dev": "pnpm --filter @webicro/cli dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "pnpm -r run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "@eslint/js": "catalog:",
+    "typescript-eslint": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "tsx": "catalog:"
+  }
+}
