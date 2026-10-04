@@ -380,6 +380,20 @@ export function deduplicateProjects(
 export function findProjectAppIcon(projectPath: string): string | null {
   if (!fs.existsSync(projectPath)) return null;
 
+  // 1. Check pubspec.yaml flutter_launcher_icons configuration
+  const pubspecPath = path.join(projectPath, 'pubspec.yaml');
+  if (fs.existsSync(pubspecPath)) {
+    try {
+      const pubContent = fs.readFileSync(pubspecPath, 'utf8');
+      const imgMatch = pubContent.match(/image_path:\s*["']?([^"'\r\n]+)["']?/);
+      if (imgMatch && imgMatch[1]) {
+        const candidate = path.resolve(projectPath, imgMatch[1].trim());
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    } catch {}
+  }
+
+  // 2. iOS AppIcon asset catalog
   const iosAppIconDir = path.join(projectPath, 'ios/Runner/Assets.xcassets/AppIcon.appiconset');
   if (fs.existsSync(iosAppIconDir)) {
     const preferredIos = [
@@ -410,6 +424,7 @@ export function findProjectAppIcon(projectPath: string): string | null {
     } catch {}
   }
 
+  // 3. Android res mipmap launcher icons
   const androidResDir = path.join(projectPath, 'android/app/src/main/res');
   if (fs.existsSync(androidResDir)) {
     const mipmapDirs = [
@@ -428,6 +443,18 @@ export function findProjectAppIcon(projectPath: string): string | null {
     }
   }
 
+  // 4. Web icons & favicons
+  const webCandidates = [
+    'web/icons/Icon-512.png',
+    'web/icons/Icon-192.png',
+    'web/favicon.png',
+  ];
+  for (const rel of webCandidates) {
+    const full = path.join(projectPath, rel);
+    if (fs.existsSync(full)) return full;
+  }
+
+  // 5. Common asset image candidates
   const assetCandidates = [
     'assets/images/logo-k.png',
     'assets/images/logo.png',
@@ -1265,7 +1292,9 @@ export const uiCommand = new Command('ui')
       const url = new URL(req.url || '/', `http://${req.headers.host}`);
       const pathname = url.pathname;
 
-      if (pathname.startsWith('/api/')) {
+      const isIconRequest = req.method === 'GET' && pathname === '/api/projects/icon';
+
+      if (pathname.startsWith('/api/') && !isIconRequest) {
         const authHeader = req.headers.authorization;
         const customToken = req.headers['x-session-token'];
         const queryToken = url.searchParams.get('token');
@@ -1381,7 +1410,11 @@ export const uiCommand = new Command('ui')
               ? 'image/png'
               : ext === '.jpg' || ext === '.jpeg'
                 ? 'image/jpeg'
-                : 'image/png';
+                : ext === '.webp'
+                  ? 'image/webp'
+                  : ext === '.ico'
+                    ? 'image/x-icon'
+                    : 'image/png';
           const stat = fs.statSync(iconPath);
 
           res.writeHead(200, {

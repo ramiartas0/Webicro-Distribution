@@ -75,6 +75,32 @@ export function AppStoreIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   );
 }
 
+function getSessionToken(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    if (urlToken) {
+      sessionStorage.setItem('webicro_session_token', urlToken);
+      return urlToken;
+    }
+  } catch {}
+
+  try {
+    const windowToken = (window as unknown as { __SESSION_TOKEN__?: string }).__SESSION_TOKEN__;
+    if (typeof windowToken === 'string' && windowToken) {
+      sessionStorage.setItem('webicro_session_token', windowToken);
+      return windowToken;
+    }
+  } catch {}
+
+  try {
+    return sessionStorage.getItem('webicro_session_token');
+  } catch {
+    return null;
+  }
+}
+
 export function ProjectAppIcon({
   path,
   name,
@@ -109,9 +135,14 @@ export function ProjectAppIcon({
     );
   }
 
+  const token = getSessionToken();
+  const iconUrl = `/api/projects/icon?path=${encodeURIComponent(path)}${
+    token ? `&token=${encodeURIComponent(token)}` : ''
+  }`;
+
   return (
     <img
-      src={`/api/projects/icon?path=${encodeURIComponent(path)}`}
+      src={iconUrl}
       alt={name}
       onError={() => setHasError(true)}
       className={`${className} rounded-xl object-cover border border-border/50 shadow-sm shrink-0 bg-background`}
@@ -119,3 +150,4 @@ export function ProjectAppIcon({
     />
   );
 }
+
