@@ -505,49 +505,42 @@ export interface StoreCredentials {
 }
 
 export function getStoreCredentials(projectDir?: string): StoreCredentials {
-  const candidates: string[] = [];
-  if (projectDir) {
-    candidates.push(path.join(projectDir, '.release/credentials.json'));
-  }
-  candidates.push(path.join(process.cwd(), '.release/credentials.json'));
+  let merged: StoreCredentials = {};
 
-  for (const cPath of candidates) {
-    if (fs.existsSync(cPath)) {
+  // 1. Genel (global) kimlik bilgilerini temel olarak yükle
+  const globalPath = path.join(process.cwd(), '.release/credentials.json');
+  if (fs.existsSync(globalPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(globalPath, 'utf8')) as StoreCredentials;
+      merged = { ...parsed };
+    } catch {}
+  }
+
+  // 2. Projeye özel dizin varsa ve genel dizinden farklıysa projeye özel kimlikleri üstüne birleştir
+  if (projectDir && path.resolve(projectDir) !== path.resolve(process.cwd())) {
+    const projectPath = path.join(projectDir, '.release/credentials.json');
+    if (fs.existsSync(projectPath)) {
       try {
-        const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8')) as StoreCredentials;
-        if (parsed.googlePlay || parsed.appStore || parsed.ai) {
-          if (!parsed.ai) {
-            parsed.ai = {
-              provider: process.env['GEMINI_API_KEY']
-                ? 'gemini'
-                : process.env['OPENAI_API_KEY']
-                  ? 'openai'
-                  : process.env['ANTHROPIC_API_KEY']
-                    ? 'anthropic'
-                    : 'conventional',
-              geminiApiKey: process.env['GEMINI_API_KEY'],
-              openaiApiKey: process.env['OPENAI_API_KEY'],
-              anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
-            };
-          }
-          return parsed;
-        }
+        const parsed = JSON.parse(fs.readFileSync(projectPath, 'utf8')) as StoreCredentials;
+        merged = {
+          googlePlay: parsed.googlePlay || merged.googlePlay,
+          appStore: parsed.appStore || merged.appStore,
+          ai: parsed.ai || merged.ai,
+        };
       } catch {}
     }
   }
 
-  const creds: StoreCredentials = {};
-
+  // 3. Ortam değişkenleri (Environment Variables) yedek desteği
   const googleKeyPath = process.env['GOOGLE_PLAY_SERVICE_ACCOUNT'];
-
-  if (googleKeyPath && fs.existsSync(googleKeyPath)) {
+  if (!merged.googlePlay && googleKeyPath && fs.existsSync(googleKeyPath)) {
     try {
       const keyContent = JSON.parse(fs.readFileSync(googleKeyPath, 'utf8')) as {
         client_email?: string;
         project_id?: string;
       };
       if (keyContent.client_email) {
-        creds.googlePlay = {
+        merged.googlePlay = {
           serviceAccountEmail: keyContent.client_email,
           projectId: keyContent.project_id || '',
           keyPath: googleKeyPath,
@@ -562,9 +555,13 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
   const appStoreIssuerId = process.env['APPSTORE_ISSUER_ID'];
   const appStoreKeyPath = process.env['APPSTORE_PRIVATE_KEY_PATH'];
   const appStorePrivateKey = process.env['APPSTORE_PRIVATE_KEY'];
-
-  if (appStoreKeyId && appStoreIssuerId && (appStoreKeyPath || appStorePrivateKey)) {
-    creds.appStore = {
+  if (
+    !merged.appStore &&
+    appStoreKeyId &&
+    appStoreIssuerId &&
+    (appStoreKeyPath || appStorePrivateKey)
+  ) {
+    merged.appStore = {
       keyId: appStoreKeyId,
       issuerId: appStoreIssuerId,
       privateKeyPath: appStoreKeyPath,
@@ -574,7 +571,22 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
     };
   }
 
-  return creds;
+  if (!merged.ai) {
+    merged.ai = {
+      provider: process.env['GEMINI_API_KEY']
+        ? 'gemini'
+        : process.env['OPENAI_API_KEY']
+          ? 'openai'
+          : process.env['ANTHROPIC_API_KEY']
+            ? 'anthropic'
+            : 'conventional',
+      geminiApiKey: process.env['GEMINI_API_KEY'],
+      openaiApiKey: process.env['OPENAI_API_KEY'],
+      anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
+    };
+  }
+
+  return merged;
 }
 
 export function saveStoreCredentials(creds: StoreCredentials, projectDir?: string): void {
@@ -585,7 +597,17 @@ export function saveStoreCredentials(creds: StoreCredentials, projectDir?: strin
     fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
   }
   const filePath = path.join(targetDir, 'credentials.json');
-  fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), { mode: 0o600, encoding: 'utf8' });
+  let existing: StoreCredentials = {};
+  if (fs.existsSync(filePath)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(filePath, 'utf8')) as StoreCredentials;
+    } catch {}
+  }
+  const updated: StoreCredentials = {
+    ...existing,
+    ...creds,
+  };
+  fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), { mode: 0o600, encoding: 'utf8' });
   try {
     fs.chmodSync(filePath, 0o600);
     fs.chmodSync(targetDir, 0o700);
@@ -1075,6 +1097,13 @@ export async function compareProjectWithStores(
     comparison.comparisonStatus = 'UNKNOWN';
     comparison.badge = 'Yetki Gerekli';
     comparison.summary = 'Play Console Service Account izinleri eksik veya doğrulanmadı.';
+  } else if (
+    (comparison.googlePlay.status === 'not_found' && comparison.appStore.status === 'not_configured') ||
+    (comparison.appStore.status === 'not_found' && comparison.googlePlay.status === 'not_configured')
+  ) {
+    comparison.comparisonStatus = 'UNKNOWN';
+    comparison.badge = 'Kayıtlı Değil';
+    comparison.summary = 'Bağlı mağazada bu paket henüz bulunmuyor veya yayınlanmamış.';
   } else {
     comparison.comparisonStatus = 'UNKNOWN';
     comparison.badge = 'Yapılandırılmadı';
@@ -1561,6 +1590,7 @@ export const uiCommand = new Command('ui')
                 meta.package,
                 meta.buildNumber,
                 meta.version,
+                resolvedPath,
               );
               currentList.push(newEntry);
               saveStoredProjects(currentList);
@@ -2129,7 +2159,12 @@ export const uiCommand = new Command('ui')
       }
 
       if (req.method === 'GET' && pathname === '/api/stores/credentials') {
-        const creds = getStoreCredentials(activeProjectDir);
+        const queryPath = url.searchParams.get('projectPath')?.trim();
+        const targetProjDir =
+          queryPath && isSafeProjectPath(queryPath) && fs.existsSync(queryPath)
+            ? path.resolve(queryPath)
+            : activeProjectDir;
+        const creds = getStoreCredentials(targetProjDir);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -2194,10 +2229,17 @@ export const uiCommand = new Command('ui')
               openaiModel?: string;
               anthropicApiKey?: string;
               anthropicModel?: string;
+              projectPath?: string;
               saveGlobal?: boolean;
             };
 
-            const creds = getStoreCredentials(activeProjectDir);
+            const targetDir = payload.saveGlobal
+              ? undefined
+              : payload.projectPath && isSafeProjectPath(payload.projectPath) && fs.existsSync(payload.projectPath)
+                ? path.resolve(payload.projectPath)
+                : activeProjectDir;
+
+            const creds = getStoreCredentials(targetDir);
             const currentAi = creds.ai || {};
 
             creds.ai = {
@@ -2222,7 +2264,7 @@ export const uiCommand = new Command('ui')
               lastTestedAt: new Date().toISOString(),
             };
 
-            saveStoreCredentials(creds, payload.saveGlobal ? undefined : activeProjectDir);
+            saveStoreCredentials(creds, targetDir);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -2644,6 +2686,7 @@ export const uiCommand = new Command('ui')
             const payload = JSON.parse(body || '{}') as {
               serviceAccountJson?: string;
               keyPath?: string;
+              projectPath?: string;
               saveGlobal?: boolean;
             };
 
@@ -2708,17 +2751,55 @@ export const uiCommand = new Command('ui')
               authError = tErr instanceof Error ? tErr.message : String(tErr);
             }
 
-            const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
-            const creds = getStoreCredentials(targetDir);
-            creds.googlePlay = {
-              serviceAccountEmail: keyJson.client_email,
-              projectId: keyJson.project_id || '',
-              serviceAccountJson: payload.serviceAccountJson,
-              keyPath: payload.keyPath,
-              verified: true,
-              lastTestedAt: new Date().toISOString(),
-            };
-            saveStoreCredentials(creds, targetDir);
+            const targetDir = payload.saveGlobal
+              ? undefined
+              : payload.projectPath && isSafeProjectPath(payload.projectPath) && fs.existsSync(payload.projectPath)
+                ? path.resolve(payload.projectPath)
+                : activeProjectDir;
+
+            saveStoreCredentials(
+              {
+                googlePlay: {
+                  serviceAccountEmail: keyJson.client_email,
+                  projectId: keyJson.project_id || '',
+                  serviceAccountJson: payload.serviceAccountJson,
+                  keyPath: payload.keyPath,
+                  verified: true,
+                  lastTestedAt: new Date().toISOString(),
+                },
+              },
+              targetDir,
+            );
+
+            try {
+              const currentList = getStoredProjects();
+              if (payload.saveGlobal) {
+                for (const p of currentList) {
+                  if (p.package) {
+                    p.stores = await compareProjectWithStores(
+                      p.package,
+                      p.buildNumber || 1,
+                      p.version || '1.0.0',
+                      p.path,
+                      true,
+                    );
+                  }
+                }
+                saveStoredProjects(currentList);
+              } else if (targetDir) {
+                const projItem = currentList.find((p) => path.resolve(p.path) === path.resolve(targetDir));
+                if (projItem && projItem.package) {
+                  projItem.stores = await compareProjectWithStores(
+                    projItem.package,
+                    projItem.buildNumber || 1,
+                    projItem.version || '1.0.0',
+                    projItem.path,
+                    true,
+                  );
+                  saveStoredProjects(currentList);
+                }
+              }
+            } catch {}
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -2753,6 +2834,7 @@ export const uiCommand = new Command('ui')
               issuerId?: string;
               privateKey?: string;
               privateKeyPath?: string;
+              projectPath?: string;
               saveGlobal?: boolean;
             };
 
@@ -2776,9 +2858,14 @@ export const uiCommand = new Command('ui')
               return;
             }
 
+            const targetDirForMeta =
+              payload.projectPath && isSafeProjectPath(payload.projectPath) && fs.existsSync(payload.projectPath)
+                ? path.resolve(payload.projectPath)
+                : activeProjectDir;
+
             let token = '';
             try {
-              const activeMeta = detectProjectMetadata(activeProjectDir);
+              const activeMeta = detectProjectMetadata(targetDirForMeta);
               token = generateAppStoreToken({
                 keyId: payload.keyId,
                 issuerId: payload.issuerId,
@@ -2820,17 +2907,55 @@ export const uiCommand = new Command('ui')
               appleErrMsg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
             }
 
-            const targetDir = payload.saveGlobal ? undefined : activeProjectDir;
-            const creds = getStoreCredentials(targetDir);
-            creds.appStore = {
-              keyId: payload.keyId,
-              issuerId: payload.issuerId,
-              privateKey: payload.privateKey,
-              privateKeyPath: payload.privateKeyPath,
-              verified: true,
-              lastTestedAt: new Date().toISOString(),
-            };
-            saveStoreCredentials(creds, targetDir);
+            const targetDir = payload.saveGlobal
+              ? undefined
+              : payload.projectPath && isSafeProjectPath(payload.projectPath) && fs.existsSync(payload.projectPath)
+                ? path.resolve(payload.projectPath)
+                : activeProjectDir;
+
+            saveStoreCredentials(
+              {
+                appStore: {
+                  keyId: payload.keyId,
+                  issuerId: payload.issuerId,
+                  privateKey: payload.privateKey,
+                  privateKeyPath: payload.privateKeyPath,
+                  verified: true,
+                  lastTestedAt: new Date().toISOString(),
+                },
+              },
+              targetDir,
+            );
+
+            try {
+              const currentList = getStoredProjects();
+              if (payload.saveGlobal) {
+                for (const p of currentList) {
+                  if (p.package) {
+                    p.stores = await compareProjectWithStores(
+                      p.package,
+                      p.buildNumber || 1,
+                      p.version || '1.0.0',
+                      p.path,
+                      true,
+                    );
+                  }
+                }
+                saveStoredProjects(currentList);
+              } else if (targetDir) {
+                const projItem = currentList.find((p) => path.resolve(p.path) === path.resolve(targetDir));
+                if (projItem && projItem.package) {
+                  projItem.stores = await compareProjectWithStores(
+                    projItem.package,
+                    projItem.buildNumber || 1,
+                    projItem.version || '1.0.0',
+                    projItem.path,
+                    true,
+                  );
+                  saveStoredProjects(currentList);
+                }
+              }
+            } catch {}
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
@@ -2856,12 +2981,21 @@ export const uiCommand = new Command('ui')
 
       if (req.method === 'POST' && pathname === '/api/stores/disconnect-google') {
         try {
-          const creds = getStoreCredentials(activeProjectDir);
-          delete creds.googlePlay;
-          saveStoreCredentials(creds, activeProjectDir);
-          const globalCreds = getStoreCredentials();
-          delete globalCreds.googlePlay;
-          saveStoreCredentials(globalCreds);
+          const removeFromDisk = (dir?: string) => {
+            const fPath = dir
+              ? path.join(dir, '.release/credentials.json')
+              : path.join(process.cwd(), '.release/credentials.json');
+            if (fs.existsSync(fPath)) {
+              try {
+                const parsed = JSON.parse(fs.readFileSync(fPath, 'utf8')) as StoreCredentials;
+                delete parsed.googlePlay;
+                fs.writeFileSync(fPath, JSON.stringify(parsed, null, 2), { mode: 0o600, encoding: 'utf8' });
+              } catch {}
+            }
+          };
+
+          removeFromDisk(activeProjectDir);
+          removeFromDisk(undefined);
 
           const list = getStoredProjects();
           for (const p of list) {
@@ -2890,12 +3024,21 @@ export const uiCommand = new Command('ui')
 
       if (req.method === 'POST' && pathname === '/api/stores/disconnect-apple') {
         try {
-          const creds = getStoreCredentials(activeProjectDir);
-          delete creds.appStore;
-          saveStoreCredentials(creds, activeProjectDir);
-          const globalCreds = getStoreCredentials();
-          delete globalCreds.appStore;
-          saveStoreCredentials(globalCreds);
+          const removeFromDisk = (dir?: string) => {
+            const fPath = dir
+              ? path.join(dir, '.release/credentials.json')
+              : path.join(process.cwd(), '.release/credentials.json');
+            if (fs.existsSync(fPath)) {
+              try {
+                const parsed = JSON.parse(fs.readFileSync(fPath, 'utf8')) as StoreCredentials;
+                delete parsed.appStore;
+                fs.writeFileSync(fPath, JSON.stringify(parsed, null, 2), { mode: 0o600, encoding: 'utf8' });
+              } catch {}
+            }
+          };
+
+          removeFromDisk(activeProjectDir);
+          removeFromDisk(undefined);
 
           const list = getStoredProjects();
           for (const p of list) {

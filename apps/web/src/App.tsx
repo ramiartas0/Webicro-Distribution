@@ -886,94 +886,117 @@ export default function App() {
   const effectiveIosBuildNumber =
     customIosBuildNumber !== '' ? Number(customIosBuildNumber) : defaultIosNextBuild;
 
-  const loadStoreCredentials = useCallback(async () => {
-    try {
-      const res = await authFetch('/api/stores/credentials');
-      if (res.ok) {
-        const data = (await res.json()) as {
-          googlePlay?: {
-            configured: boolean;
-            serviceAccountEmail?: string;
-            projectId?: string;
-            keyPath?: string;
-            verified: boolean;
+  const loadStoreCredentials = useCallback(
+    async (targetPath?: string) => {
+      try {
+        const currentPath = targetPath || activePathRef.current || activeProjectPath;
+        const url = currentPath
+          ? `/api/stores/credentials?projectPath=${encodeURIComponent(currentPath)}`
+          : '/api/stores/credentials';
+        const res = await authFetch(url);
+        if (res.ok) {
+          const data = (await res.json()) as {
+            googlePlay?: {
+              configured: boolean;
+              serviceAccountEmail?: string;
+              projectId?: string;
+              keyPath?: string;
+              verified: boolean;
+            };
+            appStore?: {
+              configured: boolean;
+              keyId?: string;
+              issuerId?: string;
+              hasPrivateKey: boolean;
+              verified: boolean;
+            };
+            ai?: {
+              provider?: 'gemini' | 'openai' | 'anthropic' | 'conventional';
+              geminiConfigured?: boolean;
+              geminiMaskedKey?: string;
+              geminiModel?: string;
+              openaiConfigured?: boolean;
+              openaiMaskedKey?: string;
+              openaiModel?: string;
+              anthropicConfigured?: boolean;
+              anthropicMaskedKey?: string;
+              anthropicModel?: string;
+              verified?: boolean;
+            };
           };
-          appStore?: {
-            configured: boolean;
-            keyId?: string;
-            issuerId?: string;
-            hasPrivateKey: boolean;
-            verified: boolean;
-          };
-          ai?: {
-            provider?: 'gemini' | 'openai' | 'anthropic' | 'conventional';
-            geminiConfigured?: boolean;
-            geminiMaskedKey?: string;
-            geminiModel?: string;
-            openaiConfigured?: boolean;
-            openaiMaskedKey?: string;
-            openaiModel?: string;
-            anthropicConfigured?: boolean;
-            anthropicMaskedKey?: string;
-            anthropicModel?: string;
-            verified?: boolean;
-          };
-        };
 
-        if (data.googlePlay?.configured) {
-          setGooglePlayInfo((prev) => ({
-            ...prev,
-            connected: data.googlePlay?.verified || Boolean(data.googlePlay?.serviceAccountEmail),
-            serviceAccount: data.googlePlay?.serviceAccountEmail || prev.serviceAccount,
-            projectId: data.googlePlay?.projectId,
-            keyPath: data.googlePlay?.keyPath,
-          }));
-          if (data.googlePlay.keyPath && !googlePathInput) {
-            setGooglePathInput(data.googlePlay.keyPath);
+          if (data.googlePlay?.configured) {
+            setGooglePlayInfo({
+              connected: data.googlePlay?.verified || Boolean(data.googlePlay?.serviceAccountEmail),
+              serviceAccount: data.googlePlay?.serviceAccountEmail || '',
+              projectId: data.googlePlay?.projectId,
+              keyPath: data.googlePlay?.keyPath,
+            });
+            if (data.googlePlay.keyPath && !googlePathInput) {
+              setGooglePathInput(data.googlePlay.keyPath);
+            }
+          } else {
+            setGooglePlayInfo({
+              connected: false,
+              serviceAccount: '',
+              projectId: '',
+              keyPath: '',
+            });
+          }
+
+          if (data.appStore?.configured) {
+            setAppStoreInfo({
+              connected: data.appStore?.verified || Boolean(data.appStore?.keyId),
+              keyId: data.appStore?.keyId || '',
+              issuerId: data.appStore?.issuerId || '',
+            });
+            if (data.appStore.keyId) {
+              setAppleKeyIdInput(data.appStore.keyId);
+            }
+            if (data.appStore.issuerId) {
+              setAppleIssuerIdInput(data.appStore.issuerId);
+            }
+          } else {
+            setAppStoreInfo({
+              connected: false,
+              keyId: '',
+              issuerId: '',
+            });
+            setAppleKeyIdInput('');
+            setAppleIssuerIdInput('');
+          }
+
+          if (data.ai) {
+            if (data.ai.provider) {
+              setAiProvider(data.ai.provider);
+            }
+            if (data.ai.geminiModel)
+              setGeminiModelInput(
+                data.ai.geminiModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : data.ai.geminiModel,
+              );
+            if (data.ai.openaiModel) setOpenaiModelInput(data.ai.openaiModel);
+            if (data.ai.anthropicModel) setAnthropicModelInput(data.ai.anthropicModel);
+            setAiConfiguredInfo({
+              geminiConfigured: data.ai.geminiConfigured,
+              geminiMaskedKey: data.ai.geminiMaskedKey,
+              openaiConfigured: data.ai.openaiConfigured,
+              openaiMaskedKey: data.ai.openaiMaskedKey,
+              anthropicConfigured: data.ai.anthropicConfigured,
+              anthropicMaskedKey: data.ai.anthropicMaskedKey,
+            });
           }
         }
-
-        if (data.appStore?.configured) {
-          setAppStoreInfo((prev) => ({
-            ...prev,
-            connected: data.appStore?.verified || Boolean(data.appStore?.keyId),
-            keyId: data.appStore?.keyId || prev.keyId,
-            issuerId: data.appStore?.issuerId || prev.issuerId,
-          }));
-          if (data.appStore.keyId && !appleKeyIdInput) {
-            setAppleKeyIdInput(data.appStore.keyId);
-          }
-          if (data.appStore.issuerId && !appleIssuerIdInput) {
-            setAppleIssuerIdInput(data.appStore.issuerId);
-          }
-        }
-
-        if (data.ai) {
-          if (data.ai.provider) {
-            setAiProvider(data.ai.provider);
-          }
-          if (data.ai.geminiModel)
-            setGeminiModelInput(
-              data.ai.geminiModel === 'gemini-1.5-flash' ? 'gemini-2.5-flash' : data.ai.geminiModel,
-            );
-          if (data.ai.openaiModel) setOpenaiModelInput(data.ai.openaiModel);
-          if (data.ai.anthropicModel) setAnthropicModelInput(data.ai.anthropicModel);
-          setAiConfiguredInfo({
-            geminiConfigured: data.ai.geminiConfigured,
-            geminiMaskedKey: data.ai.geminiMaskedKey,
-            openaiConfigured: data.ai.openaiConfigured,
-            openaiMaskedKey: data.ai.openaiMaskedKey,
-            anthropicConfigured: data.ai.anthropicConfigured,
-            anthropicMaskedKey: data.ai.anthropicMaskedKey,
-          });
-        }
+      } catch (err) {
+        console.error('Kimlik bilgileri yüklenemedi:', err);
       }
-    } catch (err) {
-      console.error('Kimlik bilgileri yüklenemedi:', err);
-    }
-  }, [googlePathInput, appleKeyIdInput, appleIssuerIdInput]);
+    },
+    [googlePathInput, activeProjectPath],
+  );
 
   useEffect(() => {
+    if (showStoreTestModal) {
+      void loadStoreCredentials(activeProjectPath);
+    }
     if (showStoreTestModal && activeStoreTab === 'ai' && aiProvider !== 'conventional') {
       void fetchAiModels(aiProvider);
     }
@@ -986,6 +1009,8 @@ export default function App() {
     aiProvider,
     appStoreInfo.connected,
     appleConnectApps.length,
+    activeProjectPath,
+    loadStoreCredentials,
   ]);
 
   const loadProjectsAndActive = useCallback(async () => {
@@ -1515,6 +1540,12 @@ export default function App() {
     setActiveProjectPath(targetPath);
     activePathRef.current = targetPath;
 
+    void authFetch('/api/projects/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: targetPath }),
+    });
+
     const targetProj = projects.find((p) => p.path === targetPath);
     if (targetProj) {
       setProjectName(targetProj.name);
@@ -1531,7 +1562,7 @@ export default function App() {
     setReleaseNotesEN('');
 
     await fetchProjectDetails(targetPath);
-    await loadStoreCredentials();
+    await loadStoreCredentials(targetPath);
   };
 
   const handleAutoDiscover = async (customPath?: string) => {
@@ -1666,6 +1697,7 @@ export default function App() {
         body: JSON.stringify({
           serviceAccountJson: googleJsonInput.trim() || undefined,
           keyPath: googlePathInput.trim() || undefined,
+          projectPath: activeProjectPath,
           saveGlobal,
         }),
       });
@@ -1692,6 +1724,7 @@ export default function App() {
           serviceAccount: data.serviceAccount || prev.serviceAccount,
           projectId: data.projectId,
         }));
+        await loadStoreCredentials(activeProjectPath);
         await loadProjectsAndActive();
       } else {
         const errorMsg = data.error || t('settings.verificationFailed');
@@ -1732,6 +1765,7 @@ export default function App() {
           keyId: appleKeyIdInput.trim(),
           issuerId: appleIssuerIdInput.trim(),
           privateKey: applePrivateKeyInput.trim() || undefined,
+          projectPath: activeProjectPath,
           saveGlobal,
         }),
       });
@@ -1753,12 +1787,12 @@ export default function App() {
           message: successMsg,
         });
         toast.success(successMsg, 'App Store Connect API');
-        setAppStoreInfo((prev) => ({
-          ...prev,
+        setAppStoreInfo({
           connected: true,
-          keyId: data.keyId || prev.keyId,
-          issuerId: data.issuerId || prev.issuerId,
-        }));
+          keyId: data.keyId || appleKeyIdInput.trim(),
+          issuerId: data.issuerId || appleIssuerIdInput.trim(),
+        });
+        await loadStoreCredentials(activeProjectPath);
         await loadProjectsAndActive();
         void fetchAppleApps();
       } else {
@@ -1989,6 +2023,7 @@ export default function App() {
           openaiModel: openaiModelInput,
           anthropicApiKey: anthropicApiKeyInput || undefined,
           anthropicModel: anthropicModelInput,
+          projectPath: activeProjectPath,
           saveGlobal,
         }),
       });
@@ -1997,7 +2032,7 @@ export default function App() {
         const msg = data.message || t('toast.settingsSaved');
         setAiTestResult({ success: true, message: msg });
         toast.success(msg, 'AI');
-        await loadStoreCredentials();
+        await loadStoreCredentials(activeProjectPath);
       } else {
         const err =
           data.error ||
