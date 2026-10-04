@@ -5,6 +5,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -42,6 +43,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -49,6 +51,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - loopback izolasyonu, oturum tokenı, fail-closed mimarisi ve açık kaynak standartları uygulandı
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
@@ -65,6 +68,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -102,6 +106,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -109,6 +114,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - loopback izolasyonu, oturum tokenı, fail-closed mimarisi ve açık kaynak standartları uygulandı
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
@@ -125,6 +131,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -162,6 +169,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -169,6 +177,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - loopback izolasyonu, oturum tokenı, fail-closed mimarisi ve açık kaynak standartları uygulandı
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
@@ -185,6 +194,7 @@ All notable changes to this project will be documented in this file.
 ## 1.1.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -222,6 +232,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -229,6 +240,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - loopback izolasyonu, oturum tokenı, fail-closed mimarisi ve açık kaynak standartları uygulandı
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
@@ -245,6 +257,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -282,6 +295,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -289,6 +303,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -304,6 +319,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -341,6 +357,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -348,6 +365,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -363,6 +381,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -400,6 +419,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -407,6 +427,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -422,6 +443,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -459,6 +481,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -466,6 +489,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -481,6 +505,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -518,6 +543,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -525,6 +551,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -540,6 +567,7 @@ All notable changes to this project will be documented in this file.
 ## 3.0.0 (2026-10-04)
 
 ### New Features
+
 - tum arayuz icin monokrom toast bildirim ve tooltip sistemi eklendi
 - mobil projeler icin otomatik git ve github baglantisi, commit, tag ve push entegrasyonu eklendi
 - google play ve apple app store ile cok kaynakli surum esitleme ozelligi eklendi
@@ -577,6 +605,7 @@ All notable changes to this project will be documented in this file.
 - shared, database, config, audit, git ve versioning paketleri tamamlandı
 
 ### Improvements & Refactoring
+
 - surum esitleme tek butona indirgendi ve buyuk surume yukseltme kurali uygulandi
 - app store kartindaki gereksiz manuel secici kaldirildi
 - simulasyon modu ve dagitim guvenlik kilidi uyarisi kaldirildi
@@ -584,6 +613,7 @@ All notable changes to this project will be documented in this file.
 - kademeli dagitim (rollout) secimi arayuzden kaldirildi ve varsayilan %100 yapildi
 
 ### Bug Fixes
+
 - monorepo kök dizini üzerinden izole alt proje stage ve commit desteği eklendi
 - monorepo alt projeleri icin izole git durum denetimi ve degisen dosya onizlemesi eklendi
 - sqlite gecmisi coklu proje destegi ve surum senkronizasyonu saglandi
@@ -595,4 +625,3 @@ All notable changes to this project will be documented in this file.
 - resolve endpoint mismatch and response pattern in release notes generation
 - resolve premature close bug on node 24 with native fetch and fix vundefined display
 - sanitize legacy unicode variation selectors from cached project badges
-

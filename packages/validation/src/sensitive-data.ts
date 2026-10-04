@@ -9,7 +9,10 @@ export class SensitiveDataScanner {
     { name: 'Password Assignment', regex: /password\s*[:=]\s*['"][^'"]+['"]/gi },
     { name: 'Sensitive Endpoint (localhost)', regex: /(?:https?:\/\/)?localhost(?::\d+)?/gi },
     { name: 'Sensitive Endpoint (127.0.0.1)', regex: /(?:https?:\/\/)?127\.0\.0\.1(?::\d+)?/gi },
-    { name: 'Sensitive Endpoint (internal)', regex: /(?:https?:\/\/)?[\w-]+\.internal(?:\.domain)?/gi },
+    {
+      name: 'Sensitive Endpoint (internal)',
+      regex: /(?:https?:\/\/)?[\w-]+\.internal(?:\.domain)?/gi,
+    },
   ];
 
   public scan(text: string): ValidationIssue[] {

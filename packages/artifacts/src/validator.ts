@@ -2,10 +2,12 @@ import { stat } from 'fs/promises';
 import type { ArtifactManifest, ArtifactValidationResult } from './types.js';
 import { calculateFileHash } from './hasher.js';
 
-export async function validateArtifact(manifest: ArtifactManifest): Promise<ArtifactValidationResult> {
+export async function validateArtifact(
+  manifest: ArtifactManifest,
+): Promise<ArtifactValidationResult> {
   try {
     const fileStat = await stat(manifest.filePath);
-    
+
     if (fileStat.size === 0) {
       return {
         isValid: false,
@@ -27,7 +29,7 @@ export async function validateArtifact(manifest: ArtifactManifest): Promise<Arti
       sizeMatches,
       expectedSha256: manifest.sha256,
       actualSha256,
-      error: (!hashMatches || !sizeMatches) ? 'Hash or size mismatch' : undefined,
+      error: !hashMatches || !sizeMatches ? 'Hash or size mismatch' : undefined,
     };
   } catch (error) {
     return {

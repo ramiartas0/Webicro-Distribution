@@ -27,7 +27,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (stored === 'tr' || stored === 'en') {
         return stored;
       }
-      if (typeof navigator !== 'undefined' && navigator.language && navigator.language.startsWith('en')) {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.language &&
+        navigator.language.startsWith('en')
+      ) {
         return 'en';
       }
     } catch {
@@ -69,7 +73,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       let currentVal: unknown = dictionaries[language];
 
       for (const k of keys) {
-        if (currentVal && typeof currentVal === 'object' && k in (currentVal as Record<string, unknown>)) {
+        if (
+          currentVal &&
+          typeof currentVal === 'object' &&
+          k in (currentVal as Record<string, unknown>)
+        ) {
           currentVal = (currentVal as Record<string, unknown>)[k];
         } else {
           currentVal = undefined;
@@ -81,7 +89,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (typeof currentVal !== 'string') {
         let fallbackVal: unknown = tr;
         for (const k of keys) {
-          if (fallbackVal && typeof fallbackVal === 'object' && k in (fallbackVal as Record<string, unknown>)) {
+          if (
+            fallbackVal &&
+            typeof fallbackVal === 'object' &&
+            k in (fallbackVal as Record<string, unknown>)
+          ) {
             fallbackVal = (fallbackVal as Record<string, unknown>)[k];
           } else {
             fallbackVal = undefined;
@@ -105,7 +117,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       return result;
     },
-    [language]
+    [language],
   );
 
   const contextValue = useMemo<LanguageContextValue>(
@@ -116,7 +128,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       t,
       dictionary,
     }),
-    [language, setLanguage, toggleLanguage, t, dictionary]
+    [language, setLanguage, toggleLanguage, t, dictionary],
   );
 
   return <LanguageContext.Provider value={contextValue}>{children}</LanguageContext.Provider>;

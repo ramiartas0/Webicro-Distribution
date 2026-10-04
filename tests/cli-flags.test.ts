@@ -77,7 +77,6 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
   });
 
   it('should throw CONFIG_ERROR if Android build/upload is requested but no packageId can be detected', async () => {
-
     const gradleFile = path.join(tempRepoDir, 'android/app/build.gradle');
     if (fs.existsSync(gradleFile)) {
       fs.unlinkSync(gradleFile);
@@ -92,7 +91,7 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
         skipTests: true,
         skipGit: true,
         skipAndroid: false,
-      })
+      }),
     ).rejects.toThrow(/Android paket kimliği/);
   });
 });

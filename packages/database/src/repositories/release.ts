@@ -67,7 +67,11 @@ export class ReleaseRepository {
     stmt.run(status, releaseId);
   }
 
-  public updateVersionAndBuildNumber(releaseId: string, version: string, buildNumber: number): void {
+  public updateVersionAndBuildNumber(
+    releaseId: string,
+    version: string,
+    buildNumber: number,
+  ): void {
     const stmt = this.db.prepare(`
       UPDATE releases 
       SET version = ?, build_number = ?, updated_at = CURRENT_TIMESTAMP 

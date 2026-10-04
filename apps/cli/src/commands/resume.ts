@@ -29,7 +29,9 @@ export const resumeCommand = new Command('resume')
         return;
       }
 
-      console.log(chalk.blue(`Resuming release: ${chalk.bold(releaseId)} (Current Status: ${record.status})`));
+      console.log(
+        chalk.blue(`Resuming release: ${chalk.bold(releaseId)} (Current Status: ${record.status})`),
+      );
 
       const orchestrator = new ReleaseOrchestrator();
       const progress = new ProgressReporter(20, process.env['CI'] === 'true');
@@ -50,7 +52,9 @@ export const resumeCommand = new Command('resume')
       });
 
       const summary = await orchestrator.resume(releaseId);
-      clack.outro(chalk.green(`✓ Release ${summary.releaseId} (${summary.version}) başarıyla tamamlandı!`));
+      clack.outro(
+        chalk.green(`✓ Release ${summary.releaseId} (${summary.version}) başarıyla tamamlandı!`),
+      );
     } catch (err) {
       clack.cancel(`Resume başarısız: ${err instanceof Error ? err.message : String(err)}`);
     }

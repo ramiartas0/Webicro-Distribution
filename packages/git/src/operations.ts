@@ -20,10 +20,10 @@ export function parseRemoteWebUrl(remoteUrl: string): {
     const provider = host.includes('github')
       ? 'github'
       : host.includes('gitlab')
-      ? 'gitlab'
-      : host.includes('bitbucket')
-      ? 'bitbucket'
-      : 'other';
+        ? 'gitlab'
+        : host.includes('bitbucket')
+          ? 'bitbucket'
+          : 'other';
 
     return {
       webUrl: `https://${sshMatch[1]}/${repoPath}`,
@@ -39,10 +39,10 @@ export function parseRemoteWebUrl(remoteUrl: string): {
     const provider = host.includes('github')
       ? 'github'
       : host.includes('gitlab')
-      ? 'gitlab'
-      : host.includes('bitbucket')
-      ? 'bitbucket'
-      : 'other';
+        ? 'gitlab'
+        : host.includes('bitbucket')
+          ? 'bitbucket'
+          : 'other';
 
     return {
       webUrl: `https://${parsed.host}/${repoPath}`,
@@ -168,7 +168,6 @@ export class GitOperations {
     }
 
     if (filesToStage.length === 0) {
-
       const head = await rootGit.revparse(['HEAD']);
       return {
         commitHash: head.trim(),
@@ -195,7 +194,6 @@ export class GitOperations {
       try {
         await rootGit.addTag(tagName);
       } catch (tagErr: unknown) {
-
         const errMsg = tagErr instanceof Error ? tagErr.message : String(tagErr);
         if (!errMsg.includes('already exists')) {
           throw tagErr;
@@ -214,7 +212,6 @@ export class GitOperations {
           }
           pushed = true;
         } catch (pushErr: unknown) {
-
           console.warn(`[GitOperations] Push uyarısı:`, pushErr);
         }
       }

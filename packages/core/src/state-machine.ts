@@ -24,7 +24,7 @@ export class ReleaseStateMachine {
     READY_FOR_SUBMISSION: ['SUBMITTED', 'FAILED'],
     SUBMITTED: ['RELEASED', 'FAILED'],
     RELEASED: ['FAILED'],
-    FAILED: ['ANALYZING', 'FAILED']
+    FAILED: ['ANALYZING', 'FAILED'],
   };
 
   constructor(initialStatus: ReleaseStatus = 'DRAFT') {
@@ -43,9 +43,7 @@ export class ReleaseStateMachine {
 
   public transitionTo(nextStatus: ReleaseStatus): void {
     if (!this.canTransitionTo(nextStatus)) {
-      throw new StateMachineError(
-        `Cannot transition from ${this.status} to ${nextStatus}`
-      );
+      throw new StateMachineError(`Cannot transition from ${this.status} to ${nextStatus}`);
     }
 
     this.status = nextStatus;

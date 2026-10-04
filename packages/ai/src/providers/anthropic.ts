@@ -30,9 +30,7 @@ export class AnthropicProvider extends BaseProvider implements AIProvider {
         model: this.modelName,
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: prompt },
-        ],
+        messages: [{ role: 'user', content: prompt }],
       }),
     });
 
@@ -41,7 +39,7 @@ export class AnthropicProvider extends BaseProvider implements AIProvider {
       throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       content?: { type: string; text?: string }[];
     };
 

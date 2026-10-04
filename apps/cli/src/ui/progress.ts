@@ -24,7 +24,7 @@ export class ProgressReporter {
   startStep(step: ProgressStep): void {
     this.currentStepIndex++;
     const message = this.formatStepMessage(step.name);
-    
+
     if (this.isHeadless) {
       console.log(`${message} - Started`);
     } else {
@@ -58,11 +58,13 @@ export class ProgressReporter {
     if (this.isHeadless) {
       console.log(`- Skipped${reason ? `: ${reason}` : ''}`);
     } else if (this.spinner) {
-      this.spinner.info(this.spinner.text + ` ${chalk.yellow('- Skipped')}${reason ? ` ${reason}` : ''}`);
+      this.spinner.info(
+        this.spinner.text + ` ${chalk.yellow('- Skipped')}${reason ? ` ${reason}` : ''}`,
+      );
       this.spinner = null;
     }
   }
-  
+
   info(message: string): void {
     if (this.isHeadless) {
       console.log(`ℹ ${message}`);

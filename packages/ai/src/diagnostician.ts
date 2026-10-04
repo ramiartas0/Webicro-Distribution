@@ -1,15 +1,11 @@
-import type {
-  AIDiagnosisContext,
-  AIDiagnosisResult,
-  AIProviderType,
-} from './types.js';
+import type { AIDiagnosisContext, AIDiagnosisResult, AIProviderType } from './types.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
 export class AIDiagnostician {
-
   public static diagnoseHeuristics(ctx: AIDiagnosisContext): AIDiagnosisResult | null {
-    const combinedText = `${ctx.failedStep || ''} ${ctx.errorText} ${(ctx.recentLogs || []).join(' ')}`.toLowerCase();
+    const combinedText =
+      `${ctx.failedStep || ''} ${ctx.errorText} ${(ctx.recentLogs || []).join(' ')}`.toLowerCase();
 
     if (
       combinedText.includes('photo and video permissions') ||
@@ -32,7 +28,7 @@ export class AIDiagnostician {
           "Gereksiz Medya İzinlerini AndroidManifest.xml'den Otomatik Temizle (Google Play Form Şartını Düşürür)",
         solutionSteps: [
           'Aşağıdaki "Sorunu Otomatik Düzelt ve Yeniden Başlat" butonuna tıklayarak AndroidManifest.xml içindeki READ_MEDIA_IMAGES ve READ_EXTERNAL_STORAGE satırlarını temizleyin.',
-          'Temizlenen yeni derleme Google Play\'e yüklendiğinde form zorunluluğu anında kalkacak ve dağıtım başarıyla tamamlanacaktır.',
+          "Temizlenen yeni derleme Google Play'e yüklendiğinde form zorunluluğu anında kalkacak ve dağıtım başarıyla tamamlanacaktır.",
           'Alternatif (Manuel): Google Play Console -> Politika ve Programlar -> Uygulama İçeriği -> "Fotoğraf ve video izinleri" sayfasına giderek manuel gerekçe formu doldurabilirsiniz (önerilmez, incelemeyi uzatır).',
         ],
       };
@@ -40,7 +36,7 @@ export class AIDiagnostician {
 
     if (
       combinedText.includes('already has version code') ||
-      combinedText.includes('version code') && combinedText.includes('already been used') ||
+      (combinedText.includes('version code') && combinedText.includes('already been used')) ||
       combinedText.includes('apk_version_already_exists')
     ) {
       return {
@@ -73,7 +69,7 @@ export class AIDiagnostician {
         source: 'native_gradle',
         sourceLabel: 'Android Gradle İmzalama (keystore / key.properties)',
         rootCause:
-          'Android AAB paketi derlenirken veya Google Play\'e yüklenirken imza sertifikası (keystore) bulunamadı veya şifresi hatalı.',
+          "Android AAB paketi derlenirken veya Google Play'e yüklenirken imza sertifikası (keystore) bulunamadı veya şifresi hatalı.",
         explanation:
           'Uygulama kodu sorunsuz derleniyor fakat release modda imzalamak için gereken key.properties veya upload-keystore.jks dosyası eksik/yanlış konumda.',
         autoFixAvailable: false,
@@ -87,7 +83,7 @@ export class AIDiagnostician {
 
     if (
       combinedText.includes('target flutter_analyze failed') ||
-      combinedText.includes('flutter analyze') && combinedText.includes('error') ||
+      (combinedText.includes('flutter analyze') && combinedText.includes('error')) ||
       combinedText.includes('tests failed')
     ) {
       return {
@@ -134,7 +130,9 @@ export class AIDiagnostician {
 
     if (
       combinedText.includes('app store connect') &&
-      (combinedText.includes('401') || combinedText.includes('unauthorized') || combinedText.includes('forbidden'))
+      (combinedText.includes('401') ||
+        combinedText.includes('unauthorized') ||
+        combinedText.includes('forbidden'))
     ) {
       return {
         category: 'STORE_API',
@@ -164,10 +162,11 @@ export class AIDiagnostician {
       provider?: AIProviderType;
       apiKey?: string;
       model?: string;
-    }
+    },
   ): Promise<AIDiagnosisResult> {
     const provider = options?.provider || 'gemini';
-    const apiKey = options?.apiKey || process.env['GEMINI_API_KEY'] || process.env['OPENAI_API_KEY'];
+    const apiKey =
+      options?.apiKey || process.env['GEMINI_API_KEY'] || process.env['OPENAI_API_KEY'];
 
     if (!apiKey) {
       return this.fallbackDiagnosis(ctx);
@@ -218,10 +217,7 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
           generationConfig: { responseMimeType: 'application/json' },
         });
 
-        const resp = await model.generateContent([
-          { text: systemPrompt },
-          { text: userPrompt },
-        ]);
+        const resp = await model.generateContent([{ text: systemPrompt }, { text: userPrompt }]);
 
         const text = resp.response.text();
         const parsed = JSON.parse(text) as AIDiagnosisResult;
@@ -257,9 +253,8 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
       provider?: AIProviderType;
       apiKey?: string;
       model?: string;
-    }
+    },
   ): Promise<AIDiagnosisResult> {
-
     const heuristic = this.diagnoseHeuristics(ctx);
     if (heuristic) {
       return heuristic;

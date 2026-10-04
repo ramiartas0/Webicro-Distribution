@@ -3,13 +3,21 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import type { AndroidBuildConfig, AndroidBuildResult } from './types.js';
 
-function runProcessWithLiveLogs(command: string, args: string[], cwd: string, onLog?: (line: string) => void): Promise<void> {
+function runProcessWithLiveLogs(
+  command: string,
+  args: string[],
+  cwd: string,
+  onLog?: (line: string) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, shell: true });
 
     child.stdout.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
       for (const line of lines) {
         if (onLog) onLog(line);
       }
@@ -17,7 +25,10 @@ function runProcessWithLiveLogs(command: string, args: string[], cwd: string, on
 
     child.stderr.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
-      const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
       for (const line of lines) {
         if (onLog) onLog(line);
       }
@@ -27,7 +38,9 @@ function runProcessWithLiveLogs(command: string, args: string[], cwd: string, on
       if (code === 0) {
         resolve();
       } else {
-        reject(new Error(`Komut başarısız oldu (çıkış kodu ${code}): ${command} ${args.join(' ')}`));
+        reject(
+          new Error(`Komut başarısız oldu (çıkış kodu ${code}): ${command} ${args.join(' ')}`),
+        );
       }
     });
 
@@ -73,7 +86,15 @@ export class AndroidBuilder {
     if (config.onLog) config.onLog(`Android AAB derlemesi başlatılıyor (Gradle bundleRelease)...`);
     await runProcessWithLiveLogs('flutter', args, workDir, config.onLog);
 
-    const aabPath = path.join(workDir, 'build', 'app', 'outputs', 'bundle', 'release', 'app-release.aab');
+    const aabPath = path.join(
+      workDir,
+      'build',
+      'app',
+      'outputs',
+      'bundle',
+      'release',
+      'app-release.aab',
+    );
 
     try {
       await fs.access(aabPath);

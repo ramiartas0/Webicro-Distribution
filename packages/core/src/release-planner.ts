@@ -9,10 +9,7 @@ export interface ReleasePlan {
 }
 
 export class ReleasePlanner {
-  public createPlan(
-    resolution: VersionResolution,
-    options: OrchestratorOptions
-  ): ReleasePlan {
+  public createPlan(resolution: VersionResolution, options: OrchestratorOptions): ReleasePlan {
     const steps: string[] = [
       'ENVIRONMENT_CHECK',
       'DATABASE_INIT',
@@ -22,7 +19,7 @@ export class ReleasePlanner {
       'NOTES_GENERATION',
       'NOTES_VALIDATION',
       'PUBSPEC_UPDATE',
-      'FLUTTER_CHECK'
+      'FLUTTER_CHECK',
     ];
 
     if (!options.skipTests) {
@@ -52,7 +49,7 @@ export class ReleasePlanner {
       steps,
       estimatedDurationMs: steps.length * 60000,
       versionResolution: resolution,
-      requiresManualApproval: !options.autoApprove
+      requiresManualApproval: !options.autoApprove,
     };
   }
 }

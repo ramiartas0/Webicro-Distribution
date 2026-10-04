@@ -2,11 +2,20 @@ import type { NativeChangeInfo } from './types.js';
 
 export function isNativeFile(filePath: string): boolean {
   const androidPatterns = ['android/', 'androidmanifest.xml', '.gradle'];
-  const iosPatterns = ['ios/', 'podfile', 'podfile.lock', 'info.plist', '.xcworkspace', '.xcodeproj'];
+  const iosPatterns = [
+    'ios/',
+    'podfile',
+    'podfile.lock',
+    'info.plist',
+    '.xcworkspace',
+    '.xcodeproj',
+  ];
 
   const lowerPath = filePath.toLowerCase();
-  return androidPatterns.some(p => lowerPath.includes(p)) ||
-         iosPatterns.some(p => lowerPath.includes(p));
+  return (
+    androidPatterns.some((p) => lowerPath.includes(p)) ||
+    iosPatterns.some((p) => lowerPath.includes(p))
+  );
 }
 
 export function detectNativeChanges(changedFiles: string[]): NativeChangeInfo {
@@ -14,7 +23,14 @@ export function detectNativeChanges(changedFiles: string[]): NativeChangeInfo {
   const iosFiles: string[] = [];
 
   const androidPatterns = ['android/', 'androidmanifest.xml', '.gradle'];
-  const iosPatterns = ['ios/', 'podfile', 'podfile.lock', 'info.plist', '.xcworkspace', '.xcodeproj'];
+  const iosPatterns = [
+    'ios/',
+    'podfile',
+    'podfile.lock',
+    'info.plist',
+    '.xcworkspace',
+    '.xcodeproj',
+  ];
 
   for (const file of changedFiles) {
     const lowerPath = file.toLowerCase();
@@ -42,6 +58,6 @@ export function detectNativeChanges(changedFiles: string[]): NativeChangeInfo {
     androidChanged: androidFiles.length > 0,
     iosChanged: iosFiles.length > 0,
     androidFiles,
-    iosFiles
+    iosFiles,
   };
 }

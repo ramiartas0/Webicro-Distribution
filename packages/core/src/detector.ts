@@ -24,9 +24,7 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
       if (cfg.project?.name) name = cfg.project.name;
       if (cfg.project?.package) pkg = cfg.project.package;
     }
-  } catch {
-
-  }
+  } catch {}
 
   try {
     const pubspecPath = path.join(projectPath, 'pubspec.yaml');
@@ -42,9 +40,7 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
         buildNumber = b ? parseInt(b, 10) : 1;
       }
     }
-  } catch {
-
-  }
+  } catch {}
 
   if (!pkg) {
     const gradlePaths = [
@@ -65,9 +61,7 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
             pkg = nsMatch[1];
             break;
           }
-        } catch {
-
-        }
+        } catch {}
       }
     }
   }
@@ -84,9 +78,7 @@ export function detectProjectMetadata(projectPath: string): ProjectMetadata {
           break;
         }
       }
-    } catch {
-
-    }
+    } catch {}
   }
 
   return {

@@ -56,7 +56,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }, duration);
       }
     },
-    [dismiss]
+    [dismiss],
   );
 
   const toast = useMemo(() => {
@@ -75,7 +75,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ toast, dismiss, toasts }}>
       {children}
-      { }
+      {}
       <div
         aria-live="polite"
         aria-label={t('toast.notifications')}
@@ -88,22 +88,30 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               key={toastItem.id}
               role="alert"
               className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border shadow-xl bg-card text-card-foreground backdrop-blur-md transition-all duration-200 animate-in slide-in-from-bottom-3 ${
-                isError ? 'border-destructive/40 shadow-destructive/5' : 'border-border shadow-black/5'
+                isError
+                  ? 'border-destructive/40 shadow-destructive/5'
+                  : 'border-border shadow-black/5'
               }`}
             >
-              { }
+              {}
               <div className="shrink-0 mt-0.5">
-                {toastItem.type === 'success' && <CheckCircle2 className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'success' && (
+                  <CheckCircle2 className="w-4 h-4 text-foreground" />
+                )}
                 {toastItem.type === 'error' && <AlertCircle className="w-4 h-4 text-destructive" />}
-                {toastItem.type === 'warning' && <AlertTriangle className="w-4 h-4 text-foreground" />}
+                {toastItem.type === 'warning' && (
+                  <AlertTriangle className="w-4 h-4 text-foreground" />
+                )}
                 {toastItem.type === 'info' && <Info className="w-4 h-4 text-foreground" />}
                 {toastItem.type === 'default' && <Bell className="w-4 h-4 text-foreground" />}
               </div>
 
-              { }
+              {}
               <div className="flex-1 min-w-0 pr-1">
                 {toastItem.title && (
-                  <h4 className={`text-xs font-semibold leading-tight mb-1 truncate ${isError ? 'text-destructive' : 'text-foreground'}`}>
+                  <h4
+                    className={`text-xs font-semibold leading-tight mb-1 truncate ${isError ? 'text-destructive' : 'text-foreground'}`}
+                  >
                     {toastItem.title}
                   </h4>
                 )}
@@ -112,7 +120,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 </div>
               </div>
 
-              { }
+              {}
               <button
                 type="button"
                 onClick={() => dismiss(toastItem.id)}

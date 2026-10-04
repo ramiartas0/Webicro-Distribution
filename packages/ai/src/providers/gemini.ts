@@ -36,7 +36,7 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
             responseMimeType: 'application/json',
             maxOutputTokens: 600,
             temperature: 0.1,
-          }
+          },
         });
         const result = await model.generateContent(prompt);
         const text = result.response.text();
@@ -45,7 +45,12 @@ export class GeminiProvider extends BaseProvider implements AIProvider {
         lastError = err;
         const errMsg = err instanceof Error ? err.message : String(err);
 
-        if (errMsg.includes('404') || errMsg.includes('503') || errMsg.includes('not found') || errMsg.includes('high demand')) {
+        if (
+          errMsg.includes('404') ||
+          errMsg.includes('503') ||
+          errMsg.includes('not found') ||
+          errMsg.includes('high demand')
+        ) {
           continue;
         }
         throw err;

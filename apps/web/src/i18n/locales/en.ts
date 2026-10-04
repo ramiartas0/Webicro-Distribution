@@ -161,7 +161,8 @@ export const en: TranslationDictionary = {
     googlePlaySettings: 'Google Play Distribution',
     appStoreSettings: 'Apple App Store Distribution',
     autoGitSync: 'Auto Git Commit & Tag (Push to GitHub)',
-    autoGitSyncDesc: 'Automatically commits pubspec and changelog upon completion, tags version and pushes to GitHub.',
+    autoGitSyncDesc:
+      'Automatically commits pubspec and changelog upon completion, tags version and pushes to GitHub.',
     notesRequired: 'Release Notes Required (Generate with AI)',
     selectPlatformFirst: 'Please select at least one platform (Android or iOS)',
     step1: 'Preparation and Git Analysis',
@@ -248,7 +249,8 @@ export const en: TranslationDictionary = {
   },
   history: {
     title: 'Release History & SQLite Audit Log',
-    subtitle: 'Filter and audit local builds, store uploads, approvals, and error traces across all projects from SQLite database.',
+    subtitle:
+      'Filter and audit local builds, store uploads, approvals, and error traces across all projects from SQLite database.',
     refreshDb: 'Refresh Database',
     refreshingDb: 'Refreshing...',
     totalReleases: 'Total Releases',
@@ -286,19 +288,26 @@ export const en: TranslationDictionary = {
   wiki: {
     title: 'Webicro Distribution — Store Integration Wiki & Guide',
     googlePlayTitle: '1. Prerequisites for Google Play Console Integration',
-    googlePlayStep1: 'Open your project in Google Cloud Console and enable the Google Play Android Developer API service.',
-    googlePlayStep2: 'Go to IAM & Admin > Service Accounts and create a new Service Account (e.g. play-store-deployer).',
+    googlePlayStep1:
+      'Open your project in Google Cloud Console and enable the Google Play Android Developer API service.',
+    googlePlayStep2:
+      'Go to IAM & Admin > Service Accounts and create a new Service Account (e.g. play-store-deployer).',
     googlePlayStep3: 'Under Keys tab of the service account, create and download a new JSON key.',
-    googlePlayStep4: 'Copy the JSON key content and paste into "Configure API Credentials" modal, then click "Save & Verify Connection".',
-    googlePlayStep5: 'In Google Play Console > Users and Permissions, invite this service account email with release management permissions.',
+    googlePlayStep4:
+      'Copy the JSON key content and paste into "Configure API Credentials" modal, then click "Save & Verify Connection".',
+    googlePlayStep5:
+      'In Google Play Console > Users and Permissions, invite this service account email with release management permissions.',
     appStoreTitle: '2. Prerequisites for Apple App Store Connect Integration',
     appStoreStep1: 'Go to App Store Connect > Users and Access > Integrations tab.',
     appStoreStep2: 'Generate an App Store Connect API Key (Role: App Manager or Admin).',
     appStoreStep3: 'Copy the Key ID and the Issuer ID shown at the top of the page.',
-    appStoreStep4: 'Download the .p8 private key file, open as text, and paste into "Configure API Credentials" modal.',
-    appStoreStep5: 'Click "Save & Verify Connection" to securely persist and link with your account.',
+    appStoreStep4:
+      'Download the .p8 private key file, open as text, and paste into "Configure API Credentials" modal.',
+    appStoreStep5:
+      'Click "Save & Verify Connection" to securely persist and link with your account.',
     testTitle: '3. How to Test Connections?',
-    testDesc: 'Click "Configure API Credentials" from top or sidebar menu to run one-click live API handshakes with both app stores and update keys anytime.',
+    testDesc:
+      'Click "Configure API Credentials" from top or sidebar menu to run one-click live API handshakes with both app stores and update keys anytime.',
   },
   toast: {
     success: 'Operation Successful',
@@ -327,7 +336,8 @@ export const en: TranslationDictionary = {
     autoFixSuccess: 'Issue successfully resolved.',
     autoFixRestarting: 'Fix completed. Automatically restarting release...',
     autoFixError: 'Automatic fix could not be applied.',
-    notesRequiredDesc: 'Turkish and English release notes are required to start release. Please generate with AI first.',
+    notesRequiredDesc:
+      'Turkish and English release notes are required to start release. Please generate with AI first.',
     selectPlatformDesc: 'Please select at least one platform to release (Android or iOS).',
   },
 };

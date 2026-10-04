@@ -44,13 +44,15 @@ export class IosBuilder {
 
     try {
       const files = await fs.readdir(ipaDir);
-      const ipaFiles = files.filter(f => f.endsWith('.ipa'));
+      const ipaFiles = files.filter((f) => f.endsWith('.ipa'));
       if (ipaFiles.length === 0) {
         throw new Error('No .ipa file found in build directory.');
       }
       ipaPath = path.join(ipaDir, ipaFiles[0] as string);
     } catch (err: unknown) {
-      throw new Error(`Failed to locate IPA file: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(
+        `Failed to locate IPA file: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     const durationMs = Date.now() - startTime;
@@ -80,13 +82,13 @@ export class IosBuilder {
         if (content.includes('flutter_additional_ios_build_settings(target)')) {
           content = content.replace(
             /flutter_additional_ios_build_settings\(target\)/g,
-            "flutter_additional_ios_build_settings(target)\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end"
+            "flutter_additional_ios_build_settings(target)\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end",
           );
           modified = true;
         } else if (content.includes('post_install do |installer|')) {
           content = content.replace(
             /post_install do \|installer\|/g,
-            "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end"
+            "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end",
           );
           modified = true;
         }
@@ -95,8 +97,6 @@ export class IosBuilder {
       if (modified) {
         await fs.writeFile(podfilePath, content, 'utf8');
       }
-    } catch {
-
-    }
+    } catch {}
   }
 }

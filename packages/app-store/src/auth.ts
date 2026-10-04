@@ -15,15 +15,15 @@ export function generateAppStoreToken(config: AppStoreConfig): string {
   const payload = {
     iss: config.issuerId,
     exp: Math.floor(Date.now() / 1000) + 20 * 60,
-    aud: 'appstoreconnect-v1'
+    aud: 'appstoreconnect-v1',
   };
 
   const token = jwt.sign(payload, privateKey, {
     algorithm: 'ES256',
     header: {
       kid: config.keyId,
-      alg: 'ES256'
-    }
+      alg: 'ES256',
+    },
   });
 
   return token;

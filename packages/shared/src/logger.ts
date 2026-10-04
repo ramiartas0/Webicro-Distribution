@@ -42,11 +42,22 @@ export class Logger {
     return LOG_LEVELS[level] >= LOG_LEVELS[this.level];
   }
 
-  private formatMessage(level: LogLevel, message: string, data?: Record<string, unknown>, error?: unknown): string {
+  private formatMessage(
+    level: LogLevel,
+    message: string,
+    data?: Record<string, unknown>,
+    error?: unknown,
+  ): string {
     const timestamp = new Date().toISOString();
     const mergedContext = { ...this.context, ...data };
-    const contextStr = Object.keys(mergedContext).length > 0 ? ` ${JSON.stringify(mergedContext)}` : '';
-    const errorStr = error instanceof Error ? `\n${error.stack ?? error.message}` : error ? `\n${String(error)}` : '';
+    const contextStr =
+      Object.keys(mergedContext).length > 0 ? ` ${JSON.stringify(mergedContext)}` : '';
+    const errorStr =
+      error instanceof Error
+        ? `\n${error.stack ?? error.message}`
+        : error
+          ? `\n${String(error)}`
+          : '';
 
     let levelStr = `[${level.toUpperCase()}]`;
     switch (level) {

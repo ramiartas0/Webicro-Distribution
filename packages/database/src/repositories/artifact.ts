@@ -18,7 +18,7 @@ export class ArtifactRepository {
       size: data.size,
       status: data.status,
     });
-    
+
     const selectStmt = this.db.prepare(`
       SELECT 
         id, 
@@ -52,7 +52,10 @@ export class ArtifactRepository {
     return stmt.all(releaseId) as ArtifactRecord[];
   }
 
-  public findByReleaseAndPlatform(releaseId: string, platform: Platform): ArtifactRecord | undefined {
+  public findByReleaseAndPlatform(
+    releaseId: string,
+    platform: Platform,
+  ): ArtifactRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT 
         id, 

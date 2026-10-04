@@ -22,11 +22,11 @@
 
 ## 🖥️ Desteklenen İşletim Sistemleri Matrisi
 
-| İşletim Sistemi | Android (AAB) Derleme | iOS (IPA) Derleme | Google Play Yükleme | App Store Connect Yükleme | Web & CLI Arayüzü |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **macOS (Apple Silicon & Intel)** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| **Linux (Ubuntu, Debian, Fedora)** | :white_check_mark: | :x: *(macOS gerektirir)* | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| **Windows 10 / 11** | :white_check_mark: | :x: *(macOS gerektirir)* | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| İşletim Sistemi                    | Android (AAB) Derleme |    iOS (IPA) Derleme     | Google Play Yükleme | App Store Connect Yükleme | Web & CLI Arayüzü  |
+| :--------------------------------- | :-------------------: | :----------------------: | :-----------------: | :-----------------------: | :----------------: |
+| **macOS (Apple Silicon & Intel)**  |  :white_check_mark:   |    :white_check_mark:    | :white_check_mark:  |    :white_check_mark:     | :white_check_mark: |
+| **Linux (Ubuntu, Debian, Fedora)** |  :white_check_mark:   | :x: _(macOS gerektirir)_ | :white_check_mark:  |    :white_check_mark:     | :white_check_mark: |
+| **Windows 10 / 11**                |  :white_check_mark:   | :x: _(macOS gerektirir)_ | :white_check_mark:  |    :white_check_mark:     | :white_check_mark: |
 
 ---
 
@@ -78,9 +78,47 @@ packages/
 
 ---
 
-## ⚡ Kurulum ve Kullanım
+## ⚡ Hızlı Kurulum & Başlatma
 
-### 1. Kurulum
+### 1. Evrensel Tek Satırda Kurulum (macOS & Linux)
+
+Herhangi bir yapılandırmayla uğraşmadan tek komutla kurup kullanmaya başlayabilirsiniz:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/webicro/distribution/main/scripts/install.sh | bash
+```
+
+### 2. macOS Homebrew ile Kurulum
+
+```bash
+brew install webicro
+# veya yerel depo üzerinden:
+brew install --build-from-source Formula/webicro.rb
+```
+
+### 3. Paket Yöneticileri ile Kurulum (npm / pnpm / yarn)
+
+```bash
+# npm ile genel kurulum
+npm install -g @webicro/cli
+
+# pnpm ile genel kurulum
+pnpm add -g @webicro/cli
+
+# yarn ile genel kurulum
+yarn global add @webicro/cli
+
+# Kurulum yapmadan tek tıkla doğrudan çalıştırma:
+npx @webicro/cli ui
+# veya:
+pnpm dlx @webicro/cli ui
+```
+
+### 4. macOS Tek Tıkla Masaüstü Başlatıcı
+
+Terminal yazmak istemeyen kullanıcılar için `scripts/Webicro-Dashboard.command` dosyasına çift tıklayarak GUI'yi doğrudan tarayıcınızda başlatabilirsiniz.
+
+### 5. Kaynak Koddan Geliştirici Kurulumu
 
 ```bash
 # Depoyu klonlayın
@@ -89,7 +127,10 @@ cd webicro_distribution
 
 # Bağımlılıkları yükleyin ve derleyin
 pnpm install
-pnpm build
+pnpm run build
+
+# Web Dashboard'u başlatın
+pnpm run ui
 ```
 
 ### 2. CLI Komutları

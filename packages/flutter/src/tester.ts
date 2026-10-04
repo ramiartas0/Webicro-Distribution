@@ -11,9 +11,13 @@ export class FlutterTester {
 
       const passedMatch = stdout.match(/All tests passed!/);
       const passedCountMatch = stdout.match(/\+(\d+)/);
-      const passed = passedMatch !== null || (passedCountMatch !== null && parseInt(passedCountMatch[1], 10) > 0 && !stdout.includes('-'));
+      const passed =
+        passedMatch !== null ||
+        (passedCountMatch !== null &&
+          parseInt(passedCountMatch[1], 10) > 0 &&
+          !stdout.includes('-'));
 
-      const testsPassed = passedCountMatch ? parseInt(passedCountMatch[1], 10) : (passed ? 1 : 0);
+      const testsPassed = passedCountMatch ? parseInt(passedCountMatch[1], 10) : passed ? 1 : 0;
 
       return {
         passed: true,
@@ -22,7 +26,12 @@ export class FlutterTester {
         output: stdout,
       };
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'stdout' in error && typeof (error as Record<string, unknown>).stdout === 'string') {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'stdout' in error &&
+        typeof (error as Record<string, unknown>).stdout === 'string'
+      ) {
         const stdout = (error as Record<string, unknown>).stdout as string;
 
         const failedMatch = stdout.match(/-(\d+)/);

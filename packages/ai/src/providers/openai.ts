@@ -24,8 +24,8 @@ export class OpenAIProvider extends BaseProvider implements AIProvider {
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt }
-      ]
+        { role: 'user', content: prompt },
+      ],
     });
 
     const content = response.choices[0]?.message?.content;

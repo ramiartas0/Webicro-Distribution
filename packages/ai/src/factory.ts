@@ -29,14 +29,16 @@ export function createAIProvider(config?: AIProviderConfig): AIProvider {
     case 'anthropic': {
       const apiKey = customKey || process.env['ANTHROPIC_API_KEY'];
       if (apiKey) {
-        return new AnthropicProvider({ apiKey, model: customModel || 'claude-3-5-sonnet-20241022' });
+        return new AnthropicProvider({
+          apiKey,
+          model: customModel || 'claude-3-5-sonnet-20241022',
+        });
       }
       return new ConventionalReleaseNotesProvider();
     }
 
     case 'conventional':
     default: {
-
       if (!config?.provider) {
         const geminiKey = process.env['GEMINI_API_KEY'];
         if (geminiKey) return new GeminiProvider({ apiKey: geminiKey });

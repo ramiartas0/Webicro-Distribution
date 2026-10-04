@@ -5,7 +5,10 @@ import { buildAIContext } from './context-builder.js';
 import { AISafetyChecker } from './safety.js';
 
 export class AIError extends Error {
-  constructor(message: string, public readonly warnings: string[] = []) {
+  constructor(
+    message: string,
+    public readonly warnings: string[] = [],
+  ) {
     super(message);
     this.name = 'AIError';
   }
@@ -20,12 +23,16 @@ export class AIController {
 
   constructor(
     private readonly provider: AIProvider,
-    private readonly validator: ReleaseNotesValidator
+    private readonly validator: ReleaseNotesValidator,
   ) {
     this.safetyChecker = new AISafetyChecker();
   }
 
-  public async generate(version: string, commits: ParsedCommit[], languages?: string[]): Promise<ReleaseNotesMap> {
+  public async generate(
+    version: string,
+    commits: ParsedCommit[],
+    languages?: string[],
+  ): Promise<ReleaseNotesMap> {
     const context = buildAIContext(version, commits, languages);
 
     const notes = await this.provider.generateReleaseNotes(context);

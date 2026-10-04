@@ -59,10 +59,21 @@ export const NotificationsConfigSchema = z.object({
 export const ReleaseConfigSchema = z.object({
   project: ProjectConfigSchema,
   version: VersionConfigSchema.default({ strategy: 'conventional-commits', autoIncrement: true }),
-  build: BuildConfigSchema.default({ flutterChannel: 'stable', clean: true, runTests: true, runAnalyze: true }),
+  build: BuildConfigSchema.default({
+    flutterChannel: 'stable',
+    clean: true,
+    runTests: true,
+    runAnalyze: true,
+  }),
   android: AndroidConfigSchema.default({ enabled: true, track: 'internal', rollout: 100 }),
   ios: IosConfigSchema.default({ enabled: true, submitForReview: false }),
-  ai: AiConfigSchema.default({ enabled: false, provider: 'gemini', generateReleaseNotes: true, generateLocalizations: false, languages: ['en'] }),
+  ai: AiConfigSchema.default({
+    enabled: false,
+    provider: 'gemini',
+    generateReleaseNotes: true,
+    generateLocalizations: false,
+    languages: ['en'],
+  }),
   stores: StoresConfigSchema.default({ googlePlay: false, appStoreConnect: false }),
   security: SecurityConfigSchema.default({ requireCleanGit: true, scanSecrets: false }),
   deployment: DeploymentConfigSchema.default({ approvalRequired: false }),

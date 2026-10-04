@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { isSafeProjectPath, saveStoreCredentials, getStoreCredentials } from '../apps/cli/src/commands/ui.js';
+import {
+  isSafeProjectPath,
+  saveStoreCredentials,
+  getStoreCredentials,
+} from '../apps/cli/src/commands/ui.js';
 
 describe('Security & Loopback Hardening Verification', () => {
   let tempDir: string;

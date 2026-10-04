@@ -16,7 +16,12 @@ export class FlutterAnalyzer {
         output: stdout,
       };
     } catch (error) {
-      if (typeof error === 'object' && error !== null && 'stdout' in error && typeof (error as Record<string, unknown>).stdout === 'string') {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'stdout' in error &&
+        typeof (error as Record<string, unknown>).stdout === 'string'
+      ) {
         const stdout = (error as Record<string, unknown>).stdout as string;
 
         const errorMatch = stdout.match(/(\d+) issue\(s\) found/);

@@ -44,7 +44,7 @@ security:
         configPath: path.join(tempRepoDir, 'release.config.yaml'),
         skipTests: true,
         skipGit: true,
-      })
+      }),
     ).rejects.toThrow(/Güvenlik kuralı ihlali|Git çalışma ağacı temiz değil/);
   });
 });

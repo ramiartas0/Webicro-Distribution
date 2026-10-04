@@ -46,9 +46,11 @@ export class AppStoreAdapter {
     return res.json();
   }
 
-  public async listAllApps(): Promise<{ id: string; name: string; bundleId: string; sku?: string }[]> {
+  public async listAllApps(): Promise<
+    { id: string; name: string; bundleId: string; sku?: string }[]
+  > {
     try {
-      const data = await this.fetchApi('/apps') as {
+      const data = (await this.fetchApi('/apps')) as {
         data?: {
           id: string;
           attributes: { name: string; bundleId: string; sku?: string };
@@ -67,7 +69,9 @@ export class AppStoreAdapter {
   }
 
   public async getAppId(): Promise<string> {
-    const data = await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`) as { data: { id: string }[] };
+    const data = (await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`)) as {
+      data: { id: string }[];
+    };
     if (!data.data || data.data.length === 0) {
       throw new AppStoreError(`App not found with bundle ID: ${this.config.bundleId}`);
     }
@@ -80,7 +84,9 @@ export class AppStoreAdapter {
 
   public async getLatestBuild(): Promise<{ version: string; buildNumber: string } | null> {
     const appId = await this.getAppId();
-    const data = await this.fetchApi(`/builds?filter[app]=${appId}&sort=-uploadedDate&limit=1`) as { data: { attributes: { version: string, uploadedDate: string } }[] };
+    const data = (await this.fetchApi(
+      `/builds?filter[app]=${appId}&sort=-uploadedDate&limit=1`,
+    )) as { data: { attributes: { version: string; uploadedDate: string } }[] };
     if (!data.data || data.data.length === 0) {
       return null;
     }
@@ -110,17 +116,19 @@ export class AppStoreAdapter {
       },
     };
 
-    const data = await this.fetchApi('/appStoreVersions', {
+    const data = (await this.fetchApi('/appStoreVersions', {
       method: 'POST',
       body: JSON.stringify(payload),
-    }) as { data: { id: string } };
+    })) as { data: { id: string } };
 
     return data.data.id;
   }
 
   public async updateWhatsNew(versionId: string, locale: string, text: string): Promise<void> {
-    const localizations = await this.fetchApi(`/appStoreVersions/${versionId}/appStoreVersionLocalizations`) as { data: { id: string, attributes: { locale: string } }[] };
-    let localizationId = localizations.data.find(l => l.attributes.locale === locale)?.id;
+    const localizations = (await this.fetchApi(
+      `/appStoreVersions/${versionId}/appStoreVersionLocalizations`,
+    )) as { data: { id: string; attributes: { locale: string } }[] };
+    let localizationId = localizations.data.find((l) => l.attributes.locale === locale)?.id;
 
     if (!localizationId) {
       const locPayload = {
@@ -128,14 +136,14 @@ export class AppStoreAdapter {
           type: 'appStoreVersionLocalizations',
           attributes: { locale },
           relationships: {
-            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } }
-          }
-        }
+            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+          },
+        },
       };
-      const created = await this.fetchApi('/appStoreVersionLocalizations', {
+      const created = (await this.fetchApi('/appStoreVersionLocalizations', {
         method: 'POST',
-        body: JSON.stringify(locPayload)
-      }) as { data: { id: string } };
+        body: JSON.stringify(locPayload),
+      })) as { data: { id: string } };
       localizationId = created.data.id;
     }
 
@@ -143,12 +151,12 @@ export class AppStoreAdapter {
       data: {
         type: 'appStoreVersionLocalizations',
         id: localizationId,
-        attributes: { whatsNew: text }
-      }
+        attributes: { whatsNew: text },
+      },
     };
     await this.fetchApi(`/appStoreVersionLocalizations/${localizationId}`, {
       method: 'PATCH',
-      body: JSON.stringify(updatePayload)
+      body: JSON.stringify(updatePayload),
     });
   }
 
@@ -190,7 +198,7 @@ export class AppStoreAdapter {
     versionString: string,
     buildNumberString: string,
     whatsNew?: Record<string, string>,
-    submitReview?: boolean
+    submitReview?: boolean,
   ): Promise<AppStoreUploadResult> {
     const appId = await this.getAppId();
 
@@ -198,10 +206,14 @@ export class AppStoreAdapter {
       const cmd = spawn('xcrun', [
         'altool',
         '--upload-app',
-        '-f', ipaPath,
-        '-t', 'ios',
-        '--apiKey', this.config.keyId,
-        '--apiIssuer', this.config.issuerId
+        '-f',
+        ipaPath,
+        '-t',
+        'ios',
+        '--apiKey',
+        this.config.keyId,
+        '--apiIssuer',
+        this.config.issuerId,
       ]);
 
       cmd.stdout.on('data', (data) => console.log(`altool: ${data}`));
@@ -217,8 +229,14 @@ export class AppStoreAdapter {
     const buildId = await waitForBuildProcessing(appId, buildNumberString, token);
 
     const versionId = await this.createAppStoreVersion(appId, versionString).catch(async (e) => {
-      const versions = await this.fetchApi(`/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}`) as { data: { id: string, attributes: { appStoreState: string } }[] };
-      const editable = versions.data.find(v => ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(v.attributes.appStoreState));
+      const versions = (await this.fetchApi(
+        `/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}`,
+      )) as { data: { id: string; attributes: { appStoreState: string } }[] };
+      const editable = versions.data.find((v) =>
+        ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(
+          v.attributes.appStoreState,
+        ),
+      );
       if (editable) return editable.id;
       throw e;
     });

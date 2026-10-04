@@ -4,7 +4,9 @@ import type { StoreSubmissionRecord, StoreName } from '../types.js';
 export class StoreSubmissionRepository {
   constructor(private db: Database) {}
 
-  public create(data: Omit<StoreSubmissionRecord, 'id' | 'createdAt' | 'updatedAt'>): StoreSubmissionRecord {
+  public create(
+    data: Omit<StoreSubmissionRecord, 'id' | 'createdAt' | 'updatedAt'>,
+  ): StoreSubmissionRecord {
     const stmt = this.db.prepare(`
       INSERT INTO store_submissions (release_id, store, version, status, external_id, error)
       VALUES (@releaseId, @store, @version, @status, @externalId, @error)
@@ -17,7 +19,7 @@ export class StoreSubmissionRepository {
       externalId: data.externalId,
       error: data.error,
     });
-    
+
     return this.findByReleaseAndStore(data.releaseId, data.store) as StoreSubmissionRecord;
   }
 
@@ -39,7 +41,10 @@ export class StoreSubmissionRepository {
     return stmt.all(releaseId) as StoreSubmissionRecord[];
   }
 
-  public findByReleaseAndStore(releaseId: string, store: StoreName): StoreSubmissionRecord | undefined {
+  public findByReleaseAndStore(
+    releaseId: string,
+    store: StoreName,
+  ): StoreSubmissionRecord | undefined {
     const stmt = this.db.prepare(`
       SELECT 
         id, 
@@ -58,7 +63,13 @@ export class StoreSubmissionRepository {
     return row ? (row as StoreSubmissionRecord) : undefined;
   }
 
-  public updateStatus(releaseId: string, store: StoreName, status: string, externalId?: string, error?: string): void {
+  public updateStatus(
+    releaseId: string,
+    store: StoreName,
+    status: string,
+    externalId?: string,
+    error?: string,
+  ): void {
     const stmt = this.db.prepare(`
       UPDATE store_submissions 
       SET status = ?, external_id = COALESCE(?, external_id), error = COALESCE(?, error), updated_at = CURRENT_TIMESTAMP

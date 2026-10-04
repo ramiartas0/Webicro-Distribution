@@ -161,7 +161,8 @@ export const tr: TranslationDictionary = {
     googlePlaySettings: 'Google Play Dağıtımı',
     appStoreSettings: 'Apple App Store Dağıtımı',
     autoGitSync: "Otomatik Git Commit & Tag (GitHub'a Push)",
-    autoGitSyncDesc: "Dağıtım bitince pubspec ve changelog otomatik commit edilir, sürüm etiketi eklenir ve GitHub'a push edilir.",
+    autoGitSyncDesc:
+      "Dağıtım bitince pubspec ve changelog otomatik commit edilir, sürüm etiketi eklenir ve GitHub'a push edilir.",
     notesRequired: 'Sürüm Notları Gerekli (AI ile Üretin)',
     selectPlatformFirst: 'Lütfen en az bir platform seçin (Android veya iOS)',
     step1: 'Hazırlık ve Git Analizi',
@@ -205,7 +206,8 @@ export const tr: TranslationDictionary = {
     reDiagnose: 'AI ile Yeniden Teşhis Et',
     provider: 'Yapay Zeka Sürüm Notu Sağlayıcısı',
     dualNotes: 'Çift Dilli (TR / EN) Otomatik Notlar',
-    offlineSolver: 'İstediğiniz modelin anahtarını bağlayabilir veya sıfır yapılandırmayla çalışan çevrimdışı Çözücüyü kullanabilirsiniz.',
+    offlineSolver:
+      'İstediğiniz modelin anahtarını bağlayabilir veya sıfır yapılandırmayla çalışan çevrimdışı Çözücüyü kullanabilirsiniz.',
     notesLimit500: 'Google Play Sınırı (Maks 500):',
   },
   settings: {
@@ -230,12 +232,14 @@ export const tr: TranslationDictionary = {
     registeredApps: 'App Store Hesabındaki Kayıtlı Uygulamalar:',
     refreshList: 'Listeyi Yenile',
     refreshing: 'Sorgulanıyor...',
-    noAppsFound: 'Hesabınızdaki kayıtlı uygulamaları listelemek için "Listeyi Yenile" butonuna tıklayabilirsiniz.',
+    noAppsFound:
+      'Hesabınızdaki kayıtlı uygulamaları listelemek için "Listeyi Yenile" butonuna tıklayabilirsiniz.',
     googlePlaySuccess: 'Google Play Service Account başarıyla bağlandı ve kaydedildi!',
     appStoreSuccess: 'Apple App Store Connect API başarıyla bağlandı ve kaydedildi!',
     verificationFailed: 'Doğrulama başarısız oldu.',
     testAndSave: 'Google Play Service Account kimliğini test eder ve kalıcı olarak kaydeder',
-    testAndSaveAppStore: 'Apple App Store Connect API anahtarını test eder ve kalıcı olarak kaydeder',
+    testAndSaveAppStore:
+      'Apple App Store Connect API anahtarını test eder ve kalıcı olarak kaydeder',
     appStoreKeyPlaceholder: 'örneğin: 2X9R427ADR',
     typeToChange: 'Yeni anahtar girmek için yazın (mevcut korunuyor)',
     fetchModelsLive: 'API anahtarına ait modelleri canlı sorgula',
@@ -248,7 +252,8 @@ export const tr: TranslationDictionary = {
   },
   history: {
     title: 'Sürüm Dağıtım Geçmişi & SQLite Denetim Günlüğü',
-    subtitle: 'Tüm projelerin yerel derleme, mağaza aktarımı, onay ve hata kayıtları SQLite veritabanından filtrelenebilir ve denetlenebilir.',
+    subtitle:
+      'Tüm projelerin yerel derleme, mağaza aktarımı, onay ve hata kayıtları SQLite veritabanından filtrelenebilir ve denetlenebilir.',
     refreshDb: 'Veritabanını Yenile',
     refreshingDb: 'Yenileniyor...',
     totalReleases: 'Toplam Dağıtım',
@@ -269,7 +274,8 @@ export const tr: TranslationDictionary = {
     actionReleaseFailed: 'Dağıtım Hatası',
     actionReleaseFailedDesc: 'Derleme veya mağaza API aktarımında bir sorun tespit edildi.',
     actionStoreSubmitted: 'Mağazaya İletildi',
-    actionStoreSubmittedDesc: 'Uygulama paketi ilgili mağazanın test veya üretim kanalına teslim edildi.',
+    actionStoreSubmittedDesc:
+      'Uygulama paketi ilgili mağazanın test veya üretim kanalına teslim edildi.',
     actionRollback: 'Geri Alma İşlemi',
     actionRollbackDesc: 'Sürüm durumu önceki kararlı sürüme geri çekildi.',
     actionDefaultDesc: 'Sistem operasyonu denetim günlüğüne işlendi.',
@@ -286,19 +292,29 @@ export const tr: TranslationDictionary = {
   wiki: {
     title: 'Webicro Distribution — Mağaza Entegrasyon Wiki & Rehber',
     googlePlayTitle: '1. Google Play Console Entegrasyonu İçin Gerekenler',
-    googlePlayStep1: 'Google Cloud Console üzerinde projenizi açın ve Google Play Android Developer API servisini etkinleştirin.',
-    googlePlayStep2: 'IAM ve Yönetim > Hizmet Hesapları bölümünden yeni bir Service Account oluşturun (örneğin: play-store-deployer).',
-    googlePlayStep3: 'Hizmet hesabının Anahtarlar (Keys) sekmesinden JSON formatında yeni bir anahtar indirin.',
-    googlePlayStep4: 'İndirilen JSON anahtarını kopyalayıp "API Kimliklerini Yapılandır" penceresine yapıştırın ve "Kaydet ve Bağlantıyı Doğrula" butonuna basın.',
-    googlePlayStep5: 'Google Play Console > Kullanıcılar ve İzinler sekmesinden bu Service Account e-posta adresini davet edin ve yayınlama izinlerini verin.',
+    googlePlayStep1:
+      'Google Cloud Console üzerinde projenizi açın ve Google Play Android Developer API servisini etkinleştirin.',
+    googlePlayStep2:
+      'IAM ve Yönetim > Hizmet Hesapları bölümünden yeni bir Service Account oluşturun (örneğin: play-store-deployer).',
+    googlePlayStep3:
+      'Hizmet hesabının Anahtarlar (Keys) sekmesinden JSON formatında yeni bir anahtar indirin.',
+    googlePlayStep4:
+      'İndirilen JSON anahtarını kopyalayıp "API Kimliklerini Yapılandır" penceresine yapıştırın ve "Kaydet ve Bağlantıyı Doğrula" butonuna basın.',
+    googlePlayStep5:
+      'Google Play Console > Kullanıcılar ve İzinler sekmesinden bu Service Account e-posta adresini davet edin ve yayınlama izinlerini verin.',
     appStoreTitle: '2. Apple App Store Connect Entegrasyonu İçin Gerekenler',
     appStoreStep1: 'App Store Connect > Kullanıcılar ve Erişim > Entegrasyonlar sekmesine gidin.',
-    appStoreStep2: 'App Store Connect API anahtarı oluşturun (Yetki düzeyi: App Manager veya Admin).',
-    appStoreStep3: "Oluşturulan anahtarın Key ID'sini ve sayfanın üstündeki Issuer ID değerini kopyalayın.",
-    appStoreStep4: 'p8 uzantılı özel anahtar dosyasını indirin ve metin olarak açıp "API Kimliklerini Yapılandır" penceresindeki alana yapıştırın.',
-    appStoreStep5: '"Kaydet ve Bağlantıyı Doğrula" butonuna basarak kalıcı olarak hesabınıza bağlayın.',
+    appStoreStep2:
+      'App Store Connect API anahtarı oluşturun (Yetki düzeyi: App Manager veya Admin).',
+    appStoreStep3:
+      "Oluşturulan anahtarın Key ID'sini ve sayfanın üstündeki Issuer ID değerini kopyalayın.",
+    appStoreStep4:
+      'p8 uzantılı özel anahtar dosyasını indirin ve metin olarak açıp "API Kimliklerini Yapılandır" penceresindeki alana yapıştırın.',
+    appStoreStep5:
+      '"Kaydet ve Bağlantıyı Doğrula" butonuna basarak kalıcı olarak hesabınıza bağlayın.',
     testTitle: '3. Bağlantılar Nasıl Test Edilir?',
-    testDesc: 'Üst menüdeki veya sol alttaki "API Kimliklerini Yapılandır" butonuna tıklayarak açılan pencereden her iki mağazanın canlı API el sıkışmasını tek tıkla test edebilir, istediğiniz zaman yeni anahtarlar tanımlayabilirsiniz.',
+    testDesc:
+      'Üst menüdeki veya sol alttaki "API Kimliklerini Yapılandır" butonuna tıklayarak açılan pencereden her iki mağazanın canlı API el sıkışmasını tek tıkla test edebilir, istediğiniz zaman yeni anahtarlar tanımlayabilirsiniz.',
   },
   toast: {
     success: 'İşlem Başarılı',
@@ -327,7 +343,8 @@ export const tr: TranslationDictionary = {
     autoFixSuccess: 'Sorun başarıyla düzeltildi.',
     autoFixRestarting: 'Düzeltme tamamlandı. Dağıtım otomatik yeniden başlatılıyor...',
     autoFixError: 'Otomatik düzeltme uygulanamadı.',
-    notesRequiredDesc: 'Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları zorunludur. Lütfen önce AI ile notları oluşturun.',
+    notesRequiredDesc:
+      'Dağıtımı başlatmak için Türkçe ve İngilizce sürüm notları zorunludur. Lütfen önce AI ile notları oluşturun.',
     selectPlatformDesc: 'Lütfen dağıtılacak en az bir platform seçin (Android veya iOS).',
   },
 };

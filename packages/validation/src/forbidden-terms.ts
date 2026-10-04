@@ -1,13 +1,7 @@
 import type { ValidationIssue } from './types.js';
 
 export class ForbiddenContentScanner {
-  private readonly forbiddenTerms = [
-    'TODO',
-    'test release',
-    'dummy',
-    'fake',
-    'fix bug #unknown'
-  ];
+  private readonly forbiddenTerms = ['TODO', 'test release', 'dummy', 'fake', 'fix bug #unknown'];
 
   public scan(text: string): ValidationIssue[] {
     const issues: ValidationIssue[] = [];

@@ -44,7 +44,12 @@ export class AuditLogger {
     });
   }
 
-  public logFailure(releaseId: string, action: string, error: unknown, details?: Record<string, unknown>): void {
+  public logFailure(
+    releaseId: string,
+    action: string,
+    error: unknown,
+    details?: Record<string, unknown>,
+  ): void {
     const errorMsg = error instanceof Error ? error.message : String(error);
     this.log({
       releaseId,

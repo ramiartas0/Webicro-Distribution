@@ -24,16 +24,18 @@ export class EnvironmentManager {
 
   public static validate(requiredKeys: string[]): void {
     const missingKeys: string[] = [];
-    
+
     for (const key of requiredKeys) {
       const value = process.env[key];
       if (value === undefined || value.trim() === '') {
         missingKeys.push(key);
       }
     }
-    
+
     if (missingKeys.length > 0) {
-      throw new EnvironmentError(`Missing required environment variables: ${missingKeys.join(', ')}`);
+      throw new EnvironmentError(
+        `Missing required environment variables: ${missingKeys.join(', ')}`,
+      );
     }
   }
 
@@ -53,11 +55,13 @@ export class EnvironmentManager {
     const keyId = this.getOptional('APP_STORE_KEY_ID');
     const issuerId = this.getOptional('APP_STORE_ISSUER_ID');
     const privateKey = this.getOptional('APP_STORE_PRIVATE_KEY');
-    
+
     if (!keyId || !issuerId || !privateKey) {
-      throw new EnvironmentError('App Store credentials incomplete. Need APP_STORE_KEY_ID, APP_STORE_ISSUER_ID, and APP_STORE_PRIVATE_KEY');
+      throw new EnvironmentError(
+        'App Store credentials incomplete. Need APP_STORE_KEY_ID, APP_STORE_ISSUER_ID, and APP_STORE_PRIVATE_KEY',
+      );
     }
-    
+
     return {
       keyId,
       issuerId,

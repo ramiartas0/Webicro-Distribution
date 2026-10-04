@@ -2,7 +2,7 @@ export async function waitForBuildProcessing(
   appId: string,
   buildNumber: string,
   token: string,
-  options?: { maxWaitMs?: number; initialDelayMs?: number }
+  options?: { maxWaitMs?: number; initialDelayMs?: number },
 ): Promise<string> {
   const maxWaitMs = options?.maxWaitMs ?? 30 * 60 * 1000;
   const initialDelayMs = options?.initialDelayMs ?? 5000;
@@ -13,15 +13,17 @@ export async function waitForBuildProcessing(
     const res = await fetch(
       `https://api.appstoreconnect.apple.com/v1/builds?filter[app]=${appId}&filter[version]=${buildNumber}`,
       {
-        headers: { Authorization: `Bearer ${token}` }
-      }
+        headers: { Authorization: `Bearer ${token}` },
+      },
     );
 
     if (!res.ok) {
       throw new Error(`Failed to fetch builds: ${res.statusText}`);
     }
 
-    const data = await res.json() as { data: { id: string, attributes: { processingState: string } }[] };
+    const data = (await res.json()) as {
+      data: { id: string; attributes: { processingState: string } }[];
+    };
 
     if (data.data && data.data.length > 0) {
       const build = data.data[0];

@@ -8,7 +8,7 @@ export class FlutterDoctor {
   async check(cwd?: string): Promise<FlutterDoctorResult> {
     try {
       const { stdout } = await execAsync('flutter doctor -v', { cwd });
-      
+
       const versionMatch = stdout.match(/Flutter \(Channel .*, (.*?),/);
       const version = versionMatch ? versionMatch[1] : null;
 

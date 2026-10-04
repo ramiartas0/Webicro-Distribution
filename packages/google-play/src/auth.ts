@@ -23,23 +23,31 @@ export function parseServiceAccount(config: GooglePlayConfig): ServiceAccountKey
     try {
       return JSON.parse(config.serviceAccountJson) as ServiceAccountKey;
     } catch (e: unknown) {
-      throw new Error(`Google Play serviceAccountJson geçersiz JSON: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(
+        `Google Play serviceAccountJson geçersiz JSON: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
   if (config.serviceAccountJsonPath) {
     if (!fs.existsSync(config.serviceAccountJsonPath)) {
-      throw new Error(`Google Play serviceAccountJsonPath dosya bulunamadı: ${config.serviceAccountJsonPath}`);
+      throw new Error(
+        `Google Play serviceAccountJsonPath dosya bulunamadı: ${config.serviceAccountJsonPath}`,
+      );
     }
     try {
       const raw = fs.readFileSync(config.serviceAccountJsonPath, 'utf8');
       return JSON.parse(raw) as ServiceAccountKey;
     } catch (e: unknown) {
-      throw new Error(`Google Play key dosyası okunamadı: ${e instanceof Error ? e.message : String(e)}`);
+      throw new Error(
+        `Google Play key dosyası okunamadı: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
-  throw new Error('Google Play kimlik doğrulama bilgileri eksik (serviceAccountJson veya serviceAccountJsonPath gereklidir).');
+  throw new Error(
+    'Google Play kimlik doğrulama bilgileri eksik (serviceAccountJson veya serviceAccountJsonPath gereklidir).',
+  );
 }
 
 export async function getGoogleAccessToken(config: GooglePlayConfig): Promise<string> {
@@ -122,5 +130,7 @@ export function createGoogleAuth(config: GooglePlayConfig): InstanceType<typeof 
     });
   }
 
-  throw new Error('Google Play kimlik doğrulama bilgileri eksik (serviceAccountJson veya serviceAccountJsonPath gereklidir).');
+  throw new Error(
+    'Google Play kimlik doğrulama bilgileri eksik (serviceAccountJson veya serviceAccountJsonPath gereklidir).',
+  );
 }

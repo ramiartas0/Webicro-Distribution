@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { parseConventionalCommit, determineVersionBump } from '../packages/git/src/commit-parser.js';
+import {
+  parseConventionalCommit,
+  determineVersionBump,
+} from '../packages/git/src/commit-parser.js';
 
 describe('Git Conventional Commit Parser', () => {
   it('should parse feat commit as minor bump', () => {
@@ -45,4 +48,3 @@ describe('Git Conventional Commit Parser', () => {
     expect(httpsResult.provider).toBe('github');
   });
 });
-

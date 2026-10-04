@@ -17,7 +17,7 @@ export class VersionConflictChecker {
           source: 'git_tag',
           existingVersion: version,
           existingBuildNumber: 0,
-          conflictType: 'version_exists'
+          conflictType: 'version_exists',
         };
       }
 
@@ -27,7 +27,10 @@ export class VersionConflictChecker {
     }
   }
 
-  async checkAll(version: SemanticVersion, checks: { gitTags?: boolean }): Promise<VersionConflict[]> {
+  async checkAll(
+    version: SemanticVersion,
+    checks: { gitTags?: boolean },
+  ): Promise<VersionConflict[]> {
     const conflicts: VersionConflict[] = [];
     const versionString = `${version.major}.${version.minor}.${version.patch}`;
 

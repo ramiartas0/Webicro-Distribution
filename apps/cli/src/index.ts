@@ -10,10 +10,8 @@ import { uiCommand } from './commands/ui.js';
 
 async function main(): Promise<void> {
   const program = new Command();
-  
-  program
-    .name('release')
-    .description('AI-Powered Flutter Release Orchestrator');
+
+  program.name('release').description('AI-Powered Flutter Release Orchestrator');
 
   program.addCommand(releaseCommand, { isDefault: true });
   program.addCommand(uiCommand);
@@ -28,6 +26,9 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('An unexpected error occurred:', error instanceof Error ? error.message : String(error));
+  console.error(
+    'An unexpected error occurred:',
+    error instanceof Error ? error.message : String(error),
+  );
   process.exit(1);
 });

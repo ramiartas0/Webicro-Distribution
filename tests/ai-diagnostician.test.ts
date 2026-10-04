@@ -27,7 +27,8 @@ describe('AIDiagnostician', () => {
   });
 
   it('Google Play sürüm kodu çakışması hatasını tespit etmeli', () => {
-    const errorText = 'The current release already has version code 3, which has already been used.';
+    const errorText =
+      'The current release already has version code 3, which has already been used.';
     const diagnosis = AIDiagnostician.diagnoseHeuristics({
       failedStep: 'Google Play Upload',
       errorText,

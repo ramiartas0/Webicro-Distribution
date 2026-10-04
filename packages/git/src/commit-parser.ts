@@ -8,7 +8,19 @@ export function parseConventionalCommit(rawMessage: string, hash: string): Parse
   const regex = /^(?<type>[a-zA-Z]+)(?:\((?<scope>[^)]+)\))?(?<breaking>!)?:\s+(?<message>.+)$/;
   const match = header.match(regex);
 
-  const knownTypes: string[] = ['feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'chore', 'ci', 'style', 'build', 'revert'];
+  const knownTypes: string[] = [
+    'feat',
+    'fix',
+    'perf',
+    'refactor',
+    'docs',
+    'test',
+    'chore',
+    'ci',
+    'style',
+    'build',
+    'revert',
+  ];
   let isBreakingChange = false;
 
   if (body && body.includes('BREAKING CHANGE')) {
@@ -23,7 +35,7 @@ export function parseConventionalCommit(rawMessage: string, hash: string): Parse
       message: header,
       body,
       isBreakingChange,
-      raw: rawMessage
+      raw: rawMessage,
     };
   }
 
@@ -42,7 +54,7 @@ export function parseConventionalCommit(rawMessage: string, hash: string): Parse
     message: (message as string).trim(),
     body,
     isBreakingChange,
-    raw: rawMessage
+    raw: rawMessage,
   };
 }
 
@@ -69,9 +81,18 @@ export function determineVersionBump(commits: ParsedCommit[]): VersionBump {
 
 export function categorizeCommits(commits: ParsedCommit[]): Record<CommitType, ParsedCommit[]> {
   const result: Record<CommitType, ParsedCommit[]> = {
-    feat: [], fix: [], perf: [], refactor: [], docs: [],
-    test: [], chore: [], ci: [], style: [], build: [],
-    revert: [], unknown: []
+    feat: [],
+    fix: [],
+    perf: [],
+    refactor: [],
+    docs: [],
+    test: [],
+    chore: [],
+    ci: [],
+    style: [],
+    build: [],
+    revert: [],
+    unknown: [],
   };
 
   for (const commit of commits) {

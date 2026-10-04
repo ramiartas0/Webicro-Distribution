@@ -8,10 +8,10 @@ Webicro Distribution, mobil uygulama yayınlama ve dağıtım süreçlerinin gü
 
 Aşağıdaki sürümler aktif olarak güvenlik güncellemeleri ve yamaları almaktadır:
 
-| Sürüm | Destek Durumu |
-| :--- | :--- |
-| `1.0.x` (Public Beta / Main) | :white_check_mark: Destekleniyor |
-| `< 1.0.0` (Alpha Ön Sürümler) | :x: Desteklenmiyor |
+| Sürüm                         | Destek Durumu                    |
+| :---------------------------- | :------------------------------- |
+| `1.0.x` (Public Beta / Main)  | :white_check_mark: Destekleniyor |
+| `< 1.0.0` (Alpha Ön Sürümler) | :x: Desteklenmiyor               |
 
 ---
 

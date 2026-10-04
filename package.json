@@ -17,7 +17,9 @@
     ]
   },
   "scripts": {
-    "build": "pnpm -r --filter './packages/*' run build && pnpm -r --filter './apps/*' run build",
+    "build": "pnpm -r --filter './packages/*' run build && pnpm --filter @webicro/web run build && pnpm --filter @webicro/cli run build && node scripts/copy-web-dist.js",
+    "ui": "node apps/cli/dist/index.js ui",
+    "cli": "node apps/cli/dist/index.js",
     "dev": "pnpm --filter @webicro/cli dev",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -21,13 +21,24 @@ export const logsCommand = new Command('logs')
       const logs = releaseId ? auditRepo.findByReleaseId(releaseId) : auditRepo.findAll(50);
 
       if (logs.length === 0) {
-        console.log(chalk.yellow(releaseId ? `ID: ${releaseId} için denetim kaydı bulunamadı.` : 'Henüz denetim kaydı bulunmuyor.'));
+        console.log(
+          chalk.yellow(
+            releaseId
+              ? `ID: ${releaseId} için denetim kaydı bulunamadı.`
+              : 'Henüz denetim kaydı bulunmuyor.',
+          ),
+        );
         return;
       }
 
       console.log(chalk.bold.cyan(`\n📜 Denetim Günlüğü (${logs.length} kayıt):`));
       for (const log of logs) {
-        const resultColor = log.result === 'SUCCESS' ? chalk.green : log.result === 'FAILURE' ? chalk.red : chalk.yellow;
+        const resultColor =
+          log.result === 'SUCCESS'
+            ? chalk.green
+            : log.result === 'FAILURE'
+              ? chalk.red
+              : chalk.yellow;
         const timeStr = chalk.dim(`[${new Date(log.timestamp).toLocaleString()}]`);
         const actorStr = chalk.blue(`(${log.actor})`);
         const actionStr = chalk.bold(log.action);
@@ -39,6 +50,8 @@ export const logsCommand = new Command('logs')
       }
       console.log('');
     } catch (err) {
-      console.error(chalk.red(`Denetim günlüğü okunamadı: ${err instanceof Error ? err.message : String(err)}`));
+      console.error(
+        chalk.red(`Denetim günlüğü okunamadı: ${err instanceof Error ? err.message : String(err)}`),
+      );
     }
   });

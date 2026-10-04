@@ -27,7 +27,7 @@ export const approveCommand = new Command('approve')
 
       const actor = process.env['USER'] || 'operator';
       releaseRepo.updateStatus(releaseId, 'VALIDATING');
-      
+
       auditRepo.create({
         releaseId,
         action: 'MANUAL_APPROVAL',
@@ -36,9 +36,17 @@ export const approveCommand = new Command('approve')
         details: JSON.stringify({ approvedAt: new Date().toISOString() }),
       });
 
-      console.log(chalk.green(`✓ Release ${chalk.bold(releaseId)} (${record.version}+${record.buildNumber}) başarıyla onaylandı.`));
-      console.log(chalk.dim(`Durum: ${record.status} -> VALIDATING. Boru hattı devam ettirilebilir.`));
+      console.log(
+        chalk.green(
+          `✓ Release ${chalk.bold(releaseId)} (${record.version}+${record.buildNumber}) başarıyla onaylandı.`,
+        ),
+      );
+      console.log(
+        chalk.dim(`Durum: ${record.status} -> VALIDATING. Boru hattı devam ettirilebilir.`),
+      );
     } catch (err) {
-      console.error(chalk.red(`Onay işlemi hatası: ${err instanceof Error ? err.message : String(err)}`));
+      console.error(
+        chalk.red(`Onay işlemi hatası: ${err instanceof Error ? err.message : String(err)}`),
+      );
     }
   });

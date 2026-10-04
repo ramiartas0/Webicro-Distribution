@@ -11,12 +11,14 @@ Tüm katkıların aşağıdaki kalite, güvenlik ve mühendislik kurallarına uy
 Proje, **pnpm workspace** kullanan modern bir TypeScript monorepo yapısına sahiptir.
 
 ### Önkoşullar
+
 - **Node.js**: `>= 20.0.0`
 - **pnpm**: `>= 9.0.0`
 - **Flutter SDK**: `>= 3.19.0` (Android/iOS derlemeleri için)
 - **Xcode & CocoaPods** (Yalnızca macOS ve iOS derlemeleri için)
 
 ### Depoyu Klonlama ve Bağımlılıkları Yükleme
+
 ```bash
 git clone https://github.com/webicro/webicro_distribution.git
 cd webicro_distribution
@@ -32,24 +34,24 @@ pnpm build
 
 ## 2. Mimari Yapı (Monorepo Packages)
 
-| Paket / Uygulama | Açıklama |
-| :--- | :--- |
-| `apps/cli` | Commander.js ve Clack tabanlı ana CLI uygulaması ve yerel Web API sunucusu |
-| `apps/web` | React 18, Vite ve Tailwind CSS tabanlı canlı kontrol paneli |
-| `packages/core` | 20 adımlı durum makinesi (State Machine) ve dağıtım orkestratörü |
-| `packages/config` | YAML konfigürasyon yükleyici ve Zod şema doğrulayıcı |
-| `packages/git` | Conventional commits ayrıştırıcı ve Git analiz motoru |
-| `packages/versioning` | SemVer sürüm çözümleyici ve çakışma denetleyicisi |
-| `packages/flutter` | Flutter Doctor, Analyze, Test ve pubspec.yaml yöneticisi |
-| `packages/android` | Android Gradle ve AAB paketleme motoru |
-| `packages/ios` | iOS Xcodebuild ve IPA paketleme motoru |
-| `packages/artifacts` | SHA-256 sağlama toplamı, saklama ve doğrulama motoru |
-| `packages/google-play` | Google Play Developer API v3 adaptörü |
-| `packages/app-store` | App Store Connect API adaptörü |
-| `packages/ai` | Gemini, OpenAI, Claude ve Conventional sürüm notu üreticileri |
-| `packages/security` | Hassas anahtar tarayıcısı (SecretScanner) ve risk motoru |
-| `packages/database` | SQLite (better-sqlite3) veritabanı ve repository katmanı |
-| `packages/shared` | Ortak hata hiyerarşisi, loglayıcı ve yardımcı araçlar |
+| Paket / Uygulama       | Açıklama                                                                   |
+| :--------------------- | :------------------------------------------------------------------------- |
+| `apps/cli`             | Commander.js ve Clack tabanlı ana CLI uygulaması ve yerel Web API sunucusu |
+| `apps/web`             | React 18, Vite ve Tailwind CSS tabanlı canlı kontrol paneli                |
+| `packages/core`        | 20 adımlı durum makinesi (State Machine) ve dağıtım orkestratörü           |
+| `packages/config`      | YAML konfigürasyon yükleyici ve Zod şema doğrulayıcı                       |
+| `packages/git`         | Conventional commits ayrıştırıcı ve Git analiz motoru                      |
+| `packages/versioning`  | SemVer sürüm çözümleyici ve çakışma denetleyicisi                          |
+| `packages/flutter`     | Flutter Doctor, Analyze, Test ve pubspec.yaml yöneticisi                   |
+| `packages/android`     | Android Gradle ve AAB paketleme motoru                                     |
+| `packages/ios`         | iOS Xcodebuild ve IPA paketleme motoru                                     |
+| `packages/artifacts`   | SHA-256 sağlama toplamı, saklama ve doğrulama motoru                       |
+| `packages/google-play` | Google Play Developer API v3 adaptörü                                      |
+| `packages/app-store`   | App Store Connect API adaptörü                                             |
+| `packages/ai`          | Gemini, OpenAI, Claude ve Conventional sürüm notu üreticileri              |
+| `packages/security`    | Hassas anahtar tarayıcısı (SecretScanner) ve risk motoru                   |
+| `packages/database`    | SQLite (better-sqlite3) veritabanı ve repository katmanı                   |
+| `packages/shared`      | Ortak hata hiyerarşisi, loglayıcı ve yardımcı araçlar                      |
 
 ---
 
@@ -85,6 +87,7 @@ Commit mesajları daima **Conventional Commits** standardına uygun ve açıklay
 ```
 
 Örnekler:
+
 - `feat(google-play): kademeli dağıtım (rollout) yüzdesi desteği eklendi`
 - `refactor(core): simulasyon modu ve mock artifactler tamamen kaldirildi`
 - `refactor(config): snake_case anahtarların camelCase normalizasyonu sadeleştirildi`

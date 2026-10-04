@@ -11,7 +11,11 @@ export class RiskEngine {
     let totalScore = 0;
 
     if (params.hasNativeChanges) {
-      factors.push({ name: 'Native Changes', score: 30, reason: 'Includes native iOS/Android code modifications.' });
+      factors.push({
+        name: 'Native Changes',
+        score: 30,
+        reason: 'Includes native iOS/Android code modifications.',
+      });
       totalScore += 30;
     }
 
@@ -26,7 +30,11 @@ export class RiskEngine {
     }
 
     if (params.commitsCount > 30) {
-      factors.push({ name: 'High Commit Volume', score: 15, reason: 'More than 30 commits included.' });
+      factors.push({
+        name: 'High Commit Volume',
+        score: 15,
+        reason: 'More than 30 commits included.',
+      });
       totalScore += 15;
     }
 

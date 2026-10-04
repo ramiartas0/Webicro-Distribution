@@ -5,7 +5,8 @@ import type { ArtifactManifest } from '@webicro/artifacts';
 import type { ReleaseNotesMap } from '@webicro/validation';
 import type { CommitAndPushResult } from '@webicro/git';
 
-export type StepStatus = 'PENDING' | 'RUNNING' | 'IN_PROGRESS' | 'SUCCESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
+export type StepStatus =
+  'PENDING' | 'RUNNING' | 'IN_PROGRESS' | 'SUCCESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
 export interface OrchestratorOptions {
   configPath?: string;
@@ -51,4 +52,3 @@ export interface ReleaseExecutionSummary {
   durationMs: number;
   releaseNotes?: ReleaseNotesMap;
 }
-

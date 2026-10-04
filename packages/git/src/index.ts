@@ -3,4 +3,3 @@ export * from './commit-parser.js';
 export * from './change-detector.js';
 export * from './analyzer.js';
 export * from './operations.js';
-

@@ -10,7 +10,11 @@ export class ArtifactManager {
     this.artifactsBaseDir = artifactsBaseDir;
   }
 
-  async registerArtifact(platform: 'android' | 'ios', sourcePath: string, version: string): Promise<ArtifactManifest> {
+  async registerArtifact(
+    platform: 'android' | 'ios',
+    sourcePath: string,
+    version: string,
+  ): Promise<ArtifactManifest> {
     const targetDir = join(process.cwd(), this.artifactsBaseDir, version, platform);
     await mkdir(targetDir, { recursive: true });
 

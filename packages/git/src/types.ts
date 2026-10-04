@@ -1,4 +1,16 @@
-export type CommitType = 'feat' | 'fix' | 'perf' | 'refactor' | 'docs' | 'test' | 'chore' | 'ci' | 'style' | 'build' | 'revert' | 'unknown';
+export type CommitType =
+  | 'feat'
+  | 'fix'
+  | 'perf'
+  | 'refactor'
+  | 'docs'
+  | 'test'
+  | 'chore'
+  | 'ci'
+  | 'style'
+  | 'build'
+  | 'revert'
+  | 'unknown';
 
 export type VersionBump = 'major' | 'minor' | 'patch' | 'none';
 

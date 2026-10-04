@@ -1,4 +1,16 @@
-export type ReleaseStatus = 'DRAFT' | 'ANALYZING' | 'PLANNED' | 'VALIDATING' | 'BUILDING' | 'ARTIFACT_READY' | 'UPLOADING' | 'STORE_PROCESSING' | 'READY_FOR_SUBMISSION' | 'SUBMITTED' | 'RELEASED' | 'FAILED';
+export type ReleaseStatus =
+  | 'DRAFT'
+  | 'ANALYZING'
+  | 'PLANNED'
+  | 'VALIDATING'
+  | 'BUILDING'
+  | 'ARTIFACT_READY'
+  | 'UPLOADING'
+  | 'STORE_PROCESSING'
+  | 'READY_FOR_SUBMISSION'
+  | 'SUBMITTED'
+  | 'RELEASED'
+  | 'FAILED';
 
 export type StepStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 

@@ -18,8 +18,10 @@ export class ReleaseStepRepository {
       error: data.error,
       metadata: data.metadata,
     });
-    
-    return this.findByReleaseId(data.releaseId).find(s => s.step === data.step) as ReleaseStepRecord;
+
+    return this.findByReleaseId(data.releaseId).find(
+      (s) => s.step === data.step,
+    ) as ReleaseStepRecord;
   }
 
   public findByReleaseId(releaseId: string): ReleaseStepRecord[] {

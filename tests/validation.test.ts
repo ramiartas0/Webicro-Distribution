@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { SensitiveDataScanner } from '../packages/validation/src/sensitive-data.js';
-import { validateGooglePlayReleaseNotes, validateAppStoreWhatsNew } from '../packages/validation/src/store-limits.js';
+import {
+  validateGooglePlayReleaseNotes,
+  validateAppStoreWhatsNew,
+} from '../packages/validation/src/store-limits.js';
 
 describe('Validation & Security Scanners', () => {
   it('should detect AWS and Google API keys in text', () => {
@@ -8,7 +11,8 @@ describe('Validation & Security Scanners', () => {
     const cleanText = 'Fixed courier notification issues and improved offline performance.';
     expect(scanner.scan(cleanText)).toHaveLength(0);
 
-    const dirtyText = 'Debugged with key AIzaSyD1234567890123456789012345678901 and secret AKIA1234567890ABCDEF';
+    const dirtyText =
+      'Debugged with key AIzaSyD1234567890123456789012345678901 and secret AKIA1234567890ABCDEF';
     const issues = scanner.scan(dirtyText);
     expect(issues.length).toBeGreaterThan(0);
   });

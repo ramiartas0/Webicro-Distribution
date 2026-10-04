@@ -16,7 +16,7 @@ export class AuditLogRepository {
       result: data.result,
       details: data.details,
     });
-    
+
     const selectStmt = this.db.prepare(`
       SELECT 
         id, 

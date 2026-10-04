@@ -64,9 +64,9 @@ export class FinalReporter {
         '',
         `Total Duration : ${chalk.magenta(this.formatDuration(data.totalDurationMs))}`,
       ].join('\n'),
-      '🎉 Release Summary'
+      '🎉 Release Summary',
     );
-    
+
     clack.outro(chalk.green('Release process completed!'));
   }
 }

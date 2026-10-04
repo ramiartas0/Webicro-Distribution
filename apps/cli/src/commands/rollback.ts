@@ -41,7 +41,7 @@ export const rollbackCommand = new Command('rollback')
 
       const tagName = `v${record.version}`;
       clack.log.info(
-        `${chalk.yellow('Hedef Sürüm:')} ${chalk.bold(record.project)} ${chalk.cyan(`v${record.version}+${record.buildNumber}`)} [Mevcut Durum: ${record.status}]`
+        `${chalk.yellow('Hedef Sürüm:')} ${chalk.bold(record.project)} ${chalk.cyan(`v${record.version}+${record.buildNumber}`)} [Mevcut Durum: ${record.status}]`,
       );
 
       if (!options.force) {
@@ -72,7 +72,9 @@ export const rollbackCommand = new Command('rollback')
           timestamp: new Date().toISOString(),
         }),
       });
-      executedActions.push(`1. Veritabanı Durumu: ${record.status} -> ${chalk.red('FAILED')} (Geri Alındı)`);
+      executedActions.push(
+        `1. Veritabanı Durumu: ${record.status} -> ${chalk.red('FAILED')} (Geri Alındı)`,
+      );
 
       if (options.deleteTag) {
         try {
@@ -84,22 +86,31 @@ export const rollbackCommand = new Command('rollback')
             const remotes = await git.getRemotes();
             if (remotes.length > 0) {
               await git.push(['origin', `:refs/tags/${tagName}`]);
-              executedActions.push(`2.1 Uzak Git Etiketi: 'origin/${tagName}' GitHub/uzak repodan kaldırıldı.`);
+              executedActions.push(
+                `2.1 Uzak Git Etiketi: 'origin/${tagName}' GitHub/uzak repodan kaldırıldı.`,
+              );
             }
           } catch (remoteTagErr) {
-            executedActions.push(`2.1 Uzak Git Etiketi: Uzak repoda bulunamadı veya silinemedi (${String(remoteTagErr)}).`);
+            executedActions.push(
+              `2.1 Uzak Git Etiketi: Uzak repoda bulunamadı veya silinemedi (${String(remoteTagErr)}).`,
+            );
           }
         } catch (tagErr) {
-          executedActions.push(`2. Git Etiketi: Yerel etiket bulunamadı veya silinirken hata: ${String(tagErr)}`);
+          executedActions.push(
+            `2. Git Etiketi: Yerel etiket bulunamadı veya silinirken hata: ${String(tagErr)}`,
+          );
         }
       } else {
-        executedActions.push(`2. Git Etiketi: Korundu (Silmek için: git tag -d ${tagName} && git push origin :refs/tags/${tagName})`);
+        executedActions.push(
+          `2. Git Etiketi: Korundu (Silmek için: git tag -d ${tagName} && git push origin :refs/tags/${tagName})`,
+        );
       }
 
       if (options.revertPubspec) {
-
         const allReleases = releaseRepo.findAll(20);
-        const previousSuccess = allReleases.find(r => r.releaseId !== releaseId && r.status === 'RELEASED');
+        const previousSuccess = allReleases.find(
+          (r) => r.releaseId !== releaseId && r.status === 'RELEASED',
+        );
         const fallbackTarget = previousSuccess
           ? `${previousSuccess.version}+${previousSuccess.buildNumber}`
           : undefined;
@@ -108,12 +119,16 @@ export const rollbackCommand = new Command('rollback')
           try {
             const updater = new PubspecVersionUpdater();
             await updater.updateVersion(fallbackTarget, process.cwd());
-            executedActions.push(`3. pubspec.yaml: Başarıyla önceki kararlı sürüm v${fallbackTarget} olarak güncellendi.`);
+            executedActions.push(
+              `3. pubspec.yaml: Başarıyla önceki kararlı sürüm v${fallbackTarget} olarak güncellendi.`,
+            );
           } catch (pubErr) {
             executedActions.push(`3. pubspec.yaml: Güncelleme hatası: ${String(pubErr)}`);
           }
         } else {
-          executedActions.push('3. pubspec.yaml: Önceki başarılı bir sürüm kaydı bulunamadığı için otomatik geri alınamadı.');
+          executedActions.push(
+            '3. pubspec.yaml: Önceki başarılı bir sürüm kaydı bulunamadığı için otomatik geri alınamadı.',
+          );
         }
       }
 
@@ -129,7 +144,7 @@ export const rollbackCommand = new Command('rollback')
         '',
         chalk.bold.yellow('🍎 Apple App Store Connect Geri Alma Playbook:'),
         '  • Eğer sürüm "İnceleme Bekliyor" veya "İncelemede" durumundaysa:',
-        '    1. App Store Connect -> Uygulamanız -> Sürüm Sayfası\'na gidin.',
+        "    1. App Store Connect -> Uygulamanız -> Sürüm Sayfası'na gidin.",
         '    2. "Bu Yapıyı İncelemeden Geri Çek" (Remove this build from review) butonuna tıklayın.',
         '  • Eğer sürüm yayına çıktıysa:',
         '    1. Yayındaki sürümü mağazadan kaldırabilir (Remove from sale) veya bir sonraki düzeltme sürümünü gönderebilirsiniz.',

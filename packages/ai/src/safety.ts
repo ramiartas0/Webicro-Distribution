@@ -13,7 +13,9 @@ export class AISafetyChecker {
         warnings.push(`[${lang}] No full release notes generated despite having commits.`);
       }
       if (note.full && note.full.length > commits.length * 3) {
-        warnings.push(`[${lang}] Unusually high number of release note items compared to commits, possible hallucination.`);
+        warnings.push(
+          `[${lang}] Unusually high number of release note items compared to commits, possible hallucination.`,
+        );
       }
     }
 

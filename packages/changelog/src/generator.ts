@@ -3,7 +3,11 @@ import type { ChangelogOptions, ChangelogRelease, ChangelogSection } from './typ
 import { formatReleaseMarkdown, prependToChangelogFile } from './formatter.js';
 
 export class ChangelogGenerator {
-  public generate(version: string, commits: ParsedCommit[], options: ChangelogOptions = {}): ChangelogRelease {
+  public generate(
+    version: string,
+    commits: ParsedCommit[],
+    options: ChangelogOptions = {},
+  ): ChangelogRelease {
     const breakingChanges: string[] = [];
     const features: string[] = [];
     const fixes: string[] = [];
@@ -64,12 +68,21 @@ export class ChangelogGenerator {
     };
   }
 
-  public generateMarkdown(version: string, commits: ParsedCommit[], options: ChangelogOptions = {}): string {
+  public generateMarkdown(
+    version: string,
+    commits: ParsedCommit[],
+    options: ChangelogOptions = {},
+  ): string {
     const release = this.generate(version, commits, options);
     return formatReleaseMarkdown(release);
   }
 
-  public async updateChangelogFile(filePath: string, version: string, commits: ParsedCommit[], options: ChangelogOptions = {}): Promise<string> {
+  public async updateChangelogFile(
+    filePath: string,
+    version: string,
+    commits: ParsedCommit[],
+    options: ChangelogOptions = {},
+  ): Promise<string> {
     const markdown = this.generateMarkdown(version, commits, options);
     await prependToChangelogFile(filePath, markdown);
     return markdown;

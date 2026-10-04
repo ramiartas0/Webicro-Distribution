@@ -4,7 +4,7 @@ import { ConfigLoader } from '../packages/config/src/loader.js';
 describe('ConfigLoader - YAML Normalization & Validation', () => {
   it('should correctly load and normalize snake_case YAML configuration', () => {
     const config = ConfigLoader.loadFromFile('./release.config.yaml');
-    
+
     expect(config).toBeDefined();
     expect(config.project.name).toBe('Piyyuu');
     expect(config.build.runTests).toBe(true);

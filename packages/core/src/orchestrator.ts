@@ -14,7 +14,12 @@ import { GitAnalyzer, GitOperations, type CommitAndPushResult } from '@webicro/g
 import { VersionResolver } from '@webicro/versioning';
 import type { VersionResolution } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
-import { PubspecVersionUpdater, FlutterDoctor, FlutterAnalyzer, FlutterTester } from '@webicro/flutter';
+import {
+  PubspecVersionUpdater,
+  FlutterDoctor,
+  FlutterAnalyzer,
+  FlutterTester,
+} from '@webicro/flutter';
 import { ChangelogGenerator } from '@webicro/changelog';
 import { ReleaseNotesValidator, type ReleaseNotesMap } from '@webicro/validation';
 import { AIController, GeminiProvider, ConventionalReleaseNotesProvider } from '@webicro/ai';
@@ -57,11 +62,17 @@ export class ReleaseOrchestrator {
     return this.run(options);
   }
 
-  public async resume(releaseId: string, options?: OrchestratorOptions): Promise<ReleaseExecutionSummary> {
+  public async resume(
+    releaseId: string,
+    options?: OrchestratorOptions,
+  ): Promise<ReleaseExecutionSummary> {
     return this.run(options ?? {}, releaseId);
   }
 
-  public async run(options: OrchestratorOptions, existingReleaseId?: string): Promise<ReleaseExecutionSummary> {
+  public async run(
+    options: OrchestratorOptions,
+    existingReleaseId?: string,
+  ): Promise<ReleaseExecutionSummary> {
     this.startTime = Date.now();
     const releaseId = existingReleaseId ?? generateReleaseId();
 
@@ -93,12 +104,15 @@ export class ReleaseOrchestrator {
         globalReleaseRepo = new ReleaseRepository(centralConn.getDb());
         globalStepRepo = new ReleaseStepRepository(centralConn.getDb());
         globalAuditRepo = new AuditLogRepository(centralConn.getDb());
-      } catch {
-
-      }
+      } catch {}
     }
 
-    const emitAndRecord = (step: string, status: 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'SKIPPED', message?: string, error?: string) => {
+    const emitAndRecord = (
+      step: string,
+      status: 'IN_PROGRESS' | 'SUCCESS' | 'FAILED' | 'SKIPPED',
+      message?: string,
+      error?: string,
+    ) => {
       this.emit({ step, status, message, error });
       try {
         if (status === 'IN_PROGRESS') {
@@ -123,9 +137,7 @@ export class ReleaseOrchestrator {
           stepRepo.updateStatus(releaseId, step, 'SKIPPED');
           globalStepRepo?.updateStatus(releaseId, step, 'SKIPPED');
         }
-      } catch {
-
-      }
+      } catch {}
     };
 
     const checkAbort = () => {
@@ -179,17 +191,27 @@ export class ReleaseOrchestrator {
         if (candidateConfig) {
           config = ConfigLoader.loadFromFile(candidateConfig);
         }
-      } catch {
+      } catch {}
 
-      }
+      const projectName =
+        config?.project?.name ||
+        detectedMeta.name ||
+        (targetDir ? path.basename(targetDir) : 'Project');
+      const resolvedPackage =
+        options.packageName || config?.project?.package || detectedMeta.package;
 
-      const projectName = config?.project?.name || detectedMeta.name || (targetDir ? path.basename(targetDir) : 'Project');
-      const resolvedPackage = options.packageName || config?.project?.package || detectedMeta.package;
-
-      const shouldBuildAndroid = !options.skipAndroid && (config?.android?.enabled !== false);
+      const shouldBuildAndroid = !options.skipAndroid && config?.android?.enabled !== false;
       if (shouldBuildAndroid && !resolvedPackage && !options.validateOnly) {
-        emitAndRecord('Environment Check', 'FAILED', undefined, 'Android paket kimliği tespit edilemedi');
-        throw new AppError('Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.', 'CONFIG_ERROR');
+        emitAndRecord(
+          'Environment Check',
+          'FAILED',
+          undefined,
+          'Android paket kimliği tespit edilemedi',
+        );
+        throw new AppError(
+          'Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.',
+          'CONFIG_ERROR',
+        );
       }
 
       emitAndRecord('Environment Check', 'SUCCESS', 'Flutter, Node ve konfigürasyon doğrulandı');
@@ -200,22 +222,44 @@ export class ReleaseOrchestrator {
       emitAndRecord('Git Analysis', 'IN_PROGRESS');
       const gitAnalyzer = new GitAnalyzer(targetDir);
       const gitAnalysis = await gitAnalyzer.analyze();
-      emitAndRecord('Git Analysis', 'SUCCESS', `${gitAnalysis.commitsSinceLastTag.length} commit incelendi`);
+      emitAndRecord(
+        'Git Analysis',
+        'SUCCESS',
+        `${gitAnalysis.commitsSinceLastTag.length} commit incelendi`,
+      );
 
       if (config?.security?.requireCleanGit && !options.validateOnly && !gitAnalysis.isClean) {
-        emitAndRecord('Git Analysis', 'FAILED', undefined, 'Git çalışma ağacı temiz değil (değişiklikler var)');
-        throw new AppError('Güvenlik kuralı ihlali: Git çalışma ağacı temiz değil. Lütfen değişiklikleri commit edin veya stash yapın.', 'USER_ERROR');
+        emitAndRecord(
+          'Git Analysis',
+          'FAILED',
+          undefined,
+          'Git çalışma ağacı temiz değil (değişiklikler var)',
+        );
+        throw new AppError(
+          'Güvenlik kuralı ihlali: Git çalışma ağacı temiz değil. Lütfen değişiklikleri commit edin veya stash yapın.',
+          'USER_ERROR',
+        );
       }
 
       if (config?.security?.scanSecrets) {
         emitAndRecord('Security Scan', 'IN_PROGRESS');
         const scanner = new SecretScanner();
         const issues = await scanner.scanFiles(gitAnalysis.changedFiles, targetDir);
-        const criticalIssues = issues.filter(i => i.severity === 'critical' || i.severity === 'high');
+        const criticalIssues = issues.filter(
+          (i) => i.severity === 'critical' || i.severity === 'high',
+        );
         if (criticalIssues.length > 0) {
-          const detail = criticalIssues.map(i => `${i.file}:${i.description}`).join('; ');
-          emitAndRecord('Security Scan', 'FAILED', undefined, `${criticalIssues.length} kritik gizli anahtar (secret) sızıntısı bulundu!`);
-          throw new AppError(`Güvenlik taraması başarısız: Kritik anahtar sızıntısı tespit edildi (${detail})`, 'SECURITY_ERROR');
+          const detail = criticalIssues.map((i) => `${i.file}:${i.description}`).join('; ');
+          emitAndRecord(
+            'Security Scan',
+            'FAILED',
+            undefined,
+            `${criticalIssues.length} kritik gizli anahtar (secret) sızıntısı bulundu!`,
+          );
+          throw new AppError(
+            `Güvenlik taraması başarısız: Kritik anahtar sızıntısı tespit edildi (${detail})`,
+            'SECURITY_ERROR',
+          );
         }
         emitAndRecord('Security Scan', 'SUCCESS', 'Hassas veri ve anahtar taraması temiz');
       }
@@ -226,9 +270,7 @@ export class ReleaseOrchestrator {
       try {
         const pubInfo = await updater.readPubspec(targetDir);
         currentVerStr = pubInfo.version;
-      } catch {
-
-      }
+      } catch {}
 
       const resolver = new VersionResolver();
       let resolution: VersionResolution;
@@ -240,7 +282,9 @@ export class ReleaseOrchestrator {
           manualBump: options.bump,
         });
       } catch {
-        const [maj = 1, min = 0, pat = 0] = currentVerStr.split('+')[0]?.split('.').map(Number) || [1, 0, 0];
+        const [maj = 1, min = 0, pat = 0] = currentVerStr.split('+')[0]?.split('.').map(Number) || [
+          1, 0, 0,
+        ];
         const nextBuild = (Number(currentVerStr.split('+')[1]) || 1) + 1;
         resolution = {
           current: { major: maj, minor: min, patch: pat, buildNumber: nextBuild - 1 },
@@ -253,8 +297,16 @@ export class ReleaseOrchestrator {
         };
       }
 
-      releaseRepo.updateVersionAndBuildNumber(releaseId, resolution.versionString, resolution.next.buildNumber);
-      globalReleaseRepo?.updateVersionAndBuildNumber(releaseId, resolution.versionString, resolution.next.buildNumber);
+      releaseRepo.updateVersionAndBuildNumber(
+        releaseId,
+        resolution.versionString,
+        resolution.next.buildNumber,
+      );
+      globalReleaseRepo?.updateVersionAndBuildNumber(
+        releaseId,
+        resolution.versionString,
+        resolution.next.buildNumber,
+      );
 
       releaseRepo.updateStatus(releaseId, 'PLANNED');
       globalReleaseRepo?.updateStatus(releaseId, 'PLANNED');
@@ -269,13 +321,25 @@ export class ReleaseOrchestrator {
 
       emitAndRecord('Changelog Generation', 'IN_PROGRESS');
       if (options.validateOnly) {
-        emitAndRecord('Changelog Generation', 'SKIPPED', 'Doğrulama modunda CHANGELOG.md yazımı atlandı');
+        emitAndRecord(
+          'Changelog Generation',
+          'SKIPPED',
+          'Doğrulama modunda CHANGELOG.md yazımı atlandı',
+        );
       } else {
         try {
           const changelogGen = new ChangelogGenerator();
           const changelogPath = path.join(targetDir, 'CHANGELOG.md');
-          await changelogGen.updateChangelogFile(changelogPath, resolution.versionString, gitAnalysis.commitsSinceLastTag);
-          emitAndRecord('Changelog Generation', 'SUCCESS', `CHANGELOG.md güncellendi (${gitAnalysis.commitsSinceLastTag.length} commit)`);
+          await changelogGen.updateChangelogFile(
+            changelogPath,
+            resolution.versionString,
+            gitAnalysis.commitsSinceLastTag,
+          );
+          emitAndRecord(
+            'Changelog Generation',
+            'SUCCESS',
+            `CHANGELOG.md güncellendi (${gitAnalysis.commitsSinceLastTag.length} commit)`,
+          );
         } catch (err: unknown) {
           emitAndRecord('Changelog Generation', 'SUCCESS', 'Changelog biçimlendirildi');
         }
@@ -283,41 +347,66 @@ export class ReleaseOrchestrator {
 
       emitAndRecord('Release Notes Generation', 'IN_PROGRESS');
       const apiKey = process.env['GEMINI_API_KEY'];
-      const languages = config?.ai?.languages && config.ai.languages.length > 0 ? config.ai.languages : ['tr', 'en'];
+      const languages =
+        config?.ai?.languages && config.ai.languages.length > 0
+          ? config.ai.languages
+          : ['tr', 'en'];
       const shouldUseAi = !options.skipAi && config?.ai?.enabled !== false && Boolean(apiKey);
-      const provider = shouldUseAi && apiKey ? new GeminiProvider({ apiKey }) : new ConventionalReleaseNotesProvider();
+      const provider =
+        shouldUseAi && apiKey
+          ? new GeminiProvider({ apiKey })
+          : new ConventionalReleaseNotesProvider();
       const rawValidator = new ReleaseNotesValidator();
       const validatorAdapter = {
         validate(data: unknown) {
           const valRes = rawValidator.validate(data);
           if (!valRes.isValid) {
-            throw new Error(valRes.issues.map(i => i.message).join(', '));
+            throw new Error(valRes.issues.map((i) => i.message).join(', '));
           }
           return data as ReleaseNotesMap;
-        }
+        },
       };
       const aiController = new AIController(provider, validatorAdapter);
       let releaseNotes: ReleaseNotesMap = {};
       try {
-        releaseNotes = await aiController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
-        emitAndRecord('Release Notes Generation', 'SUCCESS', `${provider.name} ile çok dilli sürüm notları üretildi`);
+        releaseNotes = await aiController.generate(
+          resolution.versionString,
+          gitAnalysis.commitsSinceLastTag,
+          languages,
+        );
+        emitAndRecord(
+          'Release Notes Generation',
+          'SUCCESS',
+          `${provider.name} ile çok dilli sürüm notları üretildi`,
+        );
       } catch (err: unknown) {
-
         const fallbackProvider = new ConventionalReleaseNotesProvider();
         const fallbackController = new AIController(fallbackProvider, validatorAdapter);
-        releaseNotes = await fallbackController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
-        emitAndRecord('Release Notes Generation', 'SUCCESS', 'Standart conventional sürüm notları üretildi');
+        releaseNotes = await fallbackController.generate(
+          resolution.versionString,
+          gitAnalysis.commitsSinceLastTag,
+          languages,
+        );
+        emitAndRecord(
+          'Release Notes Generation',
+          'SUCCESS',
+          'Standart conventional sürüm notları üretildi',
+        );
       }
 
       emitAndRecord('Release Notes Validation', 'IN_PROGRESS');
       const valResult = rawValidator.validate(releaseNotes);
-      const validationErrors = valResult.issues.filter(i => i.severity === 'error');
+      const validationErrors = valResult.issues.filter((i) => i.severity === 'error');
       if (!valResult.isValid && validationErrors.length > 0) {
-        const errStr = validationErrors.map(i => i.message).join(', ');
+        const errStr = validationErrors.map((i) => i.message).join(', ');
         emitAndRecord('Release Notes Validation', 'FAILED', undefined, errStr);
         throw new AppError(`Sürüm notları doğrulanamadı: ${errStr}`, 'VALIDATION_ERROR');
       } else {
-        emitAndRecord('Release Notes Validation', 'SUCCESS', 'Karakter sınırları ve güvenlik denetimleri geçti');
+        emitAndRecord(
+          'Release Notes Validation',
+          'SUCCESS',
+          'Karakter sınırları ve güvenlik denetimleri geçti',
+        );
       }
 
       this.stateMachine.transitionTo('BUILDING');
@@ -325,7 +414,11 @@ export class ReleaseOrchestrator {
 
       emitAndRecord('Pubspec Update', 'IN_PROGRESS');
       if (options.validateOnly) {
-        emitAndRecord('Pubspec Update', 'SKIPPED', 'Doğrulama modunda pubspec.yaml güncellemesi atlandı');
+        emitAndRecord(
+          'Pubspec Update',
+          'SKIPPED',
+          'Doğrulama modunda pubspec.yaml güncellemesi atlandı',
+        );
       } else {
         try {
           await updater.updateVersion(resolution.formatted, targetDir);
@@ -337,27 +430,47 @@ export class ReleaseOrchestrator {
 
       emitAndRecord('Flutter Check', 'IN_PROGRESS');
       try {
-          const doctor = new FlutterDoctor();
-          const docRes = await doctor.check(targetDir);
-          if (!docRes.isInstalled) {
-            emitAndRecord('Flutter Check', 'FAILED', undefined, 'Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı');
-            throw new AppError('Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı. Lütfen Flutter kurulumunu doğrulayın.', 'BUILD_ERROR');
-          }
-
-          const analyzer = new FlutterAnalyzer();
-          const analyzeRes = await analyzer.analyze(targetDir);
-          if (analyzeRes.hasErrors) {
-            emitAndRecord('Flutter Check', 'FAILED', undefined, `Flutter analizi ${analyzeRes.errorCount} hata verdi`);
-            throw new AppError(`Flutter statik analizi ${analyzeRes.errorCount} hata ile başarısız oldu.`, 'BUILD_ERROR');
-          } else {
-            emitAndRecord('Flutter Check', 'SUCCESS', `Flutter SDK ve kod analizi temiz (${analyzeRes.warningCount} uyarı)`);
-          }
-        } catch (checkErr) {
-          if (checkErr instanceof AppError) throw checkErr;
-          const msg = checkErr instanceof Error ? checkErr.message : String(checkErr);
-          emitAndRecord('Flutter Check', 'FAILED', undefined, msg);
-          throw new AppError(`Flutter ortam kontrolü başarısız: ${msg}`, 'BUILD_ERROR');
+        const doctor = new FlutterDoctor();
+        const docRes = await doctor.check(targetDir);
+        if (!docRes.isInstalled) {
+          emitAndRecord(
+            'Flutter Check',
+            'FAILED',
+            undefined,
+            'Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı',
+          );
+          throw new AppError(
+            'Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı. Lütfen Flutter kurulumunu doğrulayın.',
+            'BUILD_ERROR',
+          );
         }
+
+        const analyzer = new FlutterAnalyzer();
+        const analyzeRes = await analyzer.analyze(targetDir);
+        if (analyzeRes.hasErrors) {
+          emitAndRecord(
+            'Flutter Check',
+            'FAILED',
+            undefined,
+            `Flutter analizi ${analyzeRes.errorCount} hata verdi`,
+          );
+          throw new AppError(
+            `Flutter statik analizi ${analyzeRes.errorCount} hata ile başarısız oldu.`,
+            'BUILD_ERROR',
+          );
+        } else {
+          emitAndRecord(
+            'Flutter Check',
+            'SUCCESS',
+            `Flutter SDK ve kod analizi temiz (${analyzeRes.warningCount} uyarı)`,
+          );
+        }
+      } catch (checkErr) {
+        if (checkErr instanceof AppError) throw checkErr;
+        const msg = checkErr instanceof Error ? checkErr.message : String(checkErr);
+        emitAndRecord('Flutter Check', 'FAILED', undefined, msg);
+        throw new AppError(`Flutter ortam kontrolü başarısız: ${msg}`, 'BUILD_ERROR');
+      }
 
       if (!options.skipTests && config?.build?.runTests !== false) {
         emitAndRecord('Run Tests', 'IN_PROGRESS');
@@ -365,10 +478,24 @@ export class ReleaseOrchestrator {
           const tester = new FlutterTester();
           const testRes = await tester.test(targetDir);
           if (!testRes.passed || testRes.testsFailed > 0) {
-            emitAndRecord('Run Tests', 'FAILED', undefined, `Testler başarısız (${testRes.testsFailed} hata)`);
-            throw new AppError(`Birim testleri başarısız oldu: ${testRes.testsFailed} test hata verdi.`, 'TEST_ERROR');
+            emitAndRecord(
+              'Run Tests',
+              'FAILED',
+              undefined,
+              `Testler başarısız (${testRes.testsFailed} hata)`,
+            );
+            throw new AppError(
+              `Birim testleri başarısız oldu: ${testRes.testsFailed} test hata verdi.`,
+              'TEST_ERROR',
+            );
           } else {
-            emitAndRecord('Run Tests', 'SUCCESS', testRes.testsPassed > 0 ? `${testRes.testsPassed} test başarıyla geçti` : 'Testler başarıyla geçti');
+            emitAndRecord(
+              'Run Tests',
+              'SUCCESS',
+              testRes.testsPassed > 0
+                ? `${testRes.testsPassed} test başarıyla geçti`
+                : 'Testler başarıyla geçti',
+            );
           }
         } catch (testErr) {
           if (testErr instanceof AppError) throw testErr;
@@ -381,7 +508,11 @@ export class ReleaseOrchestrator {
       }
 
       if (options.validateOnly) {
-        emitAndRecord('Validation Complete', 'SUCCESS', 'Doğrulama Modu: Flutter ortamı, statik analiz ve testler başarıyla doğrulandı');
+        emitAndRecord(
+          'Validation Complete',
+          'SUCCESS',
+          'Doğrulama Modu: Flutter ortamı, statik analiz ve testler başarıyla doğrulandı',
+        );
         const durationMs = Date.now() - this.startTime;
         return {
           releaseId,
@@ -395,7 +526,9 @@ export class ReleaseOrchestrator {
       checkAbort();
       let androidArtifact: ArtifactManifest | undefined;
       if (shouldBuildAndroid) {
-        const previousAndroid = existingReleaseId ? artifactRepo.findByReleaseAndPlatform(releaseId, 'android') : undefined;
+        const previousAndroid = existingReleaseId
+          ? artifactRepo.findByReleaseAndPlatform(releaseId, 'android')
+          : undefined;
         if (previousAndroid && fs.existsSync(previousAndroid.filePath)) {
           androidArtifact = {
             platform: 'android',
@@ -405,34 +538,53 @@ export class ReleaseOrchestrator {
             sizeBytes: previousAndroid.size,
             createdAt: new Date().toISOString(),
           };
-          emitAndRecord('Android Build', 'SUCCESS', `Önceki çalıştırmadan mevcut AAB korundu: ${androidArtifact.fileName}`);
-          emitAndRecord('Android Verify', 'SUCCESS', `SHA-256 doğrulandı (Önbellek): ${androidArtifact.sha256.substring(0, 16)}...`);
+          emitAndRecord(
+            'Android Build',
+            'SUCCESS',
+            `Önceki çalıştırmadan mevcut AAB korundu: ${androidArtifact.fileName}`,
+          );
+          emitAndRecord(
+            'Android Verify',
+            'SUCCESS',
+            `SHA-256 doğrulandı (Önbellek): ${androidArtifact.sha256.substring(0, 16)}...`,
+          );
         } else {
           emitAndRecord('Android Build', 'IN_PROGRESS');
           try {
             const builder = new AndroidBuilder();
-            const buildRes = await builder.build({
-              buildName: resolution.versionString,
-              buildNumber: resolution.next.buildNumber,
-              onLog: (line) => {
-                if (
-                  line.includes('Gradle') ||
-                  line.includes('bundleRelease') ||
-                  line.includes('Built') ||
-                  line.includes('AAB') ||
-                  line.includes('temizliği') ||
-                  line.includes('Bağımlılıklar') ||
-                  line.includes('derlemesi')
-                ) {
-                  emitAndRecord('Android Build', 'IN_PROGRESS', line);
-                }
+            const buildRes = await builder.build(
+              {
+                buildName: resolution.versionString,
+                buildNumber: resolution.next.buildNumber,
+                onLog: (line) => {
+                  if (
+                    line.includes('Gradle') ||
+                    line.includes('bundleRelease') ||
+                    line.includes('Built') ||
+                    line.includes('AAB') ||
+                    line.includes('temizliği') ||
+                    line.includes('Bağımlılıklar') ||
+                    line.includes('derlemesi')
+                  ) {
+                    emitAndRecord('Android Build', 'IN_PROGRESS', line);
+                  }
+                },
               },
-            }, targetDir);
-            emitAndRecord('Android Build', 'SUCCESS', `AAB derlendi: ${path.basename(buildRes.aabPath)}`);
+              targetDir,
+            );
+            emitAndRecord(
+              'Android Build',
+              'SUCCESS',
+              `AAB derlendi: ${path.basename(buildRes.aabPath)}`,
+            );
 
             emitAndRecord('Android Verify', 'IN_PROGRESS');
             const artifactMgr = new ArtifactManager(path.join(targetDir, '.release/artifacts'));
-            androidArtifact = await artifactMgr.registerArtifact('android', buildRes.aabPath, resolution.versionString);
+            androidArtifact = await artifactMgr.registerArtifact(
+              'android',
+              buildRes.aabPath,
+              resolution.versionString,
+            );
             artifactRepo.create({
               releaseId,
               platform: 'android',
@@ -442,7 +594,11 @@ export class ReleaseOrchestrator {
               size: androidArtifact.sizeBytes,
               status: 'VERIFIED',
             });
-            emitAndRecord('Android Verify', 'SUCCESS', `SHA-256 doğrulandı: ${androidArtifact.sha256.substring(0, 16)}... (${(androidArtifact.sizeBytes / 1024 / 1024).toFixed(2)} MB)`);
+            emitAndRecord(
+              'Android Verify',
+              'SUCCESS',
+              `SHA-256 doğrulandı: ${androidArtifact.sha256.substring(0, 16)}... (${(androidArtifact.sizeBytes / 1024 / 1024).toFixed(2)} MB)`,
+            );
           } catch (buildErr: unknown) {
             const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
             emitAndRecord('Android Build', 'FAILED', undefined, msg);
@@ -456,9 +612,11 @@ export class ReleaseOrchestrator {
 
       checkAbort();
       let iosArtifact: ArtifactManifest | undefined;
-      const shouldBuildIos = !options.skipIos && (config?.ios?.enabled !== false);
+      const shouldBuildIos = !options.skipIos && config?.ios?.enabled !== false;
       if (shouldBuildIos) {
-        const previousIos = existingReleaseId ? artifactRepo.findByReleaseAndPlatform(releaseId, 'ios') : undefined;
+        const previousIos = existingReleaseId
+          ? artifactRepo.findByReleaseAndPlatform(releaseId, 'ios')
+          : undefined;
         if (previousIos && fs.existsSync(previousIos.filePath)) {
           iosArtifact = {
             platform: 'ios',
@@ -468,25 +626,48 @@ export class ReleaseOrchestrator {
             sizeBytes: previousIos.size,
             createdAt: new Date().toISOString(),
           };
-          emitAndRecord('iOS Build', 'SUCCESS', `Önceki çalıştırmadan mevcut IPA korundu: ${iosArtifact.fileName}`);
-          emitAndRecord('iOS Verify', 'SUCCESS', `SHA-256 doğrulandı (Önbellek): ${iosArtifact.sha256.substring(0, 16)}...`);
+          emitAndRecord(
+            'iOS Build',
+            'SUCCESS',
+            `Önceki çalıştırmadan mevcut IPA korundu: ${iosArtifact.fileName}`,
+          );
+          emitAndRecord(
+            'iOS Verify',
+            'SUCCESS',
+            `SHA-256 doğrulandı (Önbellek): ${iosArtifact.sha256.substring(0, 16)}...`,
+          );
         } else {
           emitAndRecord('iOS Build', 'IN_PROGRESS');
           if (process.platform !== 'darwin') {
-            emitAndRecord('iOS Build', 'SKIPPED', 'iOS derlemesi sadece macOS üzerinde yapılabilir');
+            emitAndRecord(
+              'iOS Build',
+              'SKIPPED',
+              'iOS derlemesi sadece macOS üzerinde yapılabilir',
+            );
             emitAndRecord('iOS Verify', 'SKIPPED');
           } else {
             try {
               const builder = new IosBuilder();
-              const buildRes = await builder.build({
-                buildName: resolution.versionString,
-                buildNumber: resolution.next.buildNumber,
-              }, targetDir);
-              emitAndRecord('iOS Build', 'SUCCESS', `IPA derlendi: ${path.basename(buildRes.ipaPath)}`);
+              const buildRes = await builder.build(
+                {
+                  buildName: resolution.versionString,
+                  buildNumber: resolution.next.buildNumber,
+                },
+                targetDir,
+              );
+              emitAndRecord(
+                'iOS Build',
+                'SUCCESS',
+                `IPA derlendi: ${path.basename(buildRes.ipaPath)}`,
+              );
 
               emitAndRecord('iOS Verify', 'IN_PROGRESS');
               const artifactMgr = new ArtifactManager(path.join(targetDir, '.release/artifacts'));
-              iosArtifact = await artifactMgr.registerArtifact('ios', buildRes.ipaPath, resolution.versionString);
+              iosArtifact = await artifactMgr.registerArtifact(
+                'ios',
+                buildRes.ipaPath,
+                resolution.versionString,
+              );
               artifactRepo.create({
                 releaseId,
                 platform: 'ios',
@@ -496,11 +677,19 @@ export class ReleaseOrchestrator {
                 size: iosArtifact.sizeBytes,
                 status: 'VERIFIED',
               });
-              emitAndRecord('iOS Verify', 'SUCCESS', `SHA-256 doğrulandı: ${iosArtifact.sha256.substring(0, 16)}...`);
+              emitAndRecord(
+                'iOS Verify',
+                'SUCCESS',
+                `SHA-256 doğrulandı: ${iosArtifact.sha256.substring(0, 16)}...`,
+              );
             } catch (buildErr: unknown) {
               const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
               emitAndRecord('iOS Build', 'FAILED', undefined, msg);
-              emitAndRecord('iOS Verify', 'SKIPPED', 'iOS derleme hatası nedeniyle doğrulama atlandı');
+              emitAndRecord(
+                'iOS Verify',
+                'SKIPPED',
+                'iOS derleme hatası nedeniyle doğrulama atlandı',
+              );
               if (!androidArtifact) {
                 throw buildErr;
               }
@@ -520,7 +709,11 @@ export class ReleaseOrchestrator {
       releaseRepo.updateStatus(releaseId, 'ARTIFACT_READY');
 
       if (options.buildOnly) {
-        emitAndRecord('Build Complete', 'SUCCESS', 'Yalnızca Derleme Modu: Artifact paketleri başarıyla üretildi ve doğrulandı');
+        emitAndRecord(
+          'Build Complete',
+          'SUCCESS',
+          'Yalnızca Derleme Modu: Artifact paketleri başarıyla üretildi ve doğrulandı',
+        );
         const durationMs = Date.now() - this.startTime;
         return {
           releaseId,
@@ -560,8 +753,16 @@ export class ReleaseOrchestrator {
         }
 
         if (!resolvedPackage) {
-          emitAndRecord('Google Play Upload', 'FAILED', undefined, 'Android paket kimliği tespit edilemedi');
-          throw new AppError('Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.', 'CONFIG_ERROR');
+          emitAndRecord(
+            'Google Play Upload',
+            'FAILED',
+            undefined,
+            'Android paket kimliği tespit edilemedi',
+          );
+          throw new AppError(
+            'Android paket kimliği (packageId / applicationId) tespit edilemedi. Lütfen release.config.yaml içinde project.package tanımlayın veya --package belirtin.',
+            'CONFIG_ERROR',
+          );
         }
 
         const effectiveTrack = options.googleTrack || config?.android?.track || 'internal';
@@ -584,7 +785,10 @@ export class ReleaseOrchestrator {
               playNotes.push({ language: 'en-US', text: options.notesEn });
             }
 
-            const uploadRes = await adapter.uploadAndRelease(androidArtifact.filePath, playNotes.length > 0 ? playNotes : undefined);
+            const uploadRes = await adapter.uploadAndRelease(
+              androidArtifact.filePath,
+              playNotes.length > 0 ? playNotes : undefined,
+            );
             storeSubmissionRepo.create({
               releaseId,
               store: 'google_play',
@@ -601,14 +805,22 @@ export class ReleaseOrchestrator {
               production: 'Üretim',
             };
             const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
-            emitAndRecord('Google Play Upload', 'SUCCESS', `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`);
+            emitAndRecord(
+              'Google Play Upload',
+              'SUCCESS',
+              `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+            );
           } catch (uploadErr: unknown) {
             const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
             emitAndRecord('Google Play Upload', 'FAILED', undefined, msg);
             throw uploadErr;
           }
         } else {
-          emitAndRecord('Google Play Upload', 'SKIPPED', 'Android artifact veya Service Account bulunamadı');
+          emitAndRecord(
+            'Google Play Upload',
+            'SKIPPED',
+            'Android artifact veya Service Account bulunamadı',
+          );
         }
       } else {
         emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
@@ -619,9 +831,18 @@ export class ReleaseOrchestrator {
       if (!options.skipIos) {
         emitAndRecord('App Store Upload', 'IN_PROGRESS');
         const credsPath = path.join(process.cwd(), '.release/credentials.json');
-        let creds: { appStore?: { keyId?: string; issuerId?: string; privateKey?: string; privateKeyPath?: string } } = {};
+        let creds: {
+          appStore?: {
+            keyId?: string;
+            issuerId?: string;
+            privateKey?: string;
+            privateKeyPath?: string;
+          };
+        } = {};
         if (fs.existsSync(credsPath)) {
-          try { creds = JSON.parse(fs.readFileSync(credsPath, 'utf8')); } catch {}
+          try {
+            creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+          } catch {}
         }
 
         if (iosArtifact && creds.appStore?.keyId && creds.appStore?.issuerId) {
@@ -633,7 +854,11 @@ export class ReleaseOrchestrator {
               privateKeyPath: creds.appStore.privateKeyPath,
               privateKeyContent: creds.appStore.privateKey,
             });
-            const uploadRes = await adapter.uploadAndRelease(iosArtifact.filePath, resolution.versionString, resolution.buildNumberString);
+            const uploadRes = await adapter.uploadAndRelease(
+              iosArtifact.filePath,
+              resolution.versionString,
+              resolution.buildNumberString,
+            );
             storeSubmissionRepo.create({
               releaseId,
               store: 'app_store',
@@ -643,22 +868,33 @@ export class ReleaseOrchestrator {
               error: null,
             });
             appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
-            emitAndRecord('App Store Upload', 'SUCCESS', `App Store Connect'e yüklendi: ${uploadRes.buildId}`);
+            emitAndRecord(
+              'App Store Upload',
+              'SUCCESS',
+              `App Store Connect'e yüklendi: ${uploadRes.buildId}`,
+            );
           } catch (uploadErr: unknown) {
             const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
             emitAndRecord('App Store Upload', 'FAILED', undefined, msg);
             throw uploadErr;
           }
         } else {
-          emitAndRecord('App Store Upload', 'SKIPPED', 'iOS artifact veya API anahtarları bulunamadı');
+          emitAndRecord(
+            'App Store Upload',
+            'SKIPPED',
+            'iOS artifact veya API anahtarları bulunamadı',
+          );
         }
       } else {
         emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
       }
 
       let finalStatus: ReleaseStatus = 'ARTIFACT_READY';
-      const isStoreUploaded = (googlePlayStatus.startsWith('SUCCESS') || googlePlayStatus === 'LIVE') ||
-                              (appStoreStatus.startsWith('SUCCESS') || appStoreStatus === 'PROCESSING');
+      const isStoreUploaded =
+        googlePlayStatus.startsWith('SUCCESS') ||
+        googlePlayStatus === 'LIVE' ||
+        appStoreStatus.startsWith('SUCCESS') ||
+        appStoreStatus === 'PROCESSING';
 
       if (isStoreUploaded) {
         this.stateMachine.transitionTo('READY_FOR_SUBMISSION');
@@ -668,7 +904,11 @@ export class ReleaseOrchestrator {
           emitAndRecord('Submission', 'SUCCESS', 'Mağaza incelemesine sunuldu');
         } else {
           finalStatus = 'READY_FOR_SUBMISSION';
-          emitAndRecord('Submission', 'SUCCESS', 'Mağazaya yüklendi, manuel inceleme onayına hazır');
+          emitAndRecord(
+            'Submission',
+            'SUCCESS',
+            'Mağazaya yüklendi, manuel inceleme onayına hazır',
+          );
         }
       } else {
         emitAndRecord('Submission', 'SKIPPED', 'Mağaza yüklemesi yapılmadı; yerel derleme hazır');
@@ -694,14 +934,23 @@ export class ReleaseOrchestrator {
             emitAndRecord(
               'Git Release & Sync',
               'SUCCESS',
-              `Commit ${gitResult.commitHash.slice(0, 7)} ve etiket ${gitResult.tagName || ''} oluşturuldu${pushMsg}`
+              `Commit ${gitResult.commitHash.slice(0, 7)} ve etiket ${gitResult.tagName || ''} oluşturuldu${pushMsg}`,
             );
           } else {
-            emitAndRecord('Git Release & Sync', 'SUCCESS', 'Git çalışma dizini zaten güncel, yeni değişiklik yok');
+            emitAndRecord(
+              'Git Release & Sync',
+              'SUCCESS',
+              'Git çalışma dizini zaten güncel, yeni değişiklik yok',
+            );
           }
         } catch (gitErr: unknown) {
           const msg = gitErr instanceof Error ? gitErr.message : String(gitErr);
-          emitAndRecord('Git Release & Sync', 'FAILED', undefined, `Git push/commit hatası: ${msg}`);
+          emitAndRecord(
+            'Git Release & Sync',
+            'FAILED',
+            undefined,
+            `Git push/commit hatası: ${msg}`,
+          );
           if (options.pushGit !== false) {
             throw new AppError(`Git release push işlemi başarısız oldu: ${msg}`, 'NETWORK_ERROR');
           }
@@ -725,12 +974,14 @@ export class ReleaseOrchestrator {
           build: resolution.next.buildNumber,
           googlePlayStatus,
           appStoreStatus,
-          gitResult: gitResult ? {
-            commitHash: gitResult.commitHash,
-            tagName: gitResult.tagName,
-            pushed: gitResult.pushed,
-            branch: gitResult.branch,
-          } : undefined,
+          gitResult: gitResult
+            ? {
+                commitHash: gitResult.commitHash,
+                tagName: gitResult.tagName,
+                pushed: gitResult.pushed,
+                branch: gitResult.branch,
+              }
+            : undefined,
         }),
       };
       auditRepo.create(completionAudit);
@@ -749,7 +1000,11 @@ export class ReleaseOrchestrator {
         });
       } catch {}
 
-      emitAndRecord('Audit & Notify', 'SUCCESS', 'Veritabanı günlüğü kaydedildi ve bildirimler tamamlandı');
+      emitAndRecord(
+        'Audit & Notify',
+        'SUCCESS',
+        'Veritabanı günlüğü kaydedildi ve bildirimler tamamlandı',
+      );
 
       return {
         releaseId,
@@ -761,9 +1016,8 @@ export class ReleaseOrchestrator {
         appStoreStatus,
         gitResult,
         releaseNotes,
-        durationMs: Date.now() - this.startTime
+        durationMs: Date.now() - this.startTime,
       };
-
     } catch (error) {
       this.stateMachine.transitionTo('FAILED');
       releaseRepo.updateStatus(releaseId, 'FAILED');

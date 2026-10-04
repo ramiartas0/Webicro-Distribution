@@ -12,6 +12,5 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
         <App />
       </ToastProvider>
     </LanguageProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
-

@@ -30,7 +30,9 @@ export const retryCommand = new Command('retry')
         return;
       }
 
-      console.log(chalk.blue(`Retrying release: ${chalk.bold(releaseId)} (Önceki durum: ${record.status})`));
+      console.log(
+        chalk.blue(`Retrying release: ${chalk.bold(releaseId)} (Önceki durum: ${record.status})`),
+      );
 
       auditRepo.create({
         releaseId,

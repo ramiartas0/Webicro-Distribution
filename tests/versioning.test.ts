@@ -33,13 +33,13 @@ describe('Versioning & SemVer', () => {
         message: 'courier pool settings',
         body: null,
         isBreakingChange: false,
-        raw: 'feat(courier): courier pool settings'
-      }
+        raw: 'feat(courier): courier pool settings',
+      },
     ];
 
     const resolution = resolver.resolve({
       currentVersion: '2.4.0+249',
-      commits
+      commits,
     });
 
     expect(resolution.next.major).toBe(2);

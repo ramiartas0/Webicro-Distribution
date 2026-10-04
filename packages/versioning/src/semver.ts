@@ -57,6 +57,6 @@ export function bumpVersion(current: SemanticVersion, bump: VersionBump): Semant
 export function incrementBuildNumber(version: SemanticVersion): SemanticVersion {
   return {
     ...version,
-    buildNumber: version.buildNumber + 1
+    buildNumber: version.buildNumber + 1,
   };
 }

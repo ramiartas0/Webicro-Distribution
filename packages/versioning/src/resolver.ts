@@ -18,7 +18,12 @@ export class VersionResolver {
     return this.strategy;
   }
 
-  resolve(params: { currentVersion: string; commits: ParsedCommit[]; manualVersion?: string; manualBump?: VersionBump }): VersionResolution {
+  resolve(params: {
+    currentVersion: string;
+    commits: ParsedCommit[];
+    manualVersion?: string;
+    manualBump?: VersionBump;
+  }): VersionResolution {
     const current = parseVersion(params.currentVersion);
     let next: SemanticVersion;
     let bump: VersionBump = 'none';
@@ -53,7 +58,7 @@ export class VersionResolver {
       isManual,
       formatted: formatVersion(next),
       versionString,
-      buildNumberString
+      buildNumberString,
     };
   }
 }

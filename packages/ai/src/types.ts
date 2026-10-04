@@ -34,10 +34,7 @@ export type AIDiagnosisCategory =
   | 'UNKNOWN';
 
 export type AutoFixActionType =
-  | 'REMOVE_PHOTO_PERMISSIONS'
-  | 'FLUTTER_CLEAN_RETRY'
-  | 'FIX_SIGNING_CONFIG'
-  | 'NONE';
+  'REMOVE_PHOTO_PERMISSIONS' | 'FLUTTER_CLEAN_RETRY' | 'FIX_SIGNING_CONFIG' | 'NONE';
 
 export interface AIDiagnosisContext {
   projectName?: string;
@@ -51,7 +48,8 @@ export interface AIDiagnosisContext {
 export interface AIDiagnosisResult {
   category: AIDiagnosisCategory;
   categoryTitle: string;
-  source: 'google_play' | 'app_store' | 'flutter_code' | 'native_gradle' | 'environment' | 'unknown';
+  source:
+    'google_play' | 'app_store' | 'flutter_code' | 'native_gradle' | 'environment' | 'unknown';
   sourceLabel: string;
   rootCause: string;
   explanation: string;

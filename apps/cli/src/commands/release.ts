@@ -11,8 +11,16 @@ export const releaseCommand = new Command('release')
   .description('Start a new release')
   .argument('[bump]', 'Type of version bump (patch | minor | major)')
   .option('-t, --target <path>', 'Target Flutter project directory (default: current directory)')
-  .option('--validate-only', 'Run Flutter doctor, analyze and tests without building or releasing', false)
-  .option('--build-only', 'Build and verify artifacts without store upload or git operations', false)
+  .option(
+    '--validate-only',
+    'Run Flutter doctor, analyze and tests without building or releasing',
+    false,
+  )
+  .option(
+    '--build-only',
+    'Build and verify artifacts without store upload or git operations',
+    false,
+  )
   .option('--skip-android', 'Skip Android build and upload', false)
   .option('--skip-ios', 'Skip iOS build and upload', false)
   .option('--skip-tests', 'Skip Flutter tests', false)
@@ -32,11 +40,17 @@ export const releaseCommand = new Command('release')
       const targetDir = path.resolve(rawTarget);
       const meta = detectProjectMetadata(targetDir);
 
-      const resolvedPackage = typeof options['package'] === 'string' ? options['package'] : meta.package;
-      const trackOption = typeof options['track'] === 'string' ? options['track'].toLowerCase() : undefined;
-      const validatedTrack = trackOption === 'internal' || trackOption === 'alpha' || trackOption === 'beta' || trackOption === 'production'
-        ? trackOption
-        : undefined;
+      const resolvedPackage =
+        typeof options['package'] === 'string' ? options['package'] : meta.package;
+      const trackOption =
+        typeof options['track'] === 'string' ? options['track'].toLowerCase() : undefined;
+      const validatedTrack =
+        trackOption === 'internal' ||
+        trackOption === 'alpha' ||
+        trackOption === 'beta' ||
+        trackOption === 'production'
+          ? trackOption
+          : undefined;
 
       const isValidateOnly = Boolean(options['validateOnly']);
       const isBuildOnly = Boolean(options['buildOnly']);
@@ -46,17 +60,21 @@ export const releaseCommand = new Command('release')
       const isLiveRelease = !isValidateOnly && !isBuildOnly;
       if (isLiveRelease && !options['yes'] && process.env['CI'] !== 'true') {
         const effectiveTrack = validatedTrack || 'internal';
-        const gitSummary = skipGit ? 'Atlanacak' : noPush ? 'Commit + Tag (Push Yok)' : 'Commit + Tag + Push';
+        const gitSummary = skipGit
+          ? 'Atlanacak'
+          : noPush
+            ? 'Commit + Tag (Push Yok)'
+            : 'Commit + Tag + Push';
 
         clack.note(
           `Proje: ${chalk.bold(meta.name)}\n` +
-          `Dizin: ${chalk.dim(targetDir)}\n` +
-          `Paket (Android): ${chalk.cyan(resolvedPackage || 'Belirtilmedi')}\n` +
-          `Bundle ID (iOS): ${chalk.cyan(meta.iosBundleId || 'Belirtilmedi')}\n` +
-          `Kanal (Google Play): ${chalk.yellow(effectiveTrack)}\n` +
-          `Git İşlemleri: ${gitSummary}\n` +
-          `İşlemler: Gerçek Derleme + Mağaza Dağıtımı`,
-          '⚠️ Canlı Dağıtım Öncesi Doğrulama'
+            `Dizin: ${chalk.dim(targetDir)}\n` +
+            `Paket (Android): ${chalk.cyan(resolvedPackage || 'Belirtilmedi')}\n` +
+            `Bundle ID (iOS): ${chalk.cyan(meta.iosBundleId || 'Belirtilmedi')}\n` +
+            `Kanal (Google Play): ${chalk.yellow(effectiveTrack)}\n` +
+            `Git İşlemleri: ${gitSummary}\n` +
+            `İşlemler: Gerçek Derleme + Mağaza Dağıtımı`,
+          '⚠️ Canlı Dağıtım Öncesi Doğrulama',
         );
 
         const confirmed = await clack.confirm({
@@ -89,7 +107,8 @@ export const releaseCommand = new Command('release')
         }
       });
 
-      const validatedBump = bump === 'major' || bump === 'minor' || bump === 'patch' ? bump : undefined;
+      const validatedBump =
+        bump === 'major' || bump === 'minor' || bump === 'patch' ? bump : undefined;
 
       const summary = await orchestrator.execute({
         targetDir,
@@ -108,10 +127,15 @@ export const releaseCommand = new Command('release')
         configPath: typeof options['config'] === 'string' ? options['config'] : undefined,
       });
 
-      const [verPart, buildPart] = summary.version.includes('+') ? summary.version.split('+') : [summary.version, '1'];
+      const [verPart, buildPart] = summary.version.includes('+')
+        ? summary.version.split('+')
+        : [summary.version, '1'];
       const finalBuildNum = Number(buildPart) || 1;
 
-      const parseReportStatus = (statusStr?: string, skipped?: boolean): 'success' | 'failed' | 'skipped' | 'pending' => {
+      const parseReportStatus = (
+        statusStr?: string,
+        skipped?: boolean,
+      ): 'success' | 'failed' | 'skipped' | 'pending' => {
         if (skipped) return 'skipped';
         if (!statusStr) return 'skipped';
         const lower = statusStr.toLowerCase();
@@ -126,15 +150,32 @@ export const releaseCommand = new Command('release')
         releaseId: summary.releaseId,
         nextVersion: verPart || summary.version,
         buildNumber: finalBuildNum,
-        androidArtifactInfo: summary.androidArtifact?.filePath || (options['skipAndroid'] || isValidateOnly ? 'none' : 'not generated'),
-        androidStatus: summary.androidArtifact ? 'success' : (options['skipAndroid'] || isValidateOnly ? 'skipped' : 'failed'),
-        iosArtifactInfo: summary.iosArtifact?.filePath || (options['skipIos'] || isValidateOnly ? 'none' : 'not generated'),
-        iosStatus: summary.iosArtifact ? 'success' : (options['skipIos'] || isValidateOnly ? 'skipped' : 'failed'),
-        googlePlayStatus: parseReportStatus(summary.googlePlayStatus, Boolean(options['skipAndroid'] || isValidateOnly || isBuildOnly)),
-        appStoreStatus: parseReportStatus(summary.appStoreStatus, Boolean(options['skipIos'] || isValidateOnly || isBuildOnly)),
+        androidArtifactInfo:
+          summary.androidArtifact?.filePath ||
+          (options['skipAndroid'] || isValidateOnly ? 'none' : 'not generated'),
+        androidStatus: summary.androidArtifact
+          ? 'success'
+          : options['skipAndroid'] || isValidateOnly
+            ? 'skipped'
+            : 'failed',
+        iosArtifactInfo:
+          summary.iosArtifact?.filePath ||
+          (options['skipIos'] || isValidateOnly ? 'none' : 'not generated'),
+        iosStatus: summary.iosArtifact
+          ? 'success'
+          : options['skipIos'] || isValidateOnly
+            ? 'skipped'
+            : 'failed',
+        googlePlayStatus: parseReportStatus(
+          summary.googlePlayStatus,
+          Boolean(options['skipAndroid'] || isValidateOnly || isBuildOnly),
+        ),
+        appStoreStatus: parseReportStatus(
+          summary.appStoreStatus,
+          Boolean(options['skipIos'] || isValidateOnly || isBuildOnly),
+        ),
         totalDurationMs: summary.durationMs,
       });
-
     } catch (error: unknown) {
       clack.cancel(`Release failed: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);

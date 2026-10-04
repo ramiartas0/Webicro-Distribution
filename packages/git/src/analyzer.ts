@@ -25,7 +25,7 @@ export class GitAnalyzer {
       const trimmed = topLevel.trim();
       const realTop = fs.existsSync(trimmed) ? fs.realpathSync(trimmed) : trimmed;
       const rel = path.relative(realTop, this.targetDir);
-      return (rel && rel !== '.') ? rel.replace(/\\/g, '/') : '';
+      return rel && rel !== '.' ? rel.replace(/\\/g, '/') : '';
     } catch {
       return '';
     }
@@ -36,15 +36,15 @@ export class GitAnalyzer {
       const rel = await this.getRelPath();
       const status = await this.git.status();
       const files = status.files
-        .map(f => f.path)
-        .filter(f => !f.includes('/.release/') && !f.startsWith('.release/'));
+        .map((f) => f.path)
+        .filter((f) => !f.includes('/.release/') && !f.startsWith('.release/'));
       if (!rel) {
         return files;
       }
       const prefix = rel.endsWith('/') ? rel : `${rel}/`;
       return files
-        .filter(f => f.startsWith(prefix) || f === rel)
-        .map(f => f.startsWith(prefix) ? f.slice(prefix.length) : f);
+        .filter((f) => f.startsWith(prefix) || f === rel)
+        .map((f) => (f.startsWith(prefix) ? f.slice(prefix.length) : f));
     } catch {
       return [];
     }
@@ -89,14 +89,14 @@ export class GitAnalyzer {
       changedFiles,
       hasNativeChanges: nativeChanges.androidChanged || nativeChanges.iosChanged,
       nativeChangedFiles: [...nativeChanges.androidFiles, ...nativeChanges.iosFiles],
-      suggestedBump
+      suggestedBump,
     };
   }
 
   async getLastTag(): Promise<string | null> {
     try {
       const tags = await this.git.tags({ '--sort': '-v:refname' });
-      const vTags = tags.all.filter(tag => tag.startsWith('v') || tag.match(/^\d+\.\d+\.\d+/));
+      const vTags = tags.all.filter((tag) => tag.startsWith('v') || tag.match(/^\d+\.\d+\.\d+/));
       return vTags.length > 0 ? (vTags[0] ?? null) : null;
     } catch (error: unknown) {
       return null;
@@ -105,12 +105,14 @@ export class GitAnalyzer {
 
   async getCommitsSince(ref: string): Promise<ParsedCommit[]> {
     try {
-      const log = ref === 'HEAD' 
-        ? await this.git.log() 
-        : await this.git.log({ from: ref, to: 'HEAD' });
-        
-      return log.all.map(commit => 
-        parseConventionalCommit(commit.message + (commit.body ? '\n' + commit.body : ''), commit.hash)
+      const log =
+        ref === 'HEAD' ? await this.git.log() : await this.git.log({ from: ref, to: 'HEAD' });
+
+      return log.all.map((commit) =>
+        parseConventionalCommit(
+          commit.message + (commit.body ? '\n' + commit.body : ''),
+          commit.hash,
+        ),
       );
     } catch (error: unknown) {
       return [];
@@ -121,7 +123,7 @@ export class GitAnalyzer {
     try {
       if (ref === 'HEAD') return [];
       const diff = await this.git.diffSummary([`${ref}..HEAD`]);
-      return diff.files.map(f => f.file);
+      return diff.files.map((f) => f.file);
     } catch (error: unknown) {
       return [];
     }

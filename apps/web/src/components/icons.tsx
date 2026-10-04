@@ -47,7 +47,10 @@ export function AppleIcon({ className = 'w-4 h-4', ...props }: IconProps) {
   );
 }
 
-export function AppStoreConnectIcon({ className = 'w-4 h-4', ...props }: React.ImgHTMLAttributes<HTMLImageElement>) {
+export function AppStoreConnectIcon({
+  className = 'w-4 h-4',
+  ...props
+}: React.ImgHTMLAttributes<HTMLImageElement>) {
   return (
     <img
       src="/app-store-connect.png"
@@ -87,13 +90,14 @@ export function ProjectAppIcon({
     setHasError(false);
   }, [path]);
 
-  const initials = (name || 'App')
-    .replace(/[^a-zA-Z0-9]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() || '')
-    .join('') || name.substring(0, 2).toUpperCase();
+  const initials =
+    (name || 'App')
+      .replace(/[^a-zA-Z0-9]/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || '')
+      .join('') || name.substring(0, 2).toUpperCase();
 
   if (hasError || !path) {
     return (

@@ -7,7 +7,7 @@
     "webicro": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/copy-web-dist.js",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"

@@ -11,9 +11,13 @@ export interface RunOptions {
   stdin?: string;
 }
 
-export async function runCommand(command: string, args: string[], options?: RunOptions): Promise<ProcessResult> {
+export async function runCommand(
+  command: string,
+  args: string[],
+  options?: RunOptions,
+): Promise<ProcessResult> {
   const startTime = Date.now();
-  
+
   return new Promise((resolve, reject) => {
     let stdoutData = '';
     let stderrData = '';
@@ -58,12 +62,14 @@ export async function runCommand(command: string, args: string[], options?: RunO
 
     child.on('error', (error: Error) => {
       if (timeoutId) clearTimeout(timeoutId);
-      reject(new BuildError(`Failed to start command ${command}: ${error.message}`, { cause: error }));
+      reject(
+        new BuildError(`Failed to start command ${command}: ${error.message}`, { cause: error }),
+      );
     });
 
     child.on('close', (code: number | null) => {
       if (timeoutId) clearTimeout(timeoutId);
-      
+
       const duration = Date.now() - startTime;
       const finalCode = code ?? -1;
 
@@ -76,7 +82,11 @@ export async function runCommand(command: string, args: string[], options?: RunO
 
       if (finalCode !== 0 && !options?.silent) {
         logger.error(`Command ${command} failed with exit code ${finalCode}`);
-        reject(new BuildError(`Command ${command} failed with exit code ${finalCode}`, { details: { result } }));
+        reject(
+          new BuildError(`Command ${command} failed with exit code ${finalCode}`, {
+            details: { result },
+          }),
+        );
       } else {
         resolve(result);
       }

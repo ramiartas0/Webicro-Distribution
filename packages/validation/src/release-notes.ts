@@ -35,25 +35,35 @@ export class ReleaseNotesValidator {
     for (const [lang, notes] of Object.entries(validNotes)) {
       if (notes.short) {
         const shortGoogleRes = validateGooglePlayReleaseNotes(notes.short);
-        issues.push(...shortGoogleRes.issues.map(i => ({ ...i, field: `${lang}.short` })));
-        
-        issues.push(...this.sensitiveScanner.scan(notes.short).map(i => ({ ...i, field: `${lang}.short` })));
-        issues.push(...this.forbiddenScanner.scan(notes.short).map(i => ({ ...i, field: `${lang}.short` })));
+        issues.push(...shortGoogleRes.issues.map((i) => ({ ...i, field: `${lang}.short` })));
+
+        issues.push(
+          ...this.sensitiveScanner.scan(notes.short).map((i) => ({ ...i, field: `${lang}.short` })),
+        );
+        issues.push(
+          ...this.forbiddenScanner.scan(notes.short).map((i) => ({ ...i, field: `${lang}.short` })),
+        );
       }
 
       const fullText = notes.full.join('\\n');
-      
+
       const fullGoogleRes = validateGooglePlayReleaseNotes(fullText);
-      issues.push(...fullGoogleRes.issues.map(i => ({ ...i, field: `${lang}.full (Google Play)` })));
+      issues.push(
+        ...fullGoogleRes.issues.map((i) => ({ ...i, field: `${lang}.full (Google Play)` })),
+      );
 
       const fullAppleRes = validateAppStoreWhatsNew(fullText);
-      issues.push(...fullAppleRes.issues.map(i => ({ ...i, field: `${lang}.full (App Store)` })));
-      
-      issues.push(...this.sensitiveScanner.scan(fullText).map(i => ({ ...i, field: `${lang}.full` })));
-      issues.push(...this.forbiddenScanner.scan(fullText).map(i => ({ ...i, field: `${lang}.full` })));
+      issues.push(...fullAppleRes.issues.map((i) => ({ ...i, field: `${lang}.full (App Store)` })));
+
+      issues.push(
+        ...this.sensitiveScanner.scan(fullText).map((i) => ({ ...i, field: `${lang}.full` })),
+      );
+      issues.push(
+        ...this.forbiddenScanner.scan(fullText).map((i) => ({ ...i, field: `${lang}.full` })),
+      );
     }
 
-    const errorIssues = issues.filter(i => i.severity === 'error');
+    const errorIssues = issues.filter((i) => i.severity === 'error');
 
     return {
       isValid: errorIssues.length === 0,

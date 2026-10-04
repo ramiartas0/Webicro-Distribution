@@ -19,7 +19,10 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function withRetry<T>(fn: () => Promise<T>, config?: Partial<RetryConfig>): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  config?: Partial<RetryConfig>,
+): Promise<T> {
   const finalConfig: RetryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
   let attempt = 1;
 
@@ -27,16 +30,21 @@ export async function withRetry<T>(fn: () => Promise<T>, config?: Partial<RetryC
     try {
       return await fn();
     } catch (error) {
-      const isRetryable = finalConfig.retryableCheck ? finalConfig.retryableCheck(error) : isRetryableError(error);
+      const isRetryable = finalConfig.retryableCheck
+        ? finalConfig.retryableCheck(error)
+        : isRetryableError(error);
 
       if (!isRetryable || attempt >= finalConfig.maxAttempts) {
         throw error;
       }
 
       const delayMs = calculateDelay(attempt, finalConfig);
-      logger.warn(`Operation failed, retrying in ${Math.round(delayMs)}ms (attempt ${attempt} of ${finalConfig.maxAttempts})`, {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn(
+        `Operation failed, retrying in ${Math.round(delayMs)}ms (attempt ${attempt} of ${finalConfig.maxAttempts})`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
 
       await sleep(delayMs);
       attempt++;

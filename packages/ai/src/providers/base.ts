@@ -50,7 +50,10 @@ ${commitLines}
   }
 
   protected parseJsonSafely(text: string): unknown {
-    const cleanedText = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+    const cleanedText = text
+      .replace(/^```json\s*/i, '')
+      .replace(/\s*```$/i, '')
+      .trim();
     return JSON.parse(cleanedText);
   }
 }

@@ -20,7 +20,6 @@ export class DatabaseConnection {
   }
 
   public runMigrations(): void {
-
     const createMigrationsTable = this.db.prepare(`
       CREATE TABLE IF NOT EXISTS migrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
