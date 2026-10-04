@@ -284,18 +284,13 @@ export class GooglePlayAdapter {
     }
   }
 
-  public async uploadAndRelease(aabPath: string, notes?: GooglePlayReleaseNotes[], isDryRun?: boolean): Promise<GooglePlayUploadResult> {
+  public async uploadAndRelease(aabPath: string, notes?: GooglePlayReleaseNotes[]): Promise<GooglePlayUploadResult> {
     const editId = await this.createEdit();
     let versionCode = 0;
     try {
       versionCode = await this.uploadBundle(editId, aabPath);
       await this.assignTrack(editId, versionCode, notes);
-
-      if (isDryRun) {
-        await this.validate(editId);
-      } else {
-        await this.commit(editId);
-      }
+      await this.commit(editId);
     } catch (error: unknown) {
       const token = await getGoogleAccessToken(this.config).catch(() => '');
       if (token) {

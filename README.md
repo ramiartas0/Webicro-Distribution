@@ -44,8 +44,8 @@ Webicro Distribution, kurumsal güvenlik denetimlerinden geçmiş sıkılaştır
    `.release/credentials.json` dosyası işletim sistemi seviyesinde yalnızca geçerli kullanıcı tarafından okunabilecek (`0600` / `-rw-------`) şekilde saklanır. Ortam değişkenlerindeki geçici anahtarlar diske izinsiz kopyalanmaz.
 5. **Dizin Aşımı Koruması (Path Traversal Guard):**
    Tüm dosya ve proje yolları `isSafeProjectPath` filtresinden geçirilerek yetkisiz sistem dizinlerine erişim engellenir.
-6. **Güvenli Dry-Run Modu:**
-   `--dry-run` bayrağı ile mağazalara veya Git'e dokunmadan tüm boru hattı geçerli simüle edilmiş yapay paketlerle baştan sona test edilebilir.
+6. **Güvenli Doğrulama ve Derleme Modları (`--validate-only`, `--build-only`):**
+   `--validate-only` bayrağı ile dosya ve git mutasyonu yapmadan Flutter doctor, statik analiz ve testler çalıştırılır. `--build-only` bayrağı ile mağazalara yüklemeden gerçek AAB ve IPA paketleri derlenip SHA-256 ile doğrulanır.
 
 ---
 
@@ -95,8 +95,11 @@ pnpm build
 ### 2. CLI Komutları
 
 ```bash
-# Boru hattını güvenli simülasyon modunda test edin (Önerilen ilk adım)
-node apps/cli/dist/index.js release --dry-run
+# Boru hattını doğrulama modunda test edin (Doctor, Analyze, Tests - Sıfır mutasyon)
+node apps/cli/dist/index.js release --validate-only
+
+# Yalnızca derleme yapın (Mağaza yüklemesi veya Git push yok)
+node apps/cli/dist/index.js release --build-only
 
 # Otomatik konvansiyonel analiz ile dağıtım başlatın
 node apps/cli/dist/index.js release

@@ -10,7 +10,6 @@ import { PubspecVersionUpdater } from '@webicro/flutter';
 interface RollbackOptions {
   deleteTag?: boolean;
   revertPubspec?: boolean;
-  dryRun?: boolean;
   force?: boolean;
 }
 
@@ -19,7 +18,6 @@ export const rollbackCommand = new Command('rollback')
   .argument('<releaseId>', 'Geri alınacak sürümün kimliği (Release ID)')
   .option('--delete-tag', 'Yerel ve uzak Git etiketini (vX.Y.Z) sil')
   .option('--revert-pubspec', 'pubspec.yaml dosyasını bir önceki kararlı sürüme geri al')
-  .option('--dry-run', 'Geri alma adımlarını yalnızca simüle et, değişiklik yapma')
   .option('--force', 'Kullanıcı onayı istemeden doğrudan çalıştır')
   .action(async (releaseId: string, options: RollbackOptions) => {
     clack.intro(chalk.bold('⏪ Webicro Distribution - Geri Alma (Rollback)'));
@@ -46,11 +44,7 @@ export const rollbackCommand = new Command('rollback')
         `${chalk.yellow('Hedef Sürüm:')} ${chalk.bold(record.project)} ${chalk.cyan(`v${record.version}+${record.buildNumber}`)} [Mevcut Durum: ${record.status}]`
       );
 
-      if (options.dryRun) {
-        clack.log.warn(chalk.magenta('Simülasyon Modu (--dry-run): Hiçbir dosya veya uzak repo değiştirilmeyecek.'));
-      }
-
-      if (!options.force && !options.dryRun) {
+      if (!options.force) {
         const confirm = await clack.confirm({
           message: `${releaseId} (${tagName}) sürümünü geri almak ve FAILED olarak işaretlemek istiyor musunuz?`,
           initialValue: true,
@@ -64,47 +58,41 @@ export const rollbackCommand = new Command('rollback')
       const executedActions: string[] = [];
 
       // 1. Veritabanı Durumu Güncellemesi
-      if (!options.dryRun) {
-        releaseRepo.updateStatus(releaseId, 'FAILED');
-        auditRepo.create({
-          releaseId,
-          action: 'RELEASE_ROLLED_BACK',
-          actor: process.env['USER'] || 'operator',
-          result: 'SUCCESS',
-          details: JSON.stringify({
-            rolledBackVersion: record.version,
-            rolledBackBuildNumber: record.buildNumber,
-            previousStatus: record.status,
-            deleteTag: Boolean(options.deleteTag),
-            revertPubspec: Boolean(options.revertPubspec),
-            timestamp: new Date().toISOString(),
-          }),
-        });
-      }
+      releaseRepo.updateStatus(releaseId, 'FAILED');
+      auditRepo.create({
+        releaseId,
+        action: 'RELEASE_ROLLED_BACK',
+        actor: process.env['USER'] || 'operator',
+        result: 'SUCCESS',
+        details: JSON.stringify({
+          rolledBackVersion: record.version,
+          rolledBackBuildNumber: record.buildNumber,
+          previousStatus: record.status,
+          deleteTag: Boolean(options.deleteTag),
+          revertPubspec: Boolean(options.revertPubspec),
+          timestamp: new Date().toISOString(),
+        }),
+      });
       executedActions.push(`1. Veritabanı Durumu: ${record.status} -> ${chalk.red('FAILED')} (Geri Alındı)`);
 
       // 2. Git Tag Silme
       if (options.deleteTag) {
-        if (options.dryRun) {
-          executedActions.push(`2. Git Tag: Simülasyon: 'git tag -d ${tagName}' ve uzak tag silme simüle edildi.`);
-        } else {
-          try {
-            const git = simpleGit(process.cwd());
-            await git.tag(['-d', tagName]);
-            executedActions.push(`2. Yerel Git Etiketi: '${tagName}' başarıyla silindi.`);
+        try {
+          const git = simpleGit(process.cwd());
+          await git.tag(['-d', tagName]);
+          executedActions.push(`2. Yerel Git Etiketi: '${tagName}' başarıyla silindi.`);
 
-            try {
-              const remotes = await git.getRemotes();
-              if (remotes.length > 0) {
-                await git.push(['origin', `:refs/tags/${tagName}`]);
-                executedActions.push(`2.1 Uzak Git Etiketi: 'origin/${tagName}' GitHub/uzak repodan kaldırıldı.`);
-              }
-            } catch (remoteTagErr) {
-              executedActions.push(`2.1 Uzak Git Etiketi: Uzak repoda bulunamadı veya silinemedi (${String(remoteTagErr)}).`);
+          try {
+            const remotes = await git.getRemotes();
+            if (remotes.length > 0) {
+              await git.push(['origin', `:refs/tags/${tagName}`]);
+              executedActions.push(`2.1 Uzak Git Etiketi: 'origin/${tagName}' GitHub/uzak repodan kaldırıldı.`);
             }
-          } catch (tagErr) {
-            executedActions.push(`2. Git Etiketi: Yerel etiket bulunamadı veya silinirken hata: ${String(tagErr)}`);
+          } catch (remoteTagErr) {
+            executedActions.push(`2.1 Uzak Git Etiketi: Uzak repoda bulunamadı veya silinemedi (${String(remoteTagErr)}).`);
           }
+        } catch (tagErr) {
+          executedActions.push(`2. Git Etiketi: Yerel etiket bulunamadı veya silinirken hata: ${String(tagErr)}`);
         }
       } else {
         executedActions.push(`2. Git Etiketi: Korundu (Silmek için: git tag -d ${tagName} && git push origin :refs/tags/${tagName})`);
@@ -120,16 +108,12 @@ export const rollbackCommand = new Command('rollback')
           : undefined;
 
         if (fallbackTarget) {
-          if (options.dryRun) {
-            executedActions.push(`3. pubspec.yaml: Simülasyon: Sürüm v${fallbackTarget} değerine geri çekilecekti.`);
-          } else {
-            try {
-              const updater = new PubspecVersionUpdater();
-              await updater.updateVersion(fallbackTarget, process.cwd());
-              executedActions.push(`3. pubspec.yaml: Başarıyla önceki kararlı sürüm v${fallbackTarget} olarak güncellendi.`);
-            } catch (pubErr) {
-              executedActions.push(`3. pubspec.yaml: Güncelleme hatası: ${String(pubErr)}`);
-            }
+          try {
+            const updater = new PubspecVersionUpdater();
+            await updater.updateVersion(fallbackTarget, process.cwd());
+            executedActions.push(`3. pubspec.yaml: Başarıyla önceki kararlı sürüm v${fallbackTarget} olarak güncellendi.`);
+          } catch (pubErr) {
+            executedActions.push(`3. pubspec.yaml: Güncelleme hatası: ${String(pubErr)}`);
           }
         } else {
           executedActions.push('3. pubspec.yaml: Önceki başarılı bir sürüm kaydı bulunamadığı için otomatik geri alınamadı.');

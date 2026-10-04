@@ -86,7 +86,7 @@ Commit mesajları daima **Conventional Commits** standardına uygun ve açıklay
 
 Örnekler:
 - `feat(google-play): kademeli dağıtım (rollout) yüzdesi desteği eklendi`
-- `fix(orchestrator): dry-run modunda mock artifact üretimi düzeltildi`
+- `refactor(core): simulasyon modu ve mock artifactler tamamen kaldirildi`
 - `refactor(config): snake_case anahtarların camelCase normalizasyonu sadeleştirildi`
 - `test(security): path traversal engelleme testleri eklendi`
 - `docs(readme): yerel loopback güvenlik mimarisi belgelendi`

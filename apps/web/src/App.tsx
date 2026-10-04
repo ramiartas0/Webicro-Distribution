@@ -445,7 +445,6 @@ export default function App() {
   }, [activeProjectPath]);
 
   const [googleTrack, setGoogleTrack] = useState<'internal' | 'alpha' | 'beta' | 'production'>('internal');
-  const isDryRun = false;
 
   // AI Sürüm Notları (Varsayılan olarak boş başlar, AI veya manuel doldurulur)
   const [releaseNotesTR, setReleaseNotesTR] = useState<string>('');
@@ -1923,7 +1922,6 @@ export default function App() {
           buildNumber: nextBuildNumber,
           bump: bumpType === 'custom' ? undefined : bumpType,
           manualVersion: bumpType === 'custom' ? customVersion : undefined,
-          dryRun: isDryRun,
           targetPlatform: platformMode,
           targetAndroid,
           targetIos,

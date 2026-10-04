@@ -39,12 +39,11 @@ security:
 `;
     fs.writeFileSync(path.join(tempRepoDir, 'release.config.yaml'), configContent);
 
-    // Non dry-run, requireCleanGit enabled
+    // requireCleanGit enabled
     await expect(
       orchestrator.execute({
         targetDir: tempRepoDir,
         configPath: path.join(tempRepoDir, 'release.config.yaml'),
-        dryRun: false,
         skipTests: true,
         skipGit: true,
       })

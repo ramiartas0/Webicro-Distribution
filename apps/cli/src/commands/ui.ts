@@ -3114,7 +3114,8 @@ export const uiCommand = new Command('ui')
               buildNumber?: number;
               bump?: 'patch' | 'minor' | 'major';
               manualVersion?: string;
-              dryRun?: boolean;
+              validateOnly?: boolean;
+              buildOnly?: boolean;
               targetAndroid?: boolean;
               targetIos?: boolean;
               targetPlatform?: 'android' | 'ios' | 'both';
@@ -3281,14 +3282,13 @@ export const uiCommand = new Command('ui')
             activeAbortControllers.set(releaseTargetDir, abortCtrl);
 
             try {
-              const isDryRun = options.dryRun !== undefined ? options.dryRun : false;
-
               const summary = await orchestrator.execute({
                 targetDir: releaseTargetDir,
                 packageName: meta.package || 'com.webicro.piyyuumanager',
                 bump: options.bump,
                 manualVersion: options.manualVersion || options.version,
-                dryRun: isDryRun,
+                validateOnly: Boolean(options.validateOnly),
+                buildOnly: Boolean(options.buildOnly),
                 skipAndroid,
                 skipIos,
                 skipTests: false,

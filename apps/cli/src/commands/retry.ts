@@ -60,7 +60,7 @@ export const retryCommand = new Command('retry')
         }
       });
 
-      const summary = await orchestrator.run({ dryRun: false }, releaseId);
+      const summary = await orchestrator.run({}, releaseId);
       clack.outro(chalk.green(`✓ Release ${summary.releaseId} başarıyla tamamlandı!`));
     } catch (err) {
       clack.cancel(`Yeniden deneme başarısız: ${err instanceof Error ? err.message : String(err)}`);

@@ -29,18 +29,18 @@ export class ReleasePlanner {
       steps.push('RUN_TESTS');
     }
 
-    if (!options.skipAndroid) {
+    if (!options.validateOnly && !options.skipAndroid) {
       steps.push('ANDROID_BUILD');
       steps.push('ANDROID_VERIFICATION');
-      if (!options.dryRun) {
+      if (!options.buildOnly) {
         steps.push('GOOGLE_PLAY_UPLOAD');
       }
     }
 
-    if (!options.skipIos) {
+    if (!options.validateOnly && !options.skipIos) {
       steps.push('IOS_BUILD');
       steps.push('IOS_VERIFICATION');
-      if (!options.dryRun) {
+      if (!options.buildOnly) {
         steps.push('APP_STORE_UPLOAD');
       }
     }

@@ -11,7 +11,6 @@ export const releaseCommand = new Command('release')
   .description('Start a new release')
   .argument('[bump]', 'Type of version bump (patch | minor | major)')
   .option('-t, --target <path>', 'Target Flutter project directory (default: current directory)')
-  .option('--dry-run', 'Dry run without store upload, commit or file mutations', false)
   .option('--validate-only', 'Run Flutter doctor, analyze and tests without building or releasing', false)
   .option('--build-only', 'Build and verify artifacts without store upload or git operations', false)
   .option('--skip-android', 'Skip Android build and upload', false)
@@ -39,14 +38,13 @@ export const releaseCommand = new Command('release')
         ? trackOption
         : undefined;
 
-      const isDryRun = Boolean(options['dryRun']);
       const isValidateOnly = Boolean(options['validateOnly']);
       const isBuildOnly = Boolean(options['buildOnly']);
       const skipGit = Boolean(options['skipGit']);
       const noPush = Boolean(options['push'] === false || options['noPush'] === true);
 
       // Canlı Dağıtım Öncesi Güvenlik Kilidi ve Açık Onay
-      const isLiveRelease = !isDryRun && !isValidateOnly && !isBuildOnly;
+      const isLiveRelease = !isValidateOnly && !isBuildOnly;
       if (isLiveRelease && !options['yes'] && process.env['CI'] !== 'true') {
         const effectiveTrack = validatedTrack || 'internal';
         const gitSummary = skipGit ? 'Atlanacak' : noPush ? 'Commit + Tag (Push Yok)' : 'Commit + Tag + Push';
@@ -98,7 +96,6 @@ export const releaseCommand = new Command('release')
         targetDir,
         packageName: resolvedPackage,
         bump: validatedBump,
-        dryRun: isDryRun,
         validateOnly: isValidateOnly,
         buildOnly: isBuildOnly,
         skipAndroid: Boolean(options['skipAndroid']),
@@ -121,7 +118,6 @@ export const releaseCommand = new Command('release')
         const lower = statusStr.toLowerCase();
         if (lower.includes('success') || lower === 'live' || lower === 'uploaded') return 'success';
         if (lower.includes('fail') || lower.includes('error')) return 'failed';
-        if (lower === 'simulated') return 'success';
         if (lower.includes('processing') || lower.includes('pending')) return 'pending';
         return 'skipped';
       };

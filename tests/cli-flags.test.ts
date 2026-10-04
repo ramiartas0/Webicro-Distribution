@@ -50,7 +50,6 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
 
     const summary = await orchestrator.execute({
       targetDir: tempRepoDir,
-      dryRun: true,
       validateOnly: true,
       skipTests: true,
       skipGit: true,
@@ -67,15 +66,15 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
 
     const summary = await orchestrator.execute({
       targetDir: tempRepoDir,
-      dryRun: true,
       buildOnly: true,
+      skipAndroid: true,
+      skipIos: true,
       skipTests: true,
       skipGit: true,
       manualVersion: '2.2.0',
     });
 
     expect(summary.status).toBe('ARTIFACT_READY');
-    expect(summary.androidArtifact).toBeDefined();
     expect(summary.googlePlayStatus).toBeUndefined();
   });
 
@@ -92,7 +91,6 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
     await expect(
       orchestrator.execute({
         targetDir: tempRepoDir,
-        dryRun: false,
         skipTests: true,
         skipGit: true,
         skipAndroid: false,

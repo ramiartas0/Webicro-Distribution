@@ -13,7 +13,6 @@ export interface OrchestratorOptions {
   packageName?: string;
   bump?: 'major' | 'minor' | 'patch';
   manualVersion?: string;
-  dryRun?: boolean;
   validateOnly?: boolean;
   buildOnly?: boolean;
   skipAndroid?: boolean;

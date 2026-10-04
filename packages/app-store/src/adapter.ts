@@ -190,20 +190,9 @@ export class AppStoreAdapter {
     versionString: string,
     buildNumberString: string,
     whatsNew?: Record<string, string>,
-    submitReview?: boolean,
-    isDryRun?: boolean
+    submitReview?: boolean
   ): Promise<AppStoreUploadResult> {
     const appId = await this.getAppId();
-
-    if (isDryRun) {
-      return {
-        buildId: `simulated-${buildNumberString}`,
-        version: versionString,
-        buildNumber: buildNumberString,
-        status: 'DRY_RUN',
-        submittedForReview: false,
-      };
-    }
 
     await new Promise<void>((resolve, reject) => {
       const cmd = spawn('xcrun', [
