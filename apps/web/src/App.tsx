@@ -1018,19 +1018,21 @@ export default function App() {
           allPipelines?: ProjectPipelineState[];
         };
         if (data.allPipelines && Array.isArray(data.allPipelines)) {
+          const pipelines = data.allPipelines;
           setProjectPipelines((prev) => {
             const next = { ...prev };
-            for (const pl of data.allPipelines!) {
+            for (const pl of pipelines) {
               if (pl && pl.projectPath) {
                 next[pl.projectPath] = pl;
               }
             }
             return next;
           });
-        } else if (data.pipeline && data.pipeline.projectPath) {
+        } else if (data.pipeline?.projectPath) {
+          const pl = data.pipeline;
           setProjectPipelines((prev) => ({
             ...prev,
-            [data.pipeline!.projectPath]: data.pipeline!,
+            [pl.projectPath]: pl,
           }));
         }
       }

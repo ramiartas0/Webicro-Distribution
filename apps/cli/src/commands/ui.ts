@@ -3181,7 +3181,10 @@ export const uiCommand = new Command('ui')
 
             const meta = detectProjectMetadata(releaseTargetDir);
             const stages = createDefaultStages();
-            stages[0]!.status = 'running';
+            const firstStage = stages[0];
+            if (firstStage) {
+              firstStage.status = 'running';
+            }
 
             if (skipAndroid) {
               const androidStage = stages.find(s => s.id === 4);
@@ -3344,8 +3347,9 @@ export const uiCommand = new Command('ui')
               if (currentStatus) {
                 currentStatus.isReleasing = false;
                 currentStatus.error = errMsg;
-                if (currentStatus.stages[currentStatus.currentStageId - 1]) {
-                  currentStatus.stages[currentStatus.currentStageId - 1]!.status = 'failed';
+                const failedStage = currentStatus.stages[currentStatus.currentStageId - 1];
+                if (failedStage) {
+                  failedStage.status = 'failed';
                 }
                 currentStatus.logs.push(`[${new Date().toLocaleTimeString()}] HATA: ${errMsg}`);
 

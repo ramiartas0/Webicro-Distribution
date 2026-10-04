@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type { GitRemoteInfo, CommitAndPushResult } from './types.js';
@@ -60,12 +61,18 @@ export class GitOperations {
   private targetDir: string;
 
   constructor(repoPath?: string) {
-    this.targetDir = path.resolve(repoPath || process.cwd());
+    const raw = path.resolve(repoPath || process.cwd());
+    try {
+      this.targetDir = fs.existsSync(raw) ? fs.realpathSync(raw) : raw;
+    } catch {
+      this.targetDir = raw;
+    }
     this.git = simpleGit(this.targetDir);
   }
 
   private async getRootContext(): Promise<{ rootGit: SimpleGit; topLevel: string; rel: string }> {
-    const topLevel = (await this.git.revparse(['--show-toplevel'])).trim();
+    const rawTopLevel = (await this.git.revparse(['--show-toplevel'])).trim();
+    const topLevel = fs.existsSync(rawTopLevel) ? fs.realpathSync(rawTopLevel) : rawTopLevel;
     const rel = path.relative(topLevel, this.targetDir);
     const normalizedRel = rel && rel !== '.' ? rel.replace(/\\/g, '/') : '';
     return {

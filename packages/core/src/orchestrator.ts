@@ -142,7 +142,8 @@ export class ReleaseOrchestrator {
       emitAndRecord('Environment Check', 'IN_PROGRESS');
       let config = null;
       try {
-        config = ConfigLoader.loadFromFile(options.configPath);
+        const candidateConfig = options.configPath || (targetDir && fs.existsSync(path.join(targetDir, 'release.config.yaml')) ? path.join(targetDir, 'release.config.yaml') : undefined);
+        config = ConfigLoader.loadFromFile(candidateConfig);
       } catch {
         // Varsayılan devam et
       }
@@ -267,7 +268,7 @@ export class ReleaseOrchestrator {
       const apiKey = process.env['GEMINI_API_KEY'];
       const languages = config?.ai?.languages && config.ai.languages.length > 0 ? config.ai.languages : ['tr', 'en'];
       const shouldUseAi = !options.skipAi && config?.ai?.enabled !== false && Boolean(apiKey);
-      const provider = shouldUseAi ? new GeminiProvider({ apiKey: apiKey! }) : new ConventionalReleaseNotesProvider();
+      const provider = shouldUseAi && apiKey ? new GeminiProvider({ apiKey }) : new ConventionalReleaseNotesProvider();
       const rawValidator = new ReleaseNotesValidator();
       const validatorAdapter = {
         validate(data: unknown) {

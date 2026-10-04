@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type { GitAnalysis, ParsedCommit, GitRemoteInfo } from './types.js';
@@ -9,7 +10,12 @@ export class GitAnalyzer {
   private targetDir: string;
 
   constructor(repoPath?: string) {
-    this.targetDir = path.resolve(repoPath || process.cwd());
+    const raw = path.resolve(repoPath || process.cwd());
+    try {
+      this.targetDir = fs.existsSync(raw) ? fs.realpathSync(raw) : raw;
+    } catch {
+      this.targetDir = raw;
+    }
     this.git = simpleGit(this.targetDir);
   }
 
@@ -17,7 +23,8 @@ export class GitAnalyzer {
     try {
       const topLevel = await this.git.revparse(['--show-toplevel']);
       const trimmed = topLevel.trim();
-      const rel = path.relative(trimmed, this.targetDir);
+      const realTop = fs.existsSync(trimmed) ? fs.realpathSync(trimmed) : trimmed;
+      const rel = path.relative(realTop, this.targetDir);
       return (rel && rel !== '.') ? rel.replace(/\\/g, '/') : '';
     } catch {
       return '';
