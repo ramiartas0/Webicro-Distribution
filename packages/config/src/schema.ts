@@ -27,6 +27,7 @@ export const AndroidConfigSchema = z.object({
 export const IosConfigSchema = z.object({
   enabled: z.boolean().default(true),
   submitForReview: z.boolean().default(false),
+  bundleId: z.string().optional(),
 });
 
 export const AiConfigSchema = z.object({

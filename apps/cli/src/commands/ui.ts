@@ -2104,6 +2104,7 @@ export const uiCommand = new Command('ui')
                 suggestedBuildNumber: suggestedBuild,
                 suggestedBump,
                 package: projMeta.package || '',
+                iosBundleId: projMeta.iosBundleId || '',
                 branch: gitAnalysis.currentBranch || 'main',
                 isClean: gitAnalysis.isClean,
                 uncommittedFiles: gitAnalysis.uncommittedFiles || [],
@@ -3562,6 +3563,8 @@ export const uiCommand = new Command('ui')
             const options = JSON.parse(body || '{}') as {
               projectPath?: string;
               projectName?: string;
+              packageName?: string;
+              iosBundleId?: string;
               version?: string;
               buildNumber?: number;
               bump?: 'patch' | 'minor' | 'major';
@@ -3645,6 +3648,20 @@ export const uiCommand = new Command('ui')
             }
 
             const meta = detectProjectMetadata(releaseTargetDir);
+            const storedProjects = getStoredProjects();
+            const projItem = storedProjects.find((p) => p.path === releaseTargetDir);
+
+            const effectiveAndroidPackage =
+              options.packageName ||
+              projItem?.package ||
+              meta.package;
+            const effectiveIosBundleId =
+              options.iosBundleId ||
+              projItem?.appStoreOverrideBundleId ||
+              projItem?.iosBundleId ||
+              meta.iosBundleId ||
+              effectiveAndroidPackage;
+
             const stages = createDefaultStages();
             const firstStage = stages[0];
             if (firstStage) {
@@ -3684,6 +3701,8 @@ export const uiCommand = new Command('ui')
                 `[${new Date().toLocaleTimeString()}] Sürüm dağıtım orkestrasyonu başlatıldı...`,
                 `[${new Date().toLocaleTimeString()}] Proje: ${options.projectName || meta.name} (${releaseTargetDir})`,
                 `[${new Date().toLocaleTimeString()}] Hedef Platform: ${platformLabel}`,
+                `[${new Date().toLocaleTimeString()}] Android Paket: ${effectiveAndroidPackage || 'Tespit Edilemedi'}`,
+                `[${new Date().toLocaleTimeString()}] iOS Bundle ID: ${effectiveIosBundleId || 'Tespit Edilemedi'}`,
               ],
               completed: false,
               startedAt: new Date().toISOString(),
@@ -3758,7 +3777,8 @@ export const uiCommand = new Command('ui')
             try {
               const summary = await orchestrator.execute({
                 targetDir: releaseTargetDir,
-                packageName: meta.package || 'com.webicro.piyyuumanager',
+                packageName: effectiveAndroidPackage,
+                iosBundleId: effectiveIosBundleId,
                 bump: options.bump,
                 manualVersion: options.manualVersion || options.version,
                 validateOnly: Boolean(options.validateOnly),

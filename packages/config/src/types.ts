@@ -25,6 +25,7 @@ export interface AndroidConfig {
 export interface IosConfig {
   enabled: boolean;
   submitForReview: boolean;
+  bundleId?: string;
 }
 
 export interface AiConfig {

@@ -372,6 +372,7 @@ export default function App() {
 
   const [projectName, setProjectName] = useState<string>('');
   const [projectPackage, setProjectPackage] = useState<string>('');
+  const [projectIosBundleId, setProjectIosBundleId] = useState<string>('');
   const [gitBranch, setGitBranch] = useState<string>('');
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [currentBuildNumber, setCurrentBuildNumber] = useState<number>(0);
@@ -1084,6 +1085,7 @@ export default function App() {
         project?: {
           name: string;
           package?: string;
+          iosBundleId?: string;
           currentVersion: string;
           currentBuildNumber: number;
           suggestedVersion: string;
@@ -1133,6 +1135,7 @@ export default function App() {
       if (data.project) {
         setProjectName(data.project.name || '');
         setProjectPackage(data.project.package || '');
+        setProjectIosBundleId(data.project.iosBundleId || '');
         setCurrentVersion(data.project.currentVersion || '');
         setCurrentBuildNumber(data.project.currentBuildNumber || 0);
         setGitBranch(data.project.branch || '');
@@ -2308,6 +2311,15 @@ export default function App() {
       ),
     );
 
+    const currentProj = projects.find((p) => p.path === targetPath);
+    const effectiveAndroidPkg = projectPackage || currentProj?.package || '';
+    const effectiveIosBundle =
+      activeComparison?.appStore?.bundleId ||
+      projectIosBundleId ||
+      currentProj?.appStoreOverrideBundleId ||
+      currentProj?.iosBundleId ||
+      effectiveAndroidPkg;
+
     try {
       const response = await authFetch('/api/release/start', {
         method: 'POST',
@@ -2315,6 +2327,8 @@ export default function App() {
         body: JSON.stringify({
           projectPath: targetPath,
           projectName,
+          packageName: effectiveAndroidPkg,
+          iosBundleId: effectiveIosBundle,
           version: nextVersion,
           buildNumber: nextBuildNumber,
           androidVersion: isDecoupledVersions ? effectiveAndroidVersion : nextVersion,
@@ -2801,8 +2815,21 @@ export default function App() {
                   {projectName || (language === 'tr' ? 'Proje Seçilmedi' : 'No Project Selected')}
                 </h2>
                 {projectPackage && (
-                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border">
-                    {projectPackage}
+                  <span
+                    className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border"
+                    title={language === 'tr' ? 'Android Paket Adı' : 'Android Package'}
+                  >
+                    {projectIosBundleId && projectIosBundleId !== projectPackage
+                      ? `Android: ${projectPackage}`
+                      : projectPackage}
+                  </span>
+                )}
+                {projectIosBundleId && projectIosBundleId !== projectPackage && (
+                  <span
+                    className="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-border"
+                    title={language === 'tr' ? 'iOS Bundle Kimliği' : 'iOS Bundle ID'}
+                  >
+                    iOS: {projectIosBundleId}
                   </span>
                 )}
                 {hasPubspec && (
@@ -3965,6 +3992,10 @@ export default function App() {
                               <option value="production">{t('pipeline.trackProduction')}</option>
                             </select>
                           </div>
+                          <div className="text-[10px] font-mono text-muted-foreground bg-secondary/50 p-2 rounded border border-border flex items-center justify-between">
+                            <span>{language === 'tr' ? 'Paket Kimliği:' : 'Application ID:'}</span>
+                            <strong className="text-foreground">{projectPackage || (language === 'tr' ? 'Otomatik Tespit' : 'Auto Detect')}</strong>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -4018,6 +4049,14 @@ export default function App() {
 
                       {targetIos && (
                         <div className="space-y-2 pt-1 border-t border-border/60 text-xs text-muted-foreground">
+                          <div className="text-[10px] font-mono text-muted-foreground bg-secondary/50 p-2 rounded border border-border flex items-center justify-between">
+                            <span>{language === 'tr' ? 'Bundle Kimliği:' : 'Bundle ID:'}</span>
+                            <strong className="text-foreground">
+                              {activeComparison?.appStore?.bundleId ||
+                                projectIosBundleId ||
+                                (language === 'tr' ? 'Otomatik Tespit' : 'Auto Detect')}
+                            </strong>
+                          </div>
                           <p className="text-[11px] leading-relaxed">
                             {t('labels.ipaTestFlightDesc')}
                           </p>

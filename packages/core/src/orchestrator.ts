@@ -199,6 +199,11 @@ export class ReleaseOrchestrator {
         (targetDir ? path.basename(targetDir) : 'Project');
       const resolvedPackage =
         options.packageName || config?.project?.package || detectedMeta.package;
+      const resolvedIosBundleId =
+        options.iosBundleId ||
+        config?.ios?.bundleId ||
+        detectedMeta.iosBundleId ||
+        resolvedPackage;
 
       const shouldBuildAndroid = !options.skipAndroid && config?.android?.enabled !== false;
       if (shouldBuildAndroid && !resolvedPackage && !options.validateOnly) {
@@ -214,7 +219,26 @@ export class ReleaseOrchestrator {
         );
       }
 
-      emitAndRecord('Environment Check', 'SUCCESS', 'Flutter, Node ve konfigürasyon doğrulandı');
+      const shouldValidateIos =
+        !options.skipIos && config?.ios?.enabled !== false && process.platform === 'darwin';
+      if (shouldValidateIos && !resolvedIosBundleId && !options.validateOnly) {
+        emitAndRecord(
+          'Environment Check',
+          'FAILED',
+          undefined,
+          'iOS bundle kimliği tespit edilemedi',
+        );
+        throw new AppError(
+          'iOS Bundle kimliği (PRODUCT_BUNDLE_IDENTIFIER) tespit edilemedi. Lütfen ios/Runner.xcodeproj içinde Bundle Identifier tanımlayın veya release.config.yaml içinde ios.bundleId belirtin.',
+          'CONFIG_ERROR',
+        );
+      }
+
+      emitAndRecord(
+        'Environment Check',
+        'SUCCESS',
+        `Flutter, Node ve konfigürasyon doğrulandı (Android: ${resolvedPackage || 'atlandı'}, iOS: ${resolvedIosBundleId || 'atlandı'})`,
+      );
 
       emitAndRecord('Database Init', 'IN_PROGRESS');
       emitAndRecord('Database Init', 'SUCCESS', 'SQLite bağlantısı ve şema hazır');
@@ -847,7 +871,10 @@ export class ReleaseOrchestrator {
       let appStoreStatus = 'SKIPPED';
       if (!options.skipIos) {
         emitAndRecord('App Store Upload', 'IN_PROGRESS');
-        const credsPath = path.join(process.cwd(), '.release/credentials.json');
+        const candidateCredPaths = [
+          path.join(targetDir, '.release/credentials.json'),
+          path.join(process.cwd(), '.release/credentials.json'),
+        ];
         let creds: {
           appStore?: {
             keyId?: string;
@@ -856,10 +883,16 @@ export class ReleaseOrchestrator {
             privateKeyPath?: string;
           };
         } = {};
-        if (fs.existsSync(credsPath)) {
-          try {
-            creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-          } catch {}
+        for (const cPath of candidateCredPaths) {
+          if (fs.existsSync(cPath)) {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(cPath, 'utf8'));
+              if (parsed.appStore) {
+                creds = parsed;
+                break;
+              }
+            } catch {}
+          }
         }
 
         if (iosArtifact && creds.appStore?.keyId && creds.appStore?.issuerId) {
@@ -870,10 +903,23 @@ export class ReleaseOrchestrator {
                 ? String(options.iosBuildNumber)
                 : resolution.buildNumberString;
 
+            const effectiveBundleId =
+              resolvedIosBundleId ||
+              options.iosBundleId ||
+              detectedMeta.iosBundleId ||
+              resolvedPackage;
+
+            if (!effectiveBundleId) {
+              throw new AppError(
+                'App Store Connect yüklemesi için geçerli bir iOS Bundle ID (PRODUCT_BUNDLE_IDENTIFIER) bulunamadı.',
+                'CONFIG_ERROR',
+              );
+            }
+
             const adapter = new AppStoreAdapter({
               keyId: creds.appStore.keyId,
               issuerId: creds.appStore.issuerId,
-              bundleId: config?.project?.package || 'com.webicro.app',
+              bundleId: effectiveBundleId,
               privateKeyPath: creds.appStore.privateKeyPath,
               privateKeyContent: creds.appStore.privateKey,
             });
@@ -894,7 +940,7 @@ export class ReleaseOrchestrator {
             emitAndRecord(
               'App Store Upload',
               'SUCCESS',
-              `App Store Connect'e yüklendi: ${uploadRes.buildId}`,
+              `App Store Connect'e yüklendi: Paket ${effectiveBundleId} (${uploadRes.buildId})`,
             );
           } catch (uploadErr: unknown) {
             const msg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);

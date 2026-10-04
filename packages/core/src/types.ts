@@ -12,6 +12,7 @@ export interface OrchestratorOptions {
   configPath?: string;
   targetDir?: string;
   packageName?: string;
+  iosBundleId?: string;
   bump?: 'major' | 'minor' | 'patch';
   manualVersion?: string;
   validateOnly?: boolean;
