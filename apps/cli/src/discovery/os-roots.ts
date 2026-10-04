@@ -14,17 +14,16 @@ export function getPlatformSpecificDevRoots(customRoots?: string[]): string[] {
   const home = os.homedir() || process.env['HOME'] || process.env['USERPROFILE'] || '';
   const roots: string[] = [];
 
-  // 1. Ev Dizinindeki Standart Geliştirici Klasörleri (Tüm İşletim Sistemleri)
+  // 1. Ev Dizinindeki Standart Geliştirici & IDE Klasörleri (Tüm İşletim Sistemleri)
   if (home && fs.existsSync(home)) {
     const standardHomeDevDirs = [
+      'Desktop',
+      'Documents',
+      'Downloads',
       'Projects',
       'projects',
       'Workspace',
       'workspace',
-      'Desktop',
-      'Desktop/DEV',
-      'DEV',
-      'dev',
       'Development',
       'development',
       'Developer',
@@ -33,8 +32,12 @@ export function getPlatformSpecificDevRoots(customRoots?: string[]): string[] {
       'src',
       'repos',
       'apps',
-      'Documents',
       'Sites',
+      'AndroidStudioProjects',
+      'IdeaProjects',
+      'GitHub',
+      'GitLab',
+      'Bitbucket',
       path.join('source', 'repos'),
     ];
 
@@ -44,6 +47,39 @@ export function getPlatformSpecificDevRoots(customRoots?: string[]): string[] {
         roots.push(path.resolve(full));
       }
     }
+
+    // Ev dizini (~) altındaki 1. seviye tüm kullanıcı klasörlerini dinamik olarak tara
+    // (Böylece kullanıcının kendi açtığı ~/DEV, ~/Work, ~/mobil, ~/flutter_apps gibi tüm özel dizinler otomatik bulunur)
+    try {
+      const homeEntries = fs.readdirSync(home, { withFileTypes: true });
+      const ignoreHomeFolders = new Set([
+        'Library',
+        'Applications',
+        'Application Support',
+        'AppData',
+        'Local Settings',
+        'Music',
+        'Movies',
+        'Pictures',
+        'Photos',
+        'Videos',
+        'Podcasts',
+        'Public',
+        '.Trash',
+        'webicro_distribution',
+      ]);
+
+      for (const entry of homeEntries) {
+        if (entry.isDirectory()) {
+          const dirName = entry.name;
+          if (dirName.startsWith('.')) continue; // Gizli klasörleri atla (.ssh, .config, .cache vb.)
+          if (ignoreHomeFolders.has(dirName)) continue;
+
+          const candidate = path.join(home, dirName);
+          roots.push(path.resolve(candidate));
+        }
+      }
+    } catch {}
   }
 
   // 2. Windows'a Özgü Disk Sürücüleri Taraması (C:\, D:\, E:\, F:\, G:\)
