@@ -50,4 +50,52 @@ describe('AIDiagnostician', () => {
     expect(diagnosis?.category).toBe('APP_CODE');
     expect(diagnosis?.source).toBe('flutter_code');
   });
+
+  it('Apple App Store Connect eksik platform alanı 409 hatasını doğru tespit etmeli', () => {
+    const errorText = `API request failed: Conflict {
+  "errors" : [ {
+    "id" : "ca01edcd-aaba-43ef-bb2f-6cbb1f7c29be",
+    "status" : "409",
+    "code" : "ENTITY_ERROR.ATTRIBUTE.REQUIRED",
+    "title" : "The provided entity is missing a required attribute",
+    "detail" : "You must provide a value for the attribute 'platform' with this request",
+    "source" : {
+      "pointer" : "/data/attributes/platform"
+    }
+  } ]
+}`;
+    const diagnosis = AIDiagnostician.diagnoseHeuristics({
+      failedStep: 'App Store Upload',
+      errorText,
+      recentLogs: [errorText],
+    });
+
+    expect(diagnosis).not.toBeNull();
+    expect(diagnosis?.category).toBe('STORE_API');
+    expect(diagnosis?.source).toBe('app_store');
+    expect(diagnosis?.categoryTitle).toContain('Platform Parametresi');
+    expect(diagnosis?.rootCause).toContain('platform');
+  });
+
+  it('Google Play This Edit has been deleted hatasını doğru tespit etmeli', () => {
+    const errorText = `HATA: Google Play API hatası (uploadBundle): Bundle yüklenemedi (HTTP 400): {
+  "error": {
+    "code": 400,
+    "message": "This Edit has been deleted.",
+    "status": "FAILED_PRECONDITION"
+  }
+}`;
+    const diagnosis = AIDiagnostician.diagnoseHeuristics({
+      failedStep: 'Google Play Upload',
+      errorText,
+      recentLogs: [errorText],
+    });
+
+    expect(diagnosis).not.toBeNull();
+    expect(diagnosis?.category).toBe('STORE_API');
+    expect(diagnosis?.source).toBe('google_play');
+    expect(diagnosis?.categoryTitle).toContain('Edit Oturumu Silinme');
+    expect(diagnosis?.rootCause).toContain('(Edit) oturumu');
+  });
 });
+

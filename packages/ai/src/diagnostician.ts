@@ -177,6 +177,53 @@ export class AIDiagnostician {
       };
     }
 
+    if (
+      (combinedText.includes('entity_error.attribute.required') &&
+        combinedText.includes('platform')) ||
+      (combinedText.includes('missing a required attribute') &&
+        combinedText.includes('platform')) ||
+      combinedText.includes('/data/attributes/platform')
+    ) {
+      return {
+        category: 'STORE_API',
+        categoryTitle: 'Apple App Store Connect API Platform Parametresi Hatası',
+        source: 'app_store',
+        sourceLabel: 'Apple App Store Connect API (v1 /appStoreVersions)',
+        rootCause:
+          'App Store Connect sürüm kaydı oluşturulurken Apple API tarafından zorunlu tutulan "platform": "IOS" parametresi eksik gönderildi.',
+        explanation:
+          'Uygulamanın iOS IPA derlemesi ve altool yüklemesi başarıyla tamamlanmış ve Apple build durumu geçerli (VALID) hale gelmiştir. Ancak sürüm kaydı (/appStoreVersions) API isteğinde platform alanı gönderilmediği için Apple sunucusu 409 Conflict hatası döndürmüştür. Sorun uygulamanın Flutter kodundan veya derlemesinden kaynaklanmamaktadır.',
+        autoFixAvailable: false,
+        autoFixAction: 'NONE',
+        solutionSteps: [
+          'Dağıtım motorundaki App Store Connect sürüm oluşturma isteğine zorunlu "platform": "IOS" parametresi eklendi.',
+          'IPA paketi halihazırda Apple sunucularında VALID olarak beklediğinden, dağıtımı yeniden başlattığınızda sürüm kaydı ve yayına gönderme sorunsuz tamamlanacaktır.',
+        ],
+      };
+    }
+
+    if (
+      combinedText.includes('this edit has been deleted') ||
+      (combinedText.includes('failed_precondition') && combinedText.includes('edit'))
+    ) {
+      return {
+        category: 'STORE_API',
+        categoryTitle: 'Google Play Console Edit Oturumu Silinme / Çakışma Hatası',
+        source: 'google_play',
+        sourceLabel: 'Google Play Publisher API (Edits)',
+        rootCause:
+          'Google Play üzerinde açılan taslak (Edit) oturumu, eşzamanlı bir mağaza sorgusu veya diğer dağıtımın rollback işlemi nedeniyle silindi veya geçersiz kılındı.',
+        explanation:
+          'Google Play Android Publisher API kuralları uyarınca bir paket adı için aynı anda yalnızca TEK bir Edit oturumu açık olabilir. Başka bir işlem (örneğin mağaza sürüm taraması veya eşzamanlı bir rollback çağrısı) yeni bir Edit açtığında ya da mevcut Edit oturumunu kapattığında, devam eden AAB yüklemesi veya track atama işlemi "This Edit has been deleted" hatası alır. Flutter derlemesi veya AAB paketinde bir hata yoktur.',
+        autoFixAvailable: false,
+        autoFixAction: 'NONE',
+        solutionSteps: [
+          'Dağıtım motoruna paket bazlı "Edit Kilidi" (Active Release Edit Lock) entegre edildi; böylece yayın sırasında hiçbir arka plan sorgusu açık Edit oturumunu bozamayacak.',
+          'Dağıtım boru hattını yeniden başlatın; yeni ve izole bir Edit oturumu açılarak AAB paketi başarıyla yüklenecektir.',
+        ],
+      };
+    }
+
     return null;
   }
 
