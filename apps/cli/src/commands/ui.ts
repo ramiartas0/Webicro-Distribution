@@ -3673,11 +3673,17 @@ export const uiCommand = new Command('ui')
         return;
       }
 
-      let reqPath = req.url === '/' || !req.url ? '/index.html' : req.url;
-      reqPath = reqPath.split('?')[0] || '/index.html';
+      let reqPath = req.url ? req.url.split('?')[0] : '/';
+      if (!reqPath || reqPath === '/' || reqPath === '') {
+        reqPath = '/index.html';
+      }
 
       let filePath = path.join(staticDir, reqPath);
-      if (!fs.existsSync(filePath)) {
+      try {
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+          filePath = path.join(staticDir, 'index.html');
+        }
+      } catch {
         filePath = path.join(staticDir, 'index.html');
       }
 
@@ -3686,8 +3692,10 @@ export const uiCommand = new Command('ui')
 
       fs.readFile(filePath, (err, content) => {
         if (err) {
-          res.writeHead(500);
-          res.end('Server error loading dashboard');
+          res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(
+            `<!doctype html><html><body><h1>500 - Panel Yüklenemedi</h1><p>${err.message}</p></body></html>`,
+          );
         } else {
           if (ext === '.html') {
             let htmlStr = content.toString('utf-8');
