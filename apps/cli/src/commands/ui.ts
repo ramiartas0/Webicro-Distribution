@@ -1460,6 +1460,16 @@ export const uiCommand = new Command('ui')
         return;
       }
 
+      if (req.method === 'POST' && pathname === '/api/system/shutdown') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Webicro dashboard shutting down' }));
+        setTimeout(() => {
+          clack.log.info(chalk.yellow('Web arayüzünden kapatma komutu alındı. Webicro güvenle sonlandırılıyor...'));
+          process.exit(0);
+        }, 300);
+        return;
+      }
+
       if (req.method === 'POST' && pathname === '/api/projects/switch') {
         let body = '';
         req.on('data', (chunk) => {
@@ -3654,7 +3664,11 @@ export const uiCommand = new Command('ui')
           `Oturum Tokenı: ${serverSessionToken.substring(0, 8)}... (Yalnızca yerel loopback erişimine izin verilir)`,
         ),
       );
-      clack.log.info(chalk.dim('Durdurmak için Ctrl+C tuşlarına basın.'));
+      const stopHint =
+        process.platform === 'darwin'
+          ? 'Durdurmak için Control + C (⌃C) tuşlarına basın veya Web Dashboard üzerinden [Sunucuyu Kapat] butonuna tıklayın.'
+          : 'Durdurmak için Ctrl + C tuşlarına basın veya Web Dashboard üzerinden [Sunucuyu Kapat] butonuna tıklayın.';
+      clack.log.info(chalk.dim(stopHint));
 
       const startCmd =
         process.platform === 'darwin'

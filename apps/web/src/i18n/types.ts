@@ -58,6 +58,9 @@ export interface TranslationDictionary {
     saveAndPush: string;
     pushing: string;
     noActiveProject: string;
+    shutdown: string;
+    shutdownConfirm: string;
+    shutdownSuccess: string;
     switchThemeToDark: string;
     switchThemeToLight: string;
     themeChanged: string;

@@ -35,6 +35,7 @@ import {
   FileText,
   Zap,
   Languages,
+  Power,
 } from 'lucide-react';
 import { GooglePlayIcon, AppStoreConnectIcon, ProjectAppIcon } from './components/icons';
 import { Tooltip } from './components/ui/tooltip.js';
@@ -2254,6 +2255,16 @@ export default function App() {
     }
   };
 
+  const handleShutdownServer = async () => {
+    if (!window.confirm(t('header.shutdownConfirm'))) return;
+    try {
+      await authFetch('/api/system/shutdown', { method: 'POST' });
+      toast.info(t('header.shutdownSuccess'), t('header.shutdown'));
+    } catch {
+      toast.info(t('header.shutdownSuccess'), t('header.shutdown'));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans selection:bg-primary selection:text-primary-foreground">
       {}
@@ -2855,6 +2866,18 @@ export default function App() {
                   className={`w-3.5 h-3.5 ${isSyncingStores ? 'animate-spin text-primary' : ''}`}
                 />
                 <span>{isSyncingStores ? t('header.syncingStores') : t('header.syncStores')}</span>
+              </button>
+            </Tooltip>
+
+            <Tooltip content={t('header.shutdown')} position="bottom">
+              <button
+                type="button"
+                onClick={() => void handleShutdownServer()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20 text-xs font-medium transition-all cursor-pointer"
+                title={t('header.shutdown')}
+              >
+                <Power className="w-3.5 h-3.5" />
+                <span>{language === 'tr' ? 'Kapat' : 'Stop'}</span>
               </button>
             </Tooltip>
           </div>
