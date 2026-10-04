@@ -939,46 +939,52 @@ export class ReleaseOrchestrator {
         if (options.notesTr) playNotes.push({ language: 'tr-TR', text: options.notesTr });
         if (options.notesEn) playNotes.push({ language: 'en-US', text: options.notesEn });
 
-        if (atomicRelease) {
-          // İki aşamalı taahhüt: Önce taslak (draft) olarak yükle, App Store tamamlanmadan commit etme
-          const draftRes = await googleAdapter.uploadDraftOnly(
-            androidArtifact.filePath,
-            playNotes.length > 0 ? playNotes : undefined,
-          );
-          draftHolder.draft = draftRes;
-          emitAndRecord(
-            'Google Play Upload',
-            'IN_PROGRESS',
-            `AAB paketi yüklendi (v${draftRes.versionCode}), App Store tamamlanması bekleniyor (Atomik Taslak)...`,
-          );
-          return draftRes;
-        } else {
-          const uploadRes = await googleAdapter.uploadAndRelease(
-            androidArtifact.filePath,
-            playNotes.length > 0 ? playNotes : undefined,
-          );
-          storeSubmissionRepo.create({
-            releaseId,
-            store: 'google_play',
-            version: effectiveAndroidVersion,
-            status: uploadRes.status,
-            externalId: String(uploadRes.versionCode),
-            error: null,
-          });
-          googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
-          const trackDisplayNames: Record<string, string> = {
-            internal: 'Dahili test',
-            alpha: 'Kapalı test',
-            beta: 'Açık test',
-            production: 'Üretim',
-          };
-          const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
-          emitAndRecord(
-            'Google Play Upload',
-            'SUCCESS',
-            `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
-          );
-          return uploadRes;
+        try {
+          if (atomicRelease) {
+            // İki aşamalı taahhüt: Önce taslak (draft) olarak yükle, App Store tamamlanmadan commit etme
+            const draftRes = await googleAdapter.uploadDraftOnly(
+              androidArtifact.filePath,
+              playNotes.length > 0 ? playNotes : undefined,
+            );
+            draftHolder.draft = draftRes;
+            emitAndRecord(
+              'Google Play Upload',
+              'IN_PROGRESS',
+              `AAB paketi yüklendi (v${draftRes.versionCode}), App Store tamamlanması bekleniyor (Atomik Taslak)...`,
+            );
+            return draftRes;
+          } else {
+            const uploadRes = await googleAdapter.uploadAndRelease(
+              androidArtifact.filePath,
+              playNotes.length > 0 ? playNotes : undefined,
+            );
+            storeSubmissionRepo.create({
+              releaseId,
+              store: 'google_play',
+              version: effectiveAndroidVersion,
+              status: uploadRes.status,
+              externalId: String(uploadRes.versionCode),
+              error: null,
+            });
+            googlePlayStatus = `SUCCESS (v${uploadRes.versionCode})`;
+            const trackDisplayNames: Record<string, string> = {
+              internal: 'Dahili test',
+              alpha: 'Kapalı test',
+              beta: 'Açık test',
+              production: 'Üretim',
+            };
+            const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+            emitAndRecord(
+              'Google Play Upload',
+              'SUCCESS',
+              `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+            );
+            return uploadRes;
+          }
+        } catch (gpErr: unknown) {
+          const gpMsg = gpErr instanceof Error ? gpErr.message : String(gpErr);
+          emitAndRecord('Google Play Upload', 'FAILED', undefined, gpMsg);
+          throw gpErr;
         }
       };
 
@@ -1000,32 +1006,38 @@ export class ReleaseOrchestrator {
         }
 
         emitAndRecord('App Store Upload', 'IN_PROGRESS');
-        const uploadRes = await appStoreAdapter.uploadAndRelease(
-          iosArtifact.filePath,
-          effectiveIosVersion,
-          effectiveIosBuildNumber,
-          undefined,
-          undefined,
-          {
-            signal,
-            onProgress: (m: string) => emitProgress('App Store Upload', m),
-          },
-        );
-        storeSubmissionRepo.create({
-          releaseId,
-          store: 'app_store',
-          version: effectiveIosVersion,
-          status: uploadRes.status,
-          externalId: uploadRes.buildId,
-          error: null,
-        });
-        appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
-        emitAndRecord(
-          'App Store Upload',
-          'SUCCESS',
-          `App Store Connect'e yüklendi: Paket ${effectiveIosBundleId} (${uploadRes.buildId})`,
-        );
-        return uploadRes;
+        try {
+          const uploadRes = await appStoreAdapter.uploadAndRelease(
+            iosArtifact.filePath,
+            effectiveIosVersion,
+            effectiveIosBuildNumber,
+            undefined,
+            undefined,
+            {
+              signal,
+              onProgress: (m: string) => emitProgress('App Store Upload', m),
+            },
+          );
+          storeSubmissionRepo.create({
+            releaseId,
+            store: 'app_store',
+            version: effectiveIosVersion,
+            status: uploadRes.status,
+            externalId: uploadRes.buildId,
+            error: null,
+          });
+          appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
+          emitAndRecord(
+            'App Store Upload',
+            'SUCCESS',
+            `App Store Connect'e yüklendi: Paket ${effectiveIosBundleId} (${uploadRes.buildId})`,
+          );
+          return uploadRes;
+        } catch (asErr: unknown) {
+          const asMsg = asErr instanceof Error ? asErr.message : String(asErr);
+          emitAndRecord('App Store Upload', 'FAILED', undefined, asMsg);
+          throw asErr;
+        }
       };
 
       try {
@@ -1081,9 +1093,9 @@ export class ReleaseOrchestrator {
             await googleAdapter.discardDraft(draftHolder.draft.editId);
             emitAndRecord(
               'Google Play Upload',
-              'FAILED',
-              undefined,
-              'Diğer mağaza yüklemesi başarısız olduğu için Google Play taslak yayını iptal edildi (Rollback). Mağazalar arası uyumsuzluk önlendi.',
+              'SKIPPED',
+              'Google Play taslak yayını geri alındı (Rollback).',
+              'App Store yüklemesi başarısız olduğu için Google Play taslak yayını iptal edildi (Rollback). Mağazalar arası sürüm uyumsuzluğu önlendi.',
             );
           } catch {}
         }

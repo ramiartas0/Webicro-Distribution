@@ -31,7 +31,9 @@ describe('CLI Safety Flags & Orchestrator Modes', () => {
 
   afterEach(() => {
     if (fs.existsSync(tempRepoDir)) {
-      fs.rmSync(tempRepoDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tempRepoDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      } catch {}
     }
   });
 
