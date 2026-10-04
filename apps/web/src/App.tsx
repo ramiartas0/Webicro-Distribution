@@ -291,6 +291,12 @@ export default function App() {
   const [isSyncingStores, setIsSyncingStores] = useState<boolean>(false);
   const [isSyncingStoreVersion, setIsSyncingStoreVersion] = useState<boolean>(false);
   const [syncStoreSuccessMsg, setSyncStoreSuccessMsg] = useState<string | null>(null);
+  const [syncStorePersistentNote, setSyncStorePersistentNote] = useState<string | null>(null);
+  const [isDecoupledVersions, setIsDecoupledVersions] = useState<boolean>(true);
+  const [customAndroidVersion, setCustomAndroidVersion] = useState<string>('');
+  const [customAndroidBuildNumber, setCustomAndroidBuildNumber] = useState<number | ''>('');
+  const [customIosVersion, setCustomIosVersion] = useState<string>('');
+  const [customIosBuildNumber, setCustomIosBuildNumber] = useState<number | ''>('');
   const [appleConnectApps, setAppleConnectApps] = useState<
     { id: string; name: string; bundleId: string; sku?: string }[]
   >([]);
@@ -839,6 +845,47 @@ export default function App() {
   const nextVersion = calculateNextVersion();
   const nextBuildNumber = currentBuildNumber + 1;
 
+  const androidBaseVer = activeComparison?.googlePlay?.version
+    ? activeComparison.googlePlay.version.replace(/^v/, '')
+    : currentVersion;
+  const androidBaseBuild = activeComparison?.googlePlay?.versionCode || currentBuildNumber;
+
+  const appleBaseVer = activeComparison?.appStore?.version
+    ? activeComparison.appStore.version.replace(/^v/, '')
+    : currentVersion;
+  const appleBaseBuild = activeComparison?.appStore?.buildNumber
+    ? parseInt(activeComparison.appStore.buildNumber, 10) || currentBuildNumber
+    : currentBuildNumber;
+
+  const calculateDecoupledVersion = useCallback(
+    (baseVer: string, bump: typeof bumpType) => {
+      if (bump === 'custom' && customVersion) return customVersion;
+      const clean = baseVer ? baseVer.replace(/^v/, '') : '1.0.0';
+      const parts = clean.split('.').map((p) => parseInt(p, 10) || 0);
+      const major = parts[0] ?? 1;
+      const minor = parts[1] ?? 0;
+      const patch = parts[2] ?? 0;
+      if (bump === 'major') return `${major + 1}.0.0`;
+      if (bump === 'minor') return `${major}.${minor + 1}.0`;
+      return `${major}.${minor}.${patch + 1}`;
+    },
+    [customVersion],
+  );
+
+  const defaultAndroidNextVer = calculateDecoupledVersion(androidBaseVer, bumpType);
+  const defaultAndroidNextBuild = androidBaseBuild + 1;
+
+  const defaultIosNextVer = calculateDecoupledVersion(appleBaseVer, bumpType);
+  const defaultIosNextBuild = appleBaseBuild + 1;
+
+  const effectiveAndroidVersion = customAndroidVersion || defaultAndroidNextVer;
+  const effectiveAndroidBuildNumber =
+    customAndroidBuildNumber !== '' ? Number(customAndroidBuildNumber) : defaultAndroidNextBuild;
+
+  const effectiveIosVersion = customIosVersion || defaultIosNextVer;
+  const effectiveIosBuildNumber =
+    customIosBuildNumber !== '' ? Number(customIosBuildNumber) : defaultIosNextBuild;
+
   const loadStoreCredentials = useCallback(async () => {
     try {
       const res = await authFetch('/api/stores/credentials');
@@ -1348,10 +1395,17 @@ export default function App() {
             data.message ||
             `pubspec.yaml ${language === 'tr' ? `başarıyla v${data.formatted} olarak eşitlendi.` : `successfully synced to v${data.formatted}.`}`;
           setSyncStoreSuccessMsg(successMsg);
+
+          const diffNote =
+            (data as { storeDifferenceNote?: string }).storeDifferenceNote ||
+            (language === 'tr'
+              ? `pubspec.yaml yerel sürümü v${data.formatted} olarak eşitlendi. Google Play ve App Store mağaza sürümleri farklıysa, dağıtım sırasında "Bağımsız Platform Sürümleme" seçeneğiyle her mağazayı kendi sürümünden eşitlemeden gönderebilirsiniz.`
+              : `pubspec.yaml synced to v${data.formatted}. You can use decoupled platform versioning during release to avoid forcing the same version across different stores.`);
+          setSyncStorePersistentNote(diffNote);
+
           toast.success(successMsg, language === 'tr' ? 'Sürüm Eşitlendi' : 'Version Synced');
           await fetchProjectDetails(target);
           await handleSyncStores();
-          setTimeout(() => setSyncStoreSuccessMsg(null), 6000);
         } else if (data.error) {
           toast.warning(data.error, language === 'tr' ? 'Eşitleme Uyarısı' : 'Sync Warning');
         }
@@ -2209,6 +2263,11 @@ export default function App() {
           projectName,
           version: nextVersion,
           buildNumber: nextBuildNumber,
+          androidVersion: isDecoupledVersions ? effectiveAndroidVersion : nextVersion,
+          androidBuildNumber: isDecoupledVersions ? effectiveAndroidBuildNumber : nextBuildNumber,
+          iosVersion: isDecoupledVersions ? effectiveIosVersion : nextVersion,
+          iosBuildNumber: isDecoupledVersions ? effectiveIosBuildNumber : nextBuildNumber,
+          decoupledVersions: isDecoupledVersions,
           bump: bumpType === 'custom' ? undefined : bumpType,
           manualVersion: bumpType === 'custom' ? customVersion : undefined,
           targetPlatform: platformMode,
@@ -3252,7 +3311,7 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center shrink-0">
-                        {canSyncToHigher ? (
+                        {canSyncToHigher && !isLocalEqual ? (
                           <Tooltip
                             content={t('labels.autoSyncLowerVersionDesc')}
                             position="top"
@@ -3285,20 +3344,81 @@ export default function App() {
                               </span>
                             </div>
                           </Tooltip>
+                        ) : isLocalEqual ? (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground font-semibold text-xs cursor-default">
+                            <CheckCircle2 className="w-4 h-4 text-primary" />
+                            <span>
+                              {language === 'tr'
+                                ? `Yerel Kod Eşitlendi (v${highestVersion} #${highestBuildNumber})`
+                                : `Local Code Synced (v${highestVersion} #${highestBuildNumber})`}
+                            </span>
+                          </div>
                         ) : null}
                       </div>
                     </div>
+
+                    {/* KALICI SÜRÜM SENKRONİZASYONU & BAĞIMSIZ DAĞITIM BİLGİLENDİRME NOTU */}
+                    {(syncStorePersistentNote || (!areAllInSync && hasAnyStoreLive)) && (
+                      <div className="p-4 rounded-xl bg-secondary/70 border border-border text-xs space-y-2 relative animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-foreground">
+                            <Info className="w-4 h-4 text-primary shrink-0" />
+                            <span>
+                              {language === 'tr'
+                                ? 'Sürüm Senkronizasyonu & Bağımsız Dağıtım Notu'
+                                : 'Version Synchronization & Decoupled Release Note'}
+                            </span>
+                          </div>
+                          {syncStorePersistentNote && (
+                            <button
+                              type="button"
+                              onClick={() => setSyncStorePersistentNote(null)}
+                              className="text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                              title={language === 'tr' ? 'Kapat' : 'Dismiss'}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground leading-relaxed">
+                          {syncStorePersistentNote ||
+                            (language === 'tr'
+                              ? `Google Play (v${googleVer || '-'} #${googleCode || '-'}) ile Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) sürümleri birbirinden farklıdır. pubspec.yaml yerel sürümü en yüksek mağaza doğrultusunda güncellendi. Dağıtım yaparken aşağıdaki "Bağımsız Platform Sürümleme" seçeneğiyle her iki mağazanın sürümlerini birbirine eşitlemeden kendi geçmişlerine göre artırarak gönderebilirsiniz.`
+                              : `Google Play (v${googleVer || '-'} #${googleCode || '-'}) and Apple App Store (v${appleVer || '-'} #${appleCode || '-'}) versions differ. You can use Decoupled Platform Versioning below to release them without forcing the same version.`)}
+                        </p>
+                        {!areAllInSync && hasAnyStoreLive && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <span className="px-2 py-0.5 rounded bg-background border border-border text-foreground text-[11px] font-mono">
+                              Google Play: v{googleVer || '-'} #{googleCode || '-'}
+                            </span>
+                            <span className="text-muted-foreground">•</span>
+                            <span className="px-2 py-0.5 rounded bg-background border border-border text-foreground text-[11px] font-mono">
+                              App Store: v{appleVer || '-'} #{appleCode || '-'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* EŞİTLEME BAŞARI BİLDİRİMİ */}
+                    {syncStoreSuccessMsg && (
+                      <div className="p-3 rounded-lg bg-secondary border border-border text-xs text-foreground flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-foreground" />
+                          <span className="font-semibold">{syncStoreSuccessMsg}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSyncStoreSuccessMsg(null)}
+                          className="text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </>
                 );
               })()}
-
-              {/* EŞİTLEME BAŞARI BİLDİRİMİ */}
-              {syncStoreSuccessMsg && (
-                <div className="p-3 rounded-lg bg-secondary border border-border text-xs text-foreground flex items-center gap-2 animate-in fade-in duration-200">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-foreground" />
-                  <span className="font-semibold">{syncStoreSuccessMsg}</span>
-                </div>
-              )}
             </section>
 
             {/* ===================== SÜRÜM DAĞITIM MERKEZİ & FORMU ===================== */}
@@ -3376,6 +3496,118 @@ export default function App() {
                         {nextVersion}+{nextBuildNumber}
                       </span>
                     </div>
+                  </div>
+
+                  {/* BAĞIMSIZ PLATFORM SÜRÜMLEME (MAĞAZALARI EŞİTLEMEYEREK GÖNDER) */}
+                  <div className="pt-3 border-t border-border/60 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs select-none">
+                        <input
+                          type="checkbox"
+                          checked={isDecoupledVersions}
+                          onChange={(e) => setIsDecoupledVersions(e.target.checked)}
+                          className="rounded border-border text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span className="font-bold text-foreground">
+                          {language === 'tr'
+                            ? 'Mağaza Sürümlerini Eşitlemeyerek Gönder (Bağımsız Dağıtım)'
+                            : 'Release Without Syncing Store Versions (Decoupled Mode)'}
+                        </span>
+                      </label>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full border border-border bg-secondary font-mono text-muted-foreground">
+                        {isDecoupledVersions
+                          ? (language === 'tr' ? 'Bağımsız Aktif' : 'Decoupled Active')
+                          : (language === 'tr' ? 'Ortak Sürüm' : 'Unified Version')}
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-normal">
+                      {language === 'tr'
+                        ? 'Google Play ve Apple App Store mevcut sürümleri farklıysa, her iki mağazayı birbirine zorla eşitlemeden kendi sürüm geçmişlerine göre bağımsız artışla derleyip gönderir.'
+                        : 'If Google Play and App Store have different versions, compiles and releases each store independently based on its own version history.'}
+                    </p>
+
+                    {isDecoupledVersions && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* ANDROID (GOOGLE PLAY) HEDEFİ */}
+                        <div className="p-3 rounded-lg bg-secondary/40 border border-border space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <GooglePlayIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span>Google Play</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              Mevcut: v{androidBaseVer} #{androidBaseBuild}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-muted-foreground block mb-0.5">Sürüm:</label>
+                              <input
+                                type="text"
+                                value={effectiveAndroidVersion}
+                                onChange={(e) => setCustomAndroidVersion(e.target.value)}
+                                className="w-full text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder={defaultAndroidNextVer}
+                              />
+                            </div>
+                            <div className="w-20">
+                              <label className="text-[10px] text-muted-foreground block mb-0.5">Build #:</label>
+                              <input
+                                type="number"
+                                value={effectiveAndroidBuildNumber}
+                                onChange={(e) =>
+                                  setCustomAndroidBuildNumber(
+                                    e.target.value ? parseInt(e.target.value, 10) : '',
+                                  )
+                                }
+                                className="w-full text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder={String(defaultAndroidNextBuild)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* IOS (APP STORE) HEDEFİ */}
+                        <div className="p-3 rounded-lg bg-secondary/40 border border-border space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-foreground flex items-center gap-1.5">
+                              <AppStoreConnectIcon className="w-3.5 h-3.5 shrink-0" />
+                              <span>Apple App Store</span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              Mevcut: v{appleBaseVer} #{appleBaseBuild}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-muted-foreground block mb-0.5">Sürüm:</label>
+                              <input
+                                type="text"
+                                value={effectiveIosVersion}
+                                onChange={(e) => setCustomIosVersion(e.target.value)}
+                                className="w-full text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder={defaultIosNextVer}
+                              />
+                            </div>
+                            <div className="w-20">
+                              <label className="text-[10px] text-muted-foreground block mb-0.5">Build #:</label>
+                              <input
+                                type="number"
+                                value={effectiveIosBuildNumber}
+                                onChange={(e) =>
+                                  setCustomIosBuildNumber(
+                                    e.target.value ? parseInt(e.target.value, 10) : '',
+                                  )
+                                }
+                                className="w-full text-xs font-mono px-2 py-1.5 rounded border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                                placeholder={String(defaultIosNextBuild)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -3870,11 +4102,22 @@ export default function App() {
                         {projectName}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start">
                       <span className="text-muted-foreground">{t('labels.targetVersionColon')}</span>
-                      <span className="font-mono font-bold text-foreground">
-                        {nextVersion}+{nextBuildNumber}
-                      </span>
+                      {isDecoupledVersions && targetAndroid && targetIos ? (
+                        <div className="text-right font-mono text-[11px] space-y-0.5">
+                          <div className="text-foreground font-bold">
+                            Android: v{effectiveAndroidVersion}+{effectiveAndroidBuildNumber}
+                          </div>
+                          <div className="text-muted-foreground font-semibold">
+                            iOS: v{effectiveIosVersion}+{effectiveIosBuildNumber}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="font-mono font-bold text-foreground">
+                          {nextVersion}+{nextBuildNumber}
+                        </span>
+                      )}
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">{t('labels.targetPlatformColon')}</span>

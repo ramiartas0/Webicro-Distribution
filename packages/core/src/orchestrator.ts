@@ -554,12 +554,18 @@ export class ReleaseOrchestrator {
           );
         } else {
           emitAndRecord('Android Build', 'IN_PROGRESS');
+          const effectiveAndroidVersion = options.androidVersion || resolution.versionString;
+          const effectiveAndroidBuildNumber =
+            options.androidBuildNumber !== undefined
+              ? options.androidBuildNumber
+              : resolution.next.buildNumber;
+
           try {
             const builder = new AndroidBuilder();
             const buildRes = await builder.build(
               {
-                buildName: resolution.versionString,
-                buildNumber: resolution.next.buildNumber,
+                buildName: effectiveAndroidVersion,
+                buildNumber: effectiveAndroidBuildNumber,
                 onLog: (line) => {
                   if (
                     line.includes('Gradle') ||
@@ -579,7 +585,7 @@ export class ReleaseOrchestrator {
             emitAndRecord(
               'Android Build',
               'SUCCESS',
-              `AAB derlendi: ${path.basename(buildRes.aabPath)}`,
+              `AAB derlendi (v${effectiveAndroidVersion}+${effectiveAndroidBuildNumber}): ${path.basename(buildRes.aabPath)}`,
             );
 
             emitAndRecord('Android Verify', 'IN_PROGRESS');
@@ -587,7 +593,7 @@ export class ReleaseOrchestrator {
             androidArtifact = await artifactMgr.registerArtifact(
               'android',
               buildRes.aabPath,
-              resolution.versionString,
+              effectiveAndroidVersion,
             );
             artifactRepo.create({
               releaseId,
@@ -650,19 +656,25 @@ export class ReleaseOrchestrator {
             );
             emitAndRecord('iOS Verify', 'SKIPPED');
           } else {
+            const effectiveIosVersion = options.iosVersion || resolution.versionString;
+            const effectiveIosBuildNumber =
+              options.iosBuildNumber !== undefined
+                ? options.iosBuildNumber
+                : resolution.next.buildNumber;
+
             try {
               const builder = new IosBuilder();
               const buildRes = await builder.build(
                 {
-                  buildName: resolution.versionString,
-                  buildNumber: resolution.next.buildNumber,
+                  buildName: effectiveIosVersion,
+                  buildNumber: effectiveIosBuildNumber,
                 },
                 targetDir,
               );
               emitAndRecord(
                 'iOS Build',
                 'SUCCESS',
-                `IPA derlendi: ${path.basename(buildRes.ipaPath)}`,
+                `IPA derlendi (v${effectiveIosVersion}+${effectiveIosBuildNumber}): ${path.basename(buildRes.ipaPath)}`,
               );
 
               emitAndRecord('iOS Verify', 'IN_PROGRESS');
@@ -670,7 +682,7 @@ export class ReleaseOrchestrator {
               iosArtifact = await artifactMgr.registerArtifact(
                 'ios',
                 buildRes.ipaPath,
-                resolution.versionString,
+                effectiveIosVersion,
               );
               artifactRepo.create({
                 releaseId,
@@ -789,6 +801,7 @@ export class ReleaseOrchestrator {
               playNotes.push({ language: 'en-US', text: options.notesEn });
             }
 
+            const effectiveAndroidVersion = options.androidVersion || resolution.versionString;
             const uploadRes = await adapter.uploadAndRelease(
               androidArtifact.filePath,
               playNotes.length > 0 ? playNotes : undefined,
@@ -796,7 +809,7 @@ export class ReleaseOrchestrator {
             storeSubmissionRepo.create({
               releaseId,
               store: 'google_play',
-              version: resolution.versionString,
+              version: effectiveAndroidVersion,
               status: uploadRes.status,
               externalId: String(uploadRes.versionCode),
               error: null,
@@ -851,6 +864,12 @@ export class ReleaseOrchestrator {
 
         if (iosArtifact && creds.appStore?.keyId && creds.appStore?.issuerId) {
           try {
+            const effectiveIosVersion = options.iosVersion || resolution.versionString;
+            const effectiveIosBuildNumber =
+              options.iosBuildNumber !== undefined
+                ? String(options.iosBuildNumber)
+                : resolution.buildNumberString;
+
             const adapter = new AppStoreAdapter({
               keyId: creds.appStore.keyId,
               issuerId: creds.appStore.issuerId,
@@ -860,13 +879,13 @@ export class ReleaseOrchestrator {
             });
             const uploadRes = await adapter.uploadAndRelease(
               iosArtifact.filePath,
-              resolution.versionString,
-              resolution.buildNumberString,
+              effectiveIosVersion,
+              effectiveIosBuildNumber,
             );
             storeSubmissionRepo.create({
               releaseId,
               store: 'app_store',
-              version: resolution.versionString,
+              version: effectiveIosVersion,
               status: uploadRes.status,
               externalId: uploadRes.buildId,
               error: null,

@@ -1762,6 +1762,17 @@ export const uiCommand = new Command('ui')
               saveStoredProjects(currentList);
             }
 
+            let storeDifferenceNote: string | null = null;
+            if (
+              comparison.googlePlay.status === 'live' &&
+              comparison.appStore.status === 'live' &&
+              (comparison.googlePlay.version !== comparison.appStore.version ||
+                comparison.googlePlay.versionCode !==
+                  parseInt(comparison.appStore.buildNumber || '0', 10))
+            ) {
+              storeDifferenceNote = `Google Play (v${comparison.googlePlay.version || '?'} #${comparison.googlePlay.versionCode || '?'}) ile Apple App Store (v${comparison.appStore.version || '?'} #${comparison.appStore.buildNumber || '?'}) sürümleri birbirinden farklıdır. Dağıtım yaparken mağazaları eşitlemeden bağımsız sürümleme ile gönderebilirsiniz.`;
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
@@ -1772,6 +1783,7 @@ export const uiCommand = new Command('ui')
                 sourceLabel,
                 project: projItem,
                 stores: projItem?.stores,
+                storeDifferenceNote,
                 message: `pubspec.yaml sürümü ${sourceLabel} doğrultusunda v${formatted} olarak eşitlendi.`,
               }),
             );
@@ -3426,6 +3438,11 @@ export const uiCommand = new Command('ui')
               createGitTag?: boolean;
               pushGit?: boolean;
               gitCommitMessage?: string;
+              androidVersion?: string;
+              androidBuildNumber?: number;
+              iosVersion?: string;
+              iosBuildNumber?: number;
+              decoupledVersions?: boolean;
             };
 
             const trNotes = options.notesTr?.trim();
@@ -3616,6 +3633,11 @@ export const uiCommand = new Command('ui')
                 createGitTag: options.createGitTag,
                 pushGit: options.pushGit,
                 gitCommitMessage: options.gitCommitMessage,
+                androidVersion: options.androidVersion,
+                androidBuildNumber: options.androidBuildNumber,
+                iosVersion: options.iosVersion,
+                iosBuildNumber: options.iosBuildNumber,
+                decoupledVersions: options.decoupledVersions,
                 signal: abortCtrl.signal,
               });
 

@@ -31,6 +31,11 @@ export interface OrchestratorOptions {
   pushGit?: boolean;
   gitCommitMessage?: string;
   submitForReview?: boolean;
+  androidVersion?: string;
+  androidBuildNumber?: number;
+  iosVersion?: string;
+  iosBuildNumber?: number;
+  decoupledVersions?: boolean;
   signal?: AbortSignal;
 }
 
