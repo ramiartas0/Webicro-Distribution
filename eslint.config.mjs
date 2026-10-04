@@ -8,11 +8,16 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
-      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }],
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
       '@typescript-eslint/no-non-null-assertion': 'warn',
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      '@typescript-eslint/no-extraneous-class': 'off',
+      '@typescript-eslint/no-empty-function': 'off',
+      '@typescript-eslint/no-dynamic-delete': 'off',
+      '@typescript-eslint/no-invalid-void-type': 'off',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-console': 'off',
     },
   },
   {

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { AndroidBuildConfig, AndroidBuildResult } from './types.js';
+import type { AndroidBuildConfig, AndroidBuildResult } from './types.js';
 
 function runProcessWithLiveLogs(command: string, args: string[], cwd: string, onLog?: (line: string) => void): Promise<void> {
   return new Promise((resolve, reject) => {

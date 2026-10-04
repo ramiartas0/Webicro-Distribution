@@ -218,6 +218,40 @@ export interface AIModelOption {
   recommended?: boolean;
 }
 
+export function getSessionToken(): string | null {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get('token');
+    if (urlToken) {
+      sessionStorage.setItem('webicro_session_token', urlToken);
+      return urlToken;
+    }
+  } catch {}
+
+  try {
+    const windowToken = (window as unknown as { __SESSION_TOKEN__?: string }).__SESSION_TOKEN__;
+    if (windowToken) {
+      sessionStorage.setItem('webicro_session_token', windowToken);
+      return windowToken;
+    }
+  } catch {}
+
+  try {
+    return sessionStorage.getItem('webicro_session_token');
+  } catch {
+    return null;
+  }
+}
+
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const token = getSessionToken();
+  const headers = new Headers(init?.headers);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return window.fetch(input, { ...init, headers });
+}
+
 export default function App() {
   const { toast } = useToast();
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -238,7 +272,7 @@ export default function App() {
   const [isSyncingStores, setIsSyncingStores] = useState<boolean>(false);
   const [isSyncingStoreVersion, setIsSyncingStoreVersion] = useState<boolean>(false);
   const [syncStoreSuccessMsg, setSyncStoreSuccessMsg] = useState<string | null>(null);
-  const [appleConnectApps, setAppleConnectApps] = useState<Array<{ id: string; name: string; bundleId: string; sku?: string }>>([]);
+  const [appleConnectApps, setAppleConnectApps] = useState<{ id: string; name: string; bundleId: string; sku?: string }[]>([]);
   const [isLoadingAppleApps, setIsLoadingAppleApps] = useState<boolean>(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState<boolean>(false);
   const [newProjectPath, setNewProjectPath] = useState<string>('');
@@ -717,7 +751,7 @@ export default function App() {
   // KALICI KİMLİK BİLGİLERİNİ YÜKLE
   const loadStoreCredentials = useCallback(async () => {
     try {
-      const res = await fetch('/api/stores/credentials');
+      const res = await authFetch('/api/stores/credentials');
       if (res.ok) {
         const data = await res.json() as {
           googlePlay?: {
@@ -812,7 +846,7 @@ export default function App() {
   // 1. PROJELERİ VE AKTİF PROJE DETAYLARINI ÇEK
   const loadProjectsAndActive = useCallback(async () => {
     try {
-      const pRes = await fetch('/api/projects');
+      const pRes = await authFetch('/api/projects');
       if (pRes.ok) {
         const pData = await pRes.json() as { activePath: string; projects: ProjectEntry[] };
         const fetchedProjects = pData.projects || [];
@@ -852,7 +886,7 @@ export default function App() {
     setIsLoadingProject(true);
 
     try {
-      const res = await fetch(`/api/project?path=${encodeURIComponent(pathToFetch)}`);
+      const res = await authFetch(`/api/project?path=${encodeURIComponent(pathToFetch)}`);
       if (!res.ok) return;
       if (thisSeq !== requestSeqRef.current) return; // Kullanıcı bu sırada başka projeye tıkladıysa eski yanıtı at
 
@@ -975,7 +1009,7 @@ export default function App() {
   // KALICI PİPELİNE DURUMUNU YÜKLE (Sayfa yenilendiğinde veya projeye dönüldüğünde)
   const loadPipelineStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/release/status');
+      const res = await authFetch('/api/release/status');
       if (res.ok) {
         const data = await res.json() as {
           active?: boolean;
@@ -1008,9 +1042,9 @@ export default function App() {
   // CANLI SSE DİNLEYİCİSİ (Boru Hattı Senkronizasyonu & Sayfa Yenilense Bile Canlı Kalır)
   useEffect(() => {
     void loadProjectsAndActive();
-    void loadPipelineStatus();
-
-    const eventSource = new EventSource('/api/release/events');
+    const sessionToken = getSessionToken();
+    const sseUrl = sessionToken ? `/api/release/events?token=${encodeURIComponent(sessionToken)}` : '/api/release/events';
+    const eventSource = new EventSource(sseUrl);
 
     eventSource.onmessage = (e: MessageEvent) => {
       try {
@@ -1150,7 +1184,7 @@ export default function App() {
   const handleSyncStores = async () => {
     setIsSyncingStores(true);
     try {
-      const res = await fetch('/api/projects/sync-stores', { method: 'POST' });
+      const res = await authFetch('/api/projects/sync-stores', { method: 'POST' });
       if (res.ok) {
         const data = await res.json() as { projects?: ProjectEntry[] };
         if (data.projects) {
@@ -1176,7 +1210,7 @@ export default function App() {
     setIsSyncingStoreVersion(true);
     setSyncStoreSuccessMsg(null);
     try {
-      const res = await fetch('/api/project/sync-store-version', {
+      const res = await authFetch('/api/project/sync-store-version', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: target, source }),
@@ -1209,9 +1243,9 @@ export default function App() {
   const fetchAppleApps = async () => {
     setIsLoadingAppleApps(true);
     try {
-      const res = await fetch('/api/stores/apple-apps');
+      const res = await authFetch('/api/stores/apple-apps');
       if (res.ok) {
-        const data = await res.json() as { success: boolean; apps?: Array<{ id: string; name: string; bundleId: string; sku?: string }> };
+        const data = await res.json() as { success: boolean; apps?: { id: string; name: string; bundleId: string; sku?: string }[] };
         if (data.success && data.apps) {
           setAppleConnectApps(data.apps);
         }
@@ -1229,7 +1263,7 @@ export default function App() {
     setIsGitPushing(true);
     setGitPushSuccessMsg(null);
     try {
-      const res = await fetch('/api/project/git-commit-push', {
+      const res = await authFetch('/api/project/git-commit-push', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1310,7 +1344,7 @@ export default function App() {
   const handleAutoDiscover = async (customPath?: string) => {
     setIsDiscovering(true);
     try {
-      const res = await fetch('/api/projects/auto-discover', {
+      const res = await authFetch('/api/projects/auto-discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scanPath: customPath || undefined }),
@@ -1333,7 +1367,7 @@ export default function App() {
     if (!newProjectPath.trim()) return;
     setIsAddingProject(true);
     try {
-      const res = await fetch('/api/projects/add', {
+      const res = await authFetch('/api/projects/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newProjectName.trim(), path: newProjectPath.trim() }),
@@ -1362,7 +1396,7 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch('/api/projects/remove', {
+      const res = await authFetch('/api/projects/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: projectPath }),
@@ -1391,7 +1425,7 @@ export default function App() {
     try {
       const pPath = filter === 'current' ? (targetPath || activeProjectPath) : '';
       const url = pPath ? `/api/history?projectPath=${encodeURIComponent(pPath)}` : '/api/history';
-      const res = await fetch(url);
+      const res = await authFetch(url);
       if (res.ok) {
         const data = await res.json() as { releases?: ReleaseHistoryItem[]; auditLogs?: AuditLogItem[] };
         setHistoryReleases(data.releases || []);
@@ -1410,7 +1444,7 @@ export default function App() {
     setIsSavingGoogle(true);
     setGoogleTestResult({ testing: true, tested: false, success: false });
     try {
-      const res = await fetch('/api/stores/save-google', {
+      const res = await authFetch('/api/stores/save-google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1473,7 +1507,7 @@ export default function App() {
     setIsSavingApple(true);
     setAppleTestResult({ testing: true, tested: false, success: false });
     try {
-      const res = await fetch('/api/stores/save-apple', {
+      const res = await authFetch('/api/stores/save-apple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1539,7 +1573,7 @@ export default function App() {
     const targetProvider = selectedProvider || aiProvider;
     const selectedModel = targetProvider === 'gemini' ? geminiModelInput : targetProvider === 'openai' ? openaiModelInput : anthropicModelInput;
     try {
-      const response = await fetch('/api/ai/generate', {
+      const response = await authFetch('/api/ai/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1590,7 +1624,7 @@ export default function App() {
         if (provider === 'anthropic') key = anthropicApiKeyInput.trim();
       }
 
-      const res = await fetch('/api/ai/models', {
+      const res = await authFetch('/api/ai/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, apiKey: key || undefined }),
@@ -1635,7 +1669,7 @@ export default function App() {
     setIsSavingAI(true);
     setAiTestResult(null);
     try {
-      const res = await fetch('/api/ai/save', {
+      const res = await authFetch('/api/ai/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1686,7 +1720,7 @@ export default function App() {
         modelToTest = anthropicModelInput;
       }
 
-      const res = await fetch('/api/ai/test', {
+      const res = await authFetch('/api/ai/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1744,7 +1778,7 @@ export default function App() {
   const fetchDiagnosisForPipeline = useCallback(async (projectPath: string, errorText: string, logs?: string[]) => {
     setIsDiagnosing(true);
     try {
-      const res = await fetch('/api/ai/diagnose-error', {
+      const res = await authFetch('/api/ai/diagnose-error', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1782,7 +1816,7 @@ export default function App() {
     setIsAutoFixing(true);
     setAutoFixSuccessMsg(null);
     try {
-      const res = await fetch('/api/release/autofix', {
+      const res = await authFetch('/api/release/autofix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1877,7 +1911,7 @@ export default function App() {
     );
 
     try {
-      const response = await fetch('/api/release/start', {
+      const response = await authFetch('/api/release/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1972,7 +2006,7 @@ export default function App() {
     if (!confirmCancel) return;
 
     try {
-      const res = await fetch('/api/release/cancel', {
+      const res = await authFetch('/api/release/cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectPath: targetPath }),

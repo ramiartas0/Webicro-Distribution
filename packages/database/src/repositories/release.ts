@@ -76,7 +76,7 @@ export class ReleaseRepository {
     stmt.run(version, buildNumber, releaseId);
   }
 
-  public findAll(limit: number = 100): ReleaseRecord[] {
+  public findAll(limit = 100): ReleaseRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
         id, 

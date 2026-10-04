@@ -2,15 +2,48 @@ import { Command } from 'commander';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { exec } from 'node:child_process';
 import chalk from 'chalk';
 import * as clack from '@clack/prompts';
 
+export function isSafeProjectPath(targetPath?: string | null): boolean {
+  if (!targetPath) return false;
+  try {
+    const resolved = path.resolve(targetPath);
+    // Geçici çalışma dizinleri (os.tmpdir) testler ve derlemeler için güvenlidir
+    const tmp = os.tmpdir();
+    if (resolved === tmp || resolved.startsWith(tmp + path.sep)) {
+      return true;
+    }
+    // Sistem kök dizinleri yasaklıdır
+    const forbiddenPrefixes = ['/etc', '/bin', '/sbin', '/usr', '/var', '/System', '/Library', '/private', '/dev'];
+    for (const prefix of forbiddenPrefixes) {
+      if (resolved === prefix || resolved.startsWith(prefix + path.sep)) {
+        return false;
+      }
+    }
+    const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
+    if (home) {
+      const ssh = path.join(home, '.ssh');
+      const aws = path.join(home, '.aws');
+      const gnupg = path.join(home, '.gnupg');
+      if (resolved === ssh || resolved.startsWith(ssh + path.sep)) return false;
+      if (resolved === aws || resolved.startsWith(aws + path.sep)) return false;
+      if (resolved === gnupg || resolved.startsWith(gnupg + path.sep)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 import { GitAnalyzer, detectNativeChanges } from '@webicro/git';
 import { VersionResolver } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
-import { DatabaseConnection, ReleaseRepository, AuditLogRepository } from '@webicro/database';
+import { DatabaseConnection, ReleaseRepository, AuditLogRepository, type ReleaseRecord, type AuditLogRecord } from '@webicro/database';
 import { ReleaseOrchestrator } from '@webicro/core';
 import {
   AIController,
@@ -20,7 +53,7 @@ import {
   type AIDiagnosisResult,
   type AutoFixActionType,
 } from '@webicro/ai';
-import { ReleaseNotesValidator } from '@webicro/validation';
+import { ReleaseNotesValidator, type ReleaseNotesMap } from '@webicro/validation';
 import { PubspecVersionUpdater } from '@webicro/flutter';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
 import { generateAppStoreToken, AppStoreAdapter } from '@webicro/app-store';
@@ -31,6 +64,7 @@ const __dirname = path.dirname(__filename);
 export interface StoreComparison {
   googlePlay: {
     status: 'live' | 'not_found' | 'auth_error' | 'not_configured';
+    version?: string;
     versionCode?: number;
     track?: string;
     message?: string;
@@ -432,7 +466,10 @@ export function findProjectAppIcon(projectPath: string): string | null {
           const statB = fs.statSync(path.join(iosAppIconDir, b));
           return statB.size - statA.size;
         });
-        return path.join(iosAppIconDir, files[0]);
+        const largest = files[0];
+        if (largest) {
+          return path.join(iosAppIconDir, largest);
+        }
       }
     } catch {
       // devam et
@@ -581,24 +618,26 @@ export function getStoreCredentials(projectDir?: string): StoreCredentials {
     };
   }
 
-  // Otomatik kalıcı kaydet
-  if (creds.googlePlay || creds.appStore) {
-    saveStoreCredentials(creds, projectDir);
-  }
-
+  // Güvenlik: Ortam değişkenlerinden okunan secret'lar izinsiz kalıcı diske yazılmaz.
   return creds;
 }
 
 /**
- * Mağaza kimlik bilgilerini projeye veya global dizine kalıcı olarak kaydeder
+ * Mağaza kimlik bilgilerini projeye veya global dizine güvenli (0600) olarak kaydeder
  */
 export function saveStoreCredentials(creds: StoreCredentials, projectDir?: string): void {
   const targetDir = projectDir ? path.join(projectDir, '.release') : path.join(process.cwd(), '.release');
   if (!fs.existsSync(targetDir)) {
-    fs.mkdirSync(targetDir, { recursive: true });
+    fs.mkdirSync(targetDir, { recursive: true, mode: 0o700 });
   }
   const filePath = path.join(targetDir, 'credentials.json');
-  fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf8');
+  fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), { mode: 0o600, encoding: 'utf8' });
+  try {
+    fs.chmodSync(filePath, 0o600);
+    fs.chmodSync(targetDir, 0o700);
+  } catch {
+    // İşletim sistemi dosya izinleri desteği
+  }
 }
 
 export function maskKey(key?: string): string {
@@ -671,11 +710,11 @@ async function fetchAppleStoreLive(bundleId: string): Promise<AppleLookupResult>
     }
     const data = await res.json() as {
       resultCount?: number;
-      results?: Array<{
+      results?: {
         version?: string;
         trackName?: string;
         trackViewUrl?: string;
-      }>;
+      }[];
     };
     if (data.resultCount && data.results && data.results.length > 0 && data.results[0]) {
       const app = data.results[0];
@@ -741,7 +780,7 @@ function findBestMatchedAppleApp(
     projectName?: string;
     overrideBundleId?: string;
   },
-  apps: Array<{ id: string; name: string; bundleId: string; sku?: string }>
+  apps: { id: string; name: string; bundleId: string; sku?: string }[]
 ): { id: string; name: string; bundleId: string; sku?: string } | null {
   if (apps.length === 0) return null;
 
@@ -920,7 +959,7 @@ export async function compareProjectWithStores(
   }
 
   // App Store Connect API varsa hesaptaki kayıtlı uygulamalarla akıllı eşleştirme yap
-  let connectApps: Array<{ id: string; name: string; bundleId: string; sku?: string }> = [];
+  let connectApps: { id: string; name: string; bundleId: string; sku?: string }[] = [];
   if (creds.appStore && creds.appStore.keyId && creds.appStore.issuerId && (creds.appStore.privateKeyPath || creds.appStore.privateKey)) {
     try {
       const adapter = new AppStoreAdapter({
@@ -977,7 +1016,7 @@ export async function compareProjectWithStores(
 
   // Öncelik A: Resmi Apple iTunes API (Canlı mağaza sürümü sorgusu)
   const itunesRes = await fetchAppleStoreLive(appleTargetBundleId);
-  if (itunesRes.status === 'live') {
+  if (itunesRes.status === 'live' && itunesRes.version) {
     comparison.appStore = {
       ...comparison.appStore,
       status: 'live',
@@ -1165,7 +1204,7 @@ export const uiCommand = new Command('ui')
           p.hasPubspec = fs.existsSync(path.join(p.path, 'pubspec.yaml'));
         }
         if (p.stores?.badge) {
-          p.stores.badge = p.stores.badge.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim();
+          p.stores.badge = p.stores.badge.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
         }
       }
 
@@ -1209,6 +1248,7 @@ export const uiCommand = new Command('ui')
     // SSE İstemcileri ve Canlı Dağıtım Durumu (Proje bazlı bağımsız harita)
     const sseClients: http.ServerResponse[] = [];
     const activePipelines = new Map<string, ActivePipelineStatus>();
+    const activeAbortControllers = new Map<string, AbortController>();
 
     const broadcastEvent = (event: Record<string, unknown>) => {
       const data = `data: ${JSON.stringify(event)}\n\n`;
@@ -1227,11 +1267,43 @@ export const uiCommand = new Command('ui')
       '.svg': 'image/svg+xml',
     };
 
+    // Güvenlik: Her başlatmada tekil, tahmin edilemez oturum tokenı üretilir
+    const serverSessionToken = crypto.randomBytes(24).toString('hex');
+
     const server = http.createServer(async (req, res) => {
-      // CORS başlıkları
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Güvenlik Başlıkları
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader('Content-Security-Policy', "default-src 'self' 'unsafe-inline' data:; connect-src 'self' ws: http://localhost:* http://127.0.0.1:*; img-src 'self' data: blob:;");
+
+      // Host Başlığı Doğrulaması (DNS Rebinding Önlemi)
+      const host = req.headers.host || '';
+      const allowedHosts = [`localhost:${port}`, `127.0.0.1:${port}`, 'localhost', '127.0.0.1'];
+      if (!allowedHosts.includes(host)) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: '403 Forbidden: Geçersiz Host başlığı (DNS Rebinding saldırı önlemi).' }));
+        return;
+      }
+
+      // Origin Kontrolü (CORS * Yerine Sıkı Origin Guard)
+      const origin = req.headers.origin;
+      if (origin) {
+        const allowedOrigins = [
+          `http://localhost:${port}`,
+          `http://127.0.0.1:${port}`,
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+        ];
+        if (!allowedOrigins.includes(origin)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: '403 Forbidden: Yetkisiz Origin.' }));
+          return;
+        }
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Session-Token');
 
       if (req.method === 'OPTIONS') {
         res.writeHead(200);
@@ -1241,6 +1313,22 @@ export const uiCommand = new Command('ui')
 
       const url = new URL(req.url || '/', `http://${req.headers.host}`);
       const pathname = url.pathname;
+
+      // API ve SSE İstekleri İçin Oturum Tokenı Doğrulaması
+      if (pathname.startsWith('/api/')) {
+        const authHeader = req.headers.authorization;
+        const customToken = req.headers['x-session-token'];
+        const queryToken = url.searchParams.get('token');
+
+        const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+        const providedToken = bearerToken || (typeof customToken === 'string' ? customToken : null) || queryToken;
+
+        if (providedToken !== serverSessionToken) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: '401 Unauthorized: Geçersiz veya eksik oturum tokenı.' }));
+          return;
+        }
+      }
 
       // ======================== API ENDPOINTS ========================
 
@@ -1315,9 +1403,9 @@ export const uiCommand = new Command('ui')
       if (req.method === 'GET' && pathname === '/api/projects/icon') {
         try {
           const targetProjPath = url.searchParams.get('path');
-          if (!targetProjPath || !fs.existsSync(targetProjPath)) {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Proje dizini bulunamadı.' }));
+          if (!targetProjPath || !isSafeProjectPath(targetProjPath) || !fs.existsSync(targetProjPath)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Geçersiz veya yetkisiz proje dizini.' }));
             return;
           }
 
@@ -1408,9 +1496,9 @@ export const uiCommand = new Command('ui')
         req.on('end', () => {
           try {
             const payload = JSON.parse(body || '{}') as { path?: string };
-            if (!payload.path || !fs.existsSync(payload.path)) {
+            if (!payload.path || !isSafeProjectPath(payload.path) || !fs.existsSync(payload.path)) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Belirtilen proje dizini sistemde bulunamadı.' }));
+              res.end(JSON.stringify({ error: 'Belirtilen proje dizini geçersiz veya yetkisiz.' }));
               return;
             }
             activeProjectDir = path.resolve(payload.path);
@@ -1431,9 +1519,9 @@ export const uiCommand = new Command('ui')
         req.on('end', async () => {
           try {
             const payload = JSON.parse(body || '{}') as { name?: string; path?: string };
-            if (!payload.path || !fs.existsSync(payload.path)) {
+            if (!payload.path || !isSafeProjectPath(payload.path) || !fs.existsSync(payload.path)) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Geçersiz dosya dizini.' }));
+              res.end(JSON.stringify({ error: 'Geçersiz veya yetkisiz dosya dizini.' }));
               return;
             }
 
@@ -1751,9 +1839,9 @@ export const uiCommand = new Command('ui')
             };
 
             const targetDir = payload.path ? path.resolve(payload.path) : activeProjectDir;
-            if (!fs.existsSync(targetDir)) {
-              res.writeHead(404, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ success: false, error: 'Proje dizini bulunamadı' }));
+            if (!isSafeProjectPath(targetDir) || !fs.existsSync(targetDir)) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Yetkisiz veya geçersiz proje dizini.' }));
               return;
             }
 
@@ -2180,11 +2268,11 @@ export const uiCommand = new Command('ui')
                   });
                   if (gRes.ok) {
                     const gData = await gRes.json() as {
-                      models?: Array<{
+                      models?: {
                         name?: string;
                         displayName?: string;
                         supportedGenerationMethods?: string[];
-                      }>;
+                      }[];
                     };
                     const fetched = (gData.models || [])
                       .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
@@ -2235,7 +2323,7 @@ export const uiCommand = new Command('ui')
                     signal: AbortSignal.timeout(6000),
                   });
                   if (oRes.ok) {
-                    const oData = await oRes.json() as { data?: Array<{ id: string }> };
+                    const oData = await oRes.json() as { data?: { id: string }[] };
                     const chatModels = (oData.data || [])
                       .map(m => m.id)
                       .filter(id => id.startsWith('gpt-4') || id.startsWith('o1') || id.startsWith('o3'))
@@ -2529,7 +2617,7 @@ export const uiCommand = new Command('ui')
                 }
               });
               if (appleRes.ok) {
-                const data = await appleRes.json() as { data?: Array<{ id: string }> };
+                const data = await appleRes.json() as { data?: { id: string }[] };
                 liveApiOk = true;
                 sampleAppCount = data.data?.length || 0;
               } else {
@@ -2670,7 +2758,7 @@ export const uiCommand = new Command('ui')
 
           let liveSuccess = false;
           let appCount = 0;
-          let sampleApps: Array<{ name: string; bundleId: string }> = [];
+          let sampleApps: { name: string; bundleId: string }[] = [];
           let appleStatusMsg = '';
 
           try {
@@ -2684,10 +2772,10 @@ export const uiCommand = new Command('ui')
             if (appleRes.ok) {
               liveSuccess = true;
               const json = await appleRes.json() as {
-                data?: Array<{
+                data?: {
                   id: string;
                   attributes?: { name: string; bundleId: string };
-                }>;
+                }[];
               };
               appCount = json.data?.length || 0;
               sampleApps = (json.data || []).map(a => ({
@@ -2801,11 +2889,11 @@ export const uiCommand = new Command('ui')
                 if (!valRes.isValid) {
                   throw new Error(valRes.issues.map(i => i.message).join(', '));
                 }
-                return data as import('@webicro/validation').ReleaseNotesMap;
+                return data as ReleaseNotesMap;
               }
             };
 
-            let notes: import('@webicro/validation').ReleaseNotesMap;
+            let notes: ReleaseNotesMap;
             try {
               const aiController = new AIController(provider, validatorAdapter);
               notes = await aiController.generate(version, commits, ['tr', 'en']);
@@ -2856,8 +2944,8 @@ export const uiCommand = new Command('ui')
           const targetDir = queryProj ? path.resolve(queryProj) : (activeProjectDir ? path.resolve(activeProjectDir) : null);
 
           // Toplanacak release ve audit log havuzları
-          const allReleasesMap = new Map<string, import('@webicro/database').ReleaseRecord>();
-          const allAuditLogs: import('@webicro/database').AuditLogRecord[] = [];
+          const allReleasesMap = new Map<string, ReleaseRecord>();
+          const allAuditLogs: AuditLogRecord[] = [];
 
           // 1. Merkezi veritabanındaki kayıtları ekle
           try {
@@ -2959,6 +3047,11 @@ export const uiCommand = new Command('ui')
             const payload = JSON.parse(body || '{}') as { projectPath?: string };
             const target = path.resolve(payload.projectPath || activeProjectDir);
             const existed = activePipelines.get(target);
+            const abortCtrl = activeAbortControllers.get(target);
+            if (abortCtrl) {
+              abortCtrl.abort();
+              activeAbortControllers.delete(target);
+            }
             if (existed) {
               existed.isReleasing = false;
               existed.completed = false;
@@ -3024,6 +3117,7 @@ export const uiCommand = new Command('ui')
               dryRun?: boolean;
               targetAndroid?: boolean;
               targetIos?: boolean;
+              targetPlatform?: 'android' | 'ios' | 'both';
               notesTr?: string;
               notesEn?: string;
               googleTrack?: 'internal' | 'alpha' | 'beta' | 'production';
@@ -3180,6 +3274,9 @@ export const uiCommand = new Command('ui')
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ status: 'started', projectPath: releaseTargetDir, pipeline: projectPipelineStatus }));
 
+            const abortCtrl = new AbortController();
+            activeAbortControllers.set(releaseTargetDir, abortCtrl);
+
             try {
               const isDryRun = options.dryRun !== undefined ? options.dryRun : false;
 
@@ -3202,6 +3299,7 @@ export const uiCommand = new Command('ui')
                 createGitTag: options.createGitTag,
                 pushGit: options.pushGit,
                 gitCommitMessage: options.gitCommitMessage,
+                signal: abortCtrl.signal,
               });
 
               const currentStatus = activePipelines.get(releaseTargetDir);
@@ -3217,8 +3315,18 @@ export const uiCommand = new Command('ui')
 
                 // DAĞITIM BİTTİĞİNDE MAĞAZA VERİLERİNİ OTOMATİK SENKRONİZE ET
                 try {
-                  const pData = loadProjectsData();
-                  await syncStores(pData);
+                  const storedProjects = getStoredProjects();
+                  const currentProject = storedProjects.find(p => p.path === releaseTargetDir);
+                  if (currentProject && currentProject.package) {
+                    await compareProjectWithStores(
+                      currentProject.package,
+                      currentProject.buildNumber || 1,
+                      currentProject.version || '1.0.0',
+                      currentProject.path,
+                      true,
+                      currentProject.appStoreOverrideBundleId || currentProject.iosBundleId
+                    );
+                  }
                 } catch (syncErr) {
                   console.error('Boru hattı sonrası mağaza senkronizasyonu hatası:', syncErr);
                 }
@@ -3269,6 +3377,8 @@ export const uiCommand = new Command('ui')
                   pipeline: currentStatus,
                 });
               }
+            } finally {
+              activeAbortControllers.delete(releaseTargetDir);
             }
 
           } catch (error) {
@@ -3296,20 +3406,33 @@ export const uiCommand = new Command('ui')
           res.writeHead(500);
           res.end('Server error loading dashboard');
         } else {
-          res.writeHead(200, { 'Content-Type': contentType });
-          res.end(content, 'utf-8');
+          if (ext === '.html') {
+            let htmlStr = content.toString('utf-8');
+            const tokenScript = `<script>window.__SESSION_TOKEN__ = "${serverSessionToken}";</script>`;
+            if (htmlStr.includes('<head>')) {
+              htmlStr = htmlStr.replace('<head>', `<head>${tokenScript}`);
+            } else {
+              htmlStr = tokenScript + htmlStr;
+            }
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(htmlStr, 'utf-8');
+          } else {
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(content);
+          }
         }
       });
     });
 
-    server.listen(port, () => {
-      const url = `http://localhost:${port}`;
+    server.listen(port, '127.0.0.1', () => {
+      const launchUrl = `http://127.0.0.1:${port}/?token=${serverSessionToken}`;
       clack.intro(chalk.bold('Webicro Distribution - Canlı Web Dashboard'));
-      clack.log.success(`${chalk.green('Dashboard ve Canlı API Servisi hazır:')} ${chalk.cyan.underline(url)}`);
+      clack.log.success(`${chalk.green('Dashboard ve Güvenli API Servisi (127.0.0.1 loopback) hazır:')} ${chalk.cyan.underline(launchUrl)}`);
+      clack.log.info(chalk.dim(`Oturum Tokenı: ${serverSessionToken.substring(0, 8)}... (Yalnızca yerel loopback erişimine izin verilir)`));
       clack.log.info(chalk.dim('Durdurmak için Ctrl+C tuşlarına basın.'));
 
       // Tarayıcıyı otomatik aç
       const startCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-      exec(`${startCmd} ${url}`);
+      exec(`${startCmd} "${launchUrl}"`);
     });
   });

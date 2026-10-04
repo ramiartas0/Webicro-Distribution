@@ -6,7 +6,7 @@ import { calculateFileHash } from './hasher.js';
 export class ArtifactManager {
   private readonly artifactsBaseDir: string;
 
-  constructor(artifactsBaseDir: string = '.release/artifacts') {
+  constructor(artifactsBaseDir = '.release/artifacts') {
     this.artifactsBaseDir = artifactsBaseDir;
   }
 

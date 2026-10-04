@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SecurityIssue } from './types.js';
+import type { SecurityIssue } from './types.js';
 
 interface SecretPattern {
   name: string;

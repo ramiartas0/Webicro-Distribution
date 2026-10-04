@@ -76,7 +76,7 @@ export class GooglePlayAdapter {
           name?: string;
           versionCodes?: string[];
           status?: string;
-          releaseNotes?: Array<{ language?: string; text?: string }>;
+          releaseNotes?: { language?: string; text?: string }[];
         }
         interface TrackItem {
           track?: string;

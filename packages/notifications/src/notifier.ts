@@ -1,4 +1,4 @@
-import { NotificationPayload } from './types.js';
+import type { NotificationPayload } from './types.js';
 
 export class ReleaseNotifier {
   public async notify(payload: NotificationPayload, webhooks?: string[]): Promise<void> {

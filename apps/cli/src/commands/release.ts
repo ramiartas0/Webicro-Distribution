@@ -54,17 +54,28 @@ export const releaseCommand = new Command('release')
       const [verPart, buildPart] = summary.version.includes('+') ? summary.version.split('+') : [summary.version, '1'];
       const finalBuildNum = Number(buildPart) || 1;
 
+      const parseReportStatus = (statusStr?: string, skipped?: boolean): 'success' | 'failed' | 'skipped' | 'pending' => {
+        if (skipped) return 'skipped';
+        if (!statusStr) return 'skipped';
+        const lower = statusStr.toLowerCase();
+        if (lower.includes('success') || lower === 'live' || lower === 'uploaded') return 'success';
+        if (lower.includes('fail') || lower.includes('error')) return 'failed';
+        if (lower === 'simulated') return 'success';
+        if (lower.includes('processing') || lower.includes('pending')) return 'pending';
+        return 'skipped';
+      };
+
       const reporter = new FinalReporter();
       reporter.printSummary({
         releaseId: summary.releaseId,
         nextVersion: verPart || summary.version,
         buildNumber: finalBuildNum,
-        androidArtifactInfo: options['skipAndroid'] ? 'none' : 'build/app/outputs/bundle/release/app-release.aab',
-        androidStatus: options['skipAndroid'] ? 'skipped' : 'success',
-        iosArtifactInfo: options['skipIos'] ? 'none' : 'build/ios/ipa/Runner.ipa',
-        iosStatus: options['skipIos'] ? 'skipped' : 'success',
-        googlePlayStatus: options['dryRun'] ? 'skipped' : 'success',
-        appStoreStatus: options['dryRun'] ? 'skipped' : 'success',
+        androidArtifactInfo: summary.androidArtifact?.filePath || (options['skipAndroid'] ? 'none' : 'not generated'),
+        androidStatus: summary.androidArtifact ? 'success' : (options['skipAndroid'] ? 'skipped' : 'failed'),
+        iosArtifactInfo: summary.iosArtifact?.filePath || (options['skipIos'] ? 'none' : 'not generated'),
+        iosStatus: summary.iosArtifact ? 'success' : (options['skipIos'] ? 'skipped' : 'failed'),
+        googlePlayStatus: parseReportStatus(summary.googlePlayStatus, Boolean(options['skipAndroid'])),
+        appStoreStatus: parseReportStatus(summary.appStoreStatus, Boolean(options['skipIos'])),
         totalDurationMs: summary.durationMs,
       });
       

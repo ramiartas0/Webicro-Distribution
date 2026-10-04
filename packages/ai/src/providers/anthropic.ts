@@ -42,7 +42,7 @@ export class AnthropicProvider extends BaseProvider implements AIProvider {
     }
 
     const data = await response.json() as {
-      content?: Array<{ type: string; text?: string }>;
+      content?: { type: string; text?: string }[];
     };
 
     const textContent = data.content?.find((c) => c.type === 'text')?.text;

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { AppStoreConfig, AppStoreUploadResult } from './types.js';
+import type { AppStoreConfig, AppStoreUploadResult } from './types.js';
 import { generateAppStoreToken } from './auth.js';
 import { waitForBuildProcessing } from './polling.js';
 
@@ -46,13 +46,13 @@ export class AppStoreAdapter {
     return res.json();
   }
 
-  public async listAllApps(): Promise<Array<{ id: string; name: string; bundleId: string; sku?: string }>> {
+  public async listAllApps(): Promise<{ id: string; name: string; bundleId: string; sku?: string }[]> {
     try {
       const data = await this.fetchApi('/apps') as {
-        data?: Array<{
+        data?: {
           id: string;
           attributes: { name: string; bundleId: string; sku?: string };
-        }>;
+        }[];
       };
       if (!data?.data) return [];
       return data.data.map((app) => ({
@@ -67,7 +67,7 @@ export class AppStoreAdapter {
   }
 
   public async getAppId(): Promise<string> {
-    const data = await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`) as { data: Array<{ id: string }> };
+    const data = await this.fetchApi(`/apps?filter[bundleId]=${this.config.bundleId}`) as { data: { id: string }[] };
     if (!data.data || data.data.length === 0) {
       throw new AppStoreError(`App not found with bundle ID: ${this.config.bundleId}`);
     }
@@ -80,7 +80,7 @@ export class AppStoreAdapter {
 
   public async getLatestBuild(): Promise<{ version: string; buildNumber: string } | null> {
     const appId = await this.getAppId();
-    const data = await this.fetchApi(`/builds?filter[app]=${appId}&sort=-uploadedDate&limit=1`) as { data: Array<{ attributes: { version: string, uploadedDate: string } }> };
+    const data = await this.fetchApi(`/builds?filter[app]=${appId}&sort=-uploadedDate&limit=1`) as { data: { attributes: { version: string, uploadedDate: string } }[] };
     if (!data.data || data.data.length === 0) {
       return null;
     }
@@ -119,7 +119,7 @@ export class AppStoreAdapter {
   }
 
   public async updateWhatsNew(versionId: string, locale: string, text: string): Promise<void> {
-    const localizations = await this.fetchApi(`/appStoreVersions/${versionId}/appStoreVersionLocalizations`) as { data: Array<{ id: string, attributes: { locale: string } }> };
+    const localizations = await this.fetchApi(`/appStoreVersions/${versionId}/appStoreVersionLocalizations`) as { data: { id: string, attributes: { locale: string } }[] };
     let localizationId = localizations.data.find(l => l.attributes.locale === locale)?.id;
 
     if (!localizationId) {
@@ -228,7 +228,7 @@ export class AppStoreAdapter {
     const buildId = await waitForBuildProcessing(appId, buildNumberString, token);
 
     const versionId = await this.createAppStoreVersion(appId, versionString).catch(async (e) => {
-      const versions = await this.fetchApi(`/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}`) as { data: Array<{ id: string, attributes: { appStoreState: string } }> };
+      const versions = await this.fetchApi(`/apps/${appId}/appStoreVersions?filter[versionString]=${versionString}`) as { data: { id: string, attributes: { appStoreState: string } }[] };
       const editable = versions.data.find(v => ['PREPARE_FOR_SUBMISSION', 'DEVELOPER_REJECTED', 'REJECTED'].includes(v.attributes.appStoreState));
       if (editable) return editable.id;
       throw e;

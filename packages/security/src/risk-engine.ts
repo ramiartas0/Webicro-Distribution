@@ -1,4 +1,4 @@
-import { ReleaseRiskAssessment, RiskFactor } from './types.js';
+import type { ReleaseRiskAssessment, RiskFactor } from './types.js';
 
 export class RiskEngine {
   calculateRisk(params: {

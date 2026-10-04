@@ -3,6 +3,7 @@ export type { ReleaseConfig } from '@webicro/config';
 export type { VersionResolution } from '@webicro/versioning';
 import type { ArtifactManifest } from '@webicro/artifacts';
 import type { ReleaseNotesMap } from '@webicro/validation';
+import type { CommitAndPushResult } from '@webicro/git';
 
 export type StepStatus = 'PENDING' | 'RUNNING' | 'IN_PROGRESS' | 'SUCCESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
 
@@ -26,6 +27,8 @@ export interface OrchestratorOptions {
   createGitTag?: boolean;
   pushGit?: boolean;
   gitCommitMessage?: string;
+  submitForReview?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface ReleaseStepEvent {
@@ -43,7 +46,7 @@ export interface ReleaseExecutionSummary {
   iosArtifact?: ArtifactManifest;
   googlePlayStatus?: string;
   appStoreStatus?: string;
-  gitResult?: import('@webicro/git').CommitAndPushResult;
+  gitResult?: CommitAndPushResult;
   durationMs: number;
   releaseNotes?: ReleaseNotesMap;
 }

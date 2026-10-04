@@ -49,7 +49,7 @@ export class AuditLogRepository {
     return stmt.all(releaseId) as AuditLogRecord[];
   }
 
-  public findAll(limit: number = 100): AuditLogRecord[] {
+  public findAll(limit = 100): AuditLogRecord[] {
     const stmt = this.db.prepare(`
       SELECT 
         id, 

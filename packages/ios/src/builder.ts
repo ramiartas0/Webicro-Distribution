@@ -2,7 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { IosBuildConfig, IosBuildResult } from './types.js';
+import type { IosBuildConfig, IosBuildResult } from './types.js';
 
 const execAsync = promisify(exec);
 

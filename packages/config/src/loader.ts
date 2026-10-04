@@ -11,6 +11,21 @@ export class ConfigError extends Error {
   }
 }
 
+function normalizeKeysToCamelCase(obj: unknown): unknown {
+  if (Array.isArray(obj)) {
+    return obj.map(normalizeKeysToCamelCase);
+  }
+  if (obj !== null && typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const camelKey = key.replace(/_([a-z0-9])/g, (_, letter: string) => letter.toUpperCase());
+      result[camelKey] = normalizeKeysToCamelCase(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
 export class ConfigLoader {
   private static findConfigFile(startDir: string): string | null {
     let currentDir = startDir;
@@ -45,8 +60,9 @@ export class ConfigLoader {
     try {
       const fileContents = fs.readFileSync(targetPath, 'utf8');
       const rawConfig = yaml.parse(fileContents);
+      const normalizedConfig = normalizeKeysToCamelCase(rawConfig);
       
-      const result = ReleaseConfigSchema.safeParse(rawConfig);
+      const result = ReleaseConfigSchema.safeParse(normalizedConfig);
       
       if (!result.success) {
         const errorMessages = result.error.errors

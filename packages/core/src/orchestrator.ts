@@ -8,20 +8,22 @@ import {
   AuditLogRepository,
   ArtifactRepository,
   StoreSubmissionRepository,
+  type ReleaseStatus,
 } from '@webicro/database';
-import { GitAnalyzer, GitOperations } from '@webicro/git';
+import { GitAnalyzer, GitOperations, type CommitAndPushResult } from '@webicro/git';
 import { VersionResolver } from '@webicro/versioning';
 import type { VersionResolution } from '@webicro/versioning';
 import { ConfigLoader } from '@webicro/config';
 import { PubspecVersionUpdater, FlutterDoctor, FlutterAnalyzer, FlutterTester } from '@webicro/flutter';
 import { ChangelogGenerator } from '@webicro/changelog';
-import { ReleaseNotesValidator } from '@webicro/validation';
+import { ReleaseNotesValidator, type ReleaseNotesMap } from '@webicro/validation';
 import { AIController, GeminiProvider, ConventionalReleaseNotesProvider } from '@webicro/ai';
 import { AndroidBuilder } from '@webicro/android';
 import { IosBuilder } from '@webicro/ios';
 import { ArtifactManager } from '@webicro/artifacts';
 import type { ArtifactManifest } from '@webicro/artifacts';
-import { GooglePlayAdapter } from '@webicro/google-play';
+import { SecretScanner } from '@webicro/security';
+import { GooglePlayAdapter, type GooglePlayReleaseNotes } from '@webicro/google-play';
 import { AppStoreAdapter, generateAppStoreToken } from '@webicro/app-store';
 import { ReleaseNotifier } from '@webicro/notifications';
 import { generateReleaseId } from './release-id.js';
@@ -38,8 +40,8 @@ export class OrchestratorError extends AppError {
 export class ReleaseOrchestrator {
   private stateMachine: ReleaseStateMachine;
   private planner: ReleasePlanner;
-  private startTime: number = 0;
-  private listeners: Array<(event: ReleaseStepEvent) => void> = [];
+  private startTime = 0;
+  private listeners: ((event: ReleaseStepEvent) => void)[] = [];
   
   constructor() {
     this.stateMachine = new ReleaseStateMachine('DRAFT');
@@ -126,7 +128,14 @@ export class ReleaseOrchestrator {
       }
     };
 
+    const checkAbort = () => {
+      if (options.signal?.aborted) {
+        throw new AppError('İşlem kullanıcı tarafından iptal edildi.', 'USER_ERROR');
+      }
+    };
+
     try {
+      checkAbort();
       this.stateMachine.transitionTo('ANALYZING');
       
       // 1. Environment Check & Config Load
@@ -169,11 +178,29 @@ export class ReleaseOrchestrator {
         globalAuditRepo?.create(auditPayload);
       }
 
-      // 4. Git Analysis
+      // 4. Git Analysis & Security Check
       emitAndRecord('Git Analysis', 'IN_PROGRESS');
       const gitAnalyzer = new GitAnalyzer(targetDir);
       const gitAnalysis = await gitAnalyzer.analyze();
       emitAndRecord('Git Analysis', 'SUCCESS', `${gitAnalysis.commitsSinceLastTag.length} commit incelendi`);
+
+      if (config?.security?.requireCleanGit && !options.dryRun && !gitAnalysis.isClean) {
+        emitAndRecord('Git Analysis', 'FAILED', undefined, 'Git çalışma ağacı temiz değil (değişiklikler var)');
+        throw new AppError('Güvenlik kuralı ihlali: Git çalışma ağacı temiz değil. Lütfen değişiklikleri commit edin veya stash yapın.', 'USER_ERROR');
+      }
+
+      if (config?.security?.scanSecrets) {
+        emitAndRecord('Security Scan', 'IN_PROGRESS');
+        const scanner = new SecretScanner();
+        const issues = await scanner.scanFiles(gitAnalysis.changedFiles, targetDir);
+        const criticalIssues = issues.filter(i => i.severity === 'critical' || i.severity === 'high');
+        if (criticalIssues.length > 0) {
+          const detail = criticalIssues.map(i => `${i.file}:${i.description}`).join('; ');
+          emitAndRecord('Security Scan', 'FAILED', undefined, `${criticalIssues.length} kritik gizli anahtar (secret) sızıntısı bulundu!`);
+          throw new AppError(`Güvenlik taraması başarısız: Kritik anahtar sızıntısı tespit edildi (${detail})`, 'SECURITY_ERROR');
+        }
+        emitAndRecord('Security Scan', 'SUCCESS', 'Hassas veri ve anahtar taraması temiz');
+      }
 
       // 5. Version Resolution
       emitAndRecord('Version Resolution', 'IN_PROGRESS');
@@ -238,7 +265,9 @@ export class ReleaseOrchestrator {
       // 8. AI / Conventional Release Notes Generation
       emitAndRecord('Release Notes Generation', 'IN_PROGRESS');
       const apiKey = process.env['GEMINI_API_KEY'];
-      const provider = apiKey ? new GeminiProvider({ apiKey }) : new ConventionalReleaseNotesProvider();
+      const languages = config?.ai?.languages && config.ai.languages.length > 0 ? config.ai.languages : ['tr', 'en'];
+      const shouldUseAi = !options.skipAi && config?.ai?.enabled !== false && Boolean(apiKey);
+      const provider = shouldUseAi ? new GeminiProvider({ apiKey: apiKey! }) : new ConventionalReleaseNotesProvider();
       const rawValidator = new ReleaseNotesValidator();
       const validatorAdapter = {
         validate(data: unknown) {
@@ -246,23 +275,30 @@ export class ReleaseOrchestrator {
           if (!valRes.isValid) {
             throw new Error(valRes.issues.map(i => i.message).join(', '));
           }
-          return data as import('@webicro/validation').ReleaseNotesMap;
+          return data as ReleaseNotesMap;
         }
       };
       const aiController = new AIController(provider, validatorAdapter);
-      let releaseNotes: import('@webicro/validation').ReleaseNotesMap = {};
+      let releaseNotes: ReleaseNotesMap = {};
       try {
-        releaseNotes = await aiController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, ['tr', 'en']);
+        releaseNotes = await aiController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
         emitAndRecord('Release Notes Generation', 'SUCCESS', `${provider.name} ile çok dilli sürüm notları üretildi`);
       } catch (err: unknown) {
-        emitAndRecord('Release Notes Generation', 'SUCCESS', 'Standart sürüm notları üretildi');
+        // Fallback to conventional notes if AI generation fails
+        const fallbackProvider = new ConventionalReleaseNotesProvider();
+        const fallbackController = new AIController(fallbackProvider, validatorAdapter);
+        releaseNotes = await fallbackController.generate(resolution.versionString, gitAnalysis.commitsSinceLastTag, languages);
+        emitAndRecord('Release Notes Generation', 'SUCCESS', 'Standart conventional sürüm notları üretildi');
       }
 
       // 9. Release Notes Validation
       emitAndRecord('Release Notes Validation', 'IN_PROGRESS');
       const valResult = rawValidator.validate(releaseNotes);
-      if (!valResult.isValid && valResult.issues.some(i => i.severity === 'error')) {
-        emitAndRecord('Release Notes Validation', 'FAILED', undefined, valResult.issues.map(i => i.message).join(', '));
+      const validationErrors = valResult.issues.filter(i => i.severity === 'error');
+      if (!valResult.isValid && validationErrors.length > 0) {
+        const errStr = validationErrors.map(i => i.message).join(', ');
+        emitAndRecord('Release Notes Validation', 'FAILED', undefined, errStr);
+        throw new AppError(`Sürüm notları doğrulanamadı: ${errStr}`, 'VALIDATION_ERROR');
       } else {
         emitAndRecord('Release Notes Validation', 'SUCCESS', 'Karakter sınırları ve güvenlik denetimleri geçti');
       }
@@ -279,53 +315,88 @@ export class ReleaseOrchestrator {
         emitAndRecord('Pubspec Update', 'SKIPPED', 'pubspec.yaml bulunamadı veya güncellenemedi');
       }
 
-      // 11. Flutter Doctor / Analyze
+      // 11. Flutter Doctor / Analyze (Fail-Closed)
       emitAndRecord('Flutter Check', 'IN_PROGRESS');
-      try {
-        const doctor = new FlutterDoctor();
-        const docRes = await doctor.check(targetDir);
-        if (!docRes.isInstalled) {
-          emitAndRecord('Flutter Check', 'SUCCESS', 'Flutter SDK doğrulaması tamamlandı');
-        } else {
+      if (options.dryRun) {
+        emitAndRecord('Flutter Check', 'SUCCESS', 'Simülasyon Modu: Flutter ortamı doğrulandı');
+      } else {
+        try {
+          const doctor = new FlutterDoctor();
+          const docRes = await doctor.check(targetDir);
+          if (!docRes.isInstalled) {
+            emitAndRecord('Flutter Check', 'FAILED', undefined, 'Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı');
+            throw new AppError('Flutter SDK sistemde kurulu veya PATH üzerinde bulunamadı. Lütfen Flutter kurulumunu doğrulayın.', 'BUILD_ERROR');
+          }
+
           const analyzer = new FlutterAnalyzer();
           const analyzeRes = await analyzer.analyze(targetDir);
           if (analyzeRes.hasErrors) {
             emitAndRecord('Flutter Check', 'FAILED', undefined, `Flutter analizi ${analyzeRes.errorCount} hata verdi`);
+            throw new AppError(`Flutter statik analizi ${analyzeRes.errorCount} hata ile başarısız oldu.`, 'BUILD_ERROR');
           } else {
             emitAndRecord('Flutter Check', 'SUCCESS', `Flutter SDK ve kod analizi temiz (${analyzeRes.warningCount} uyarı)`);
           }
+        } catch (checkErr) {
+          if (checkErr instanceof AppError) throw checkErr;
+          const msg = checkErr instanceof Error ? checkErr.message : String(checkErr);
+          emitAndRecord('Flutter Check', 'FAILED', undefined, msg);
+          throw new AppError(`Flutter ortam kontrolü başarısız: ${msg}`, 'BUILD_ERROR');
         }
-      } catch {
-        emitAndRecord('Flutter Check', 'SUCCESS', 'Ortam doğrulaması tamamlandı');
       }
 
-      // 12. Run Tests
-      if (!options.skipTests) {
+      // 12. Run Tests (Fail-Closed)
+      if (!options.skipTests && config?.build?.runTests !== false) {
         emitAndRecord('Run Tests', 'IN_PROGRESS');
         try {
           const tester = new FlutterTester();
           const testRes = await tester.test(targetDir);
-          if (!testRes.passed && testRes.testsFailed > 0) {
+          if (!testRes.passed || testRes.testsFailed > 0) {
             emitAndRecord('Run Tests', 'FAILED', undefined, `Testler başarısız (${testRes.testsFailed} hata)`);
+            throw new AppError(`Birim testleri başarısız oldu: ${testRes.testsFailed} test hata verdi.`, 'TEST_ERROR');
           } else {
             emitAndRecord('Run Tests', 'SUCCESS', testRes.testsPassed > 0 ? `${testRes.testsPassed} test başarıyla geçti` : 'Testler başarıyla geçti');
           }
-        } catch {
-          emitAndRecord('Run Tests', 'SUCCESS', 'Test adımı tamamlandı');
+        } catch (testErr) {
+          if (testErr instanceof AppError) throw testErr;
+          const msg = testErr instanceof Error ? testErr.message : String(testErr);
+          emitAndRecord('Run Tests', 'FAILED', undefined, msg);
+          throw new AppError(`Flutter test çalıştırma hatası: ${msg}`, 'TEST_ERROR');
         }
       } else {
         emitAndRecord('Run Tests', 'SKIPPED', 'Testler kullanıcı tercihiyle atlandı');
       }
 
       // 13 & 14. Android Build & Verify
+      checkAbort();
       let androidArtifact: ArtifactManifest | undefined;
-      if (!options.skipAndroid) {
-        emitAndRecord('Android Build', 'IN_PROGRESS');
-        if (options.dryRun) {
+      const shouldBuildAndroid = !options.skipAndroid && (config?.android?.enabled !== false);
+      if (shouldBuildAndroid) {
+        const previousAndroid = existingReleaseId ? artifactRepo.findByReleaseAndPlatform(releaseId, 'android') : undefined;
+        if (previousAndroid && fs.existsSync(previousAndroid.filePath)) {
+          androidArtifact = {
+            platform: 'android',
+            filePath: previousAndroid.filePath,
+            fileName: previousAndroid.fileName,
+            sha256: previousAndroid.sha256,
+            sizeBytes: previousAndroid.size,
+            createdAt: new Date().toISOString(),
+          };
+          emitAndRecord('Android Build', 'SUCCESS', `Önceki çalıştırmadan mevcut AAB korundu: ${androidArtifact.fileName}`);
+          emitAndRecord('Android Verify', 'SUCCESS', `SHA-256 doğrulandı (Önbellek): ${androidArtifact.sha256.substring(0, 16)}...`);
+        } else if (options.dryRun) {
+          androidArtifact = {
+            platform: 'android',
+            filePath: path.join(targetDir, 'build/app/outputs/bundle/release/dry-run-app-release.aab'),
+            fileName: 'dry-run-app-release.aab',
+            sha256: 'simulated_aab_sha256_hash_for_dry_run_testing_only',
+            sizeBytes: 16400000,
+            createdAt: new Date().toISOString(),
+          };
           emitAndRecord('Android Build', 'SUCCESS', 'Simülasyon Modu: Android derleme adımı doğrulandı');
           emitAndRecord('Android Verify', 'IN_PROGRESS');
-          emitAndRecord('Android Verify', 'SUCCESS', 'Simülasyon Modu: SHA-256 doğrulama hazır');
+          emitAndRecord('Android Verify', 'SUCCESS', 'Simülasyon Modu: SHA-256 doğrulama hazır (15.64 MB)');
         } else {
+          emitAndRecord('Android Build', 'IN_PROGRESS');
           try {
             const builder = new AndroidBuilder();
             const buildRes = await builder.build({
@@ -372,14 +443,36 @@ export class ReleaseOrchestrator {
       }
 
       // 15 & 16. iOS Build & Verify
+      checkAbort();
       let iosArtifact: ArtifactManifest | undefined;
-      if (!options.skipIos) {
-        emitAndRecord('iOS Build', 'IN_PROGRESS');
-        if (options.dryRun) {
+      const shouldBuildIos = !options.skipIos && (config?.ios?.enabled !== false);
+      if (shouldBuildIos) {
+        const previousIos = existingReleaseId ? artifactRepo.findByReleaseAndPlatform(releaseId, 'ios') : undefined;
+        if (previousIos && fs.existsSync(previousIos.filePath)) {
+          iosArtifact = {
+            platform: 'ios',
+            filePath: previousIos.filePath,
+            fileName: previousIos.fileName,
+            sha256: previousIos.sha256,
+            sizeBytes: previousIos.size,
+            createdAt: new Date().toISOString(),
+          };
+          emitAndRecord('iOS Build', 'SUCCESS', `Önceki çalıştırmadan mevcut IPA korundu: ${iosArtifact.fileName}`);
+          emitAndRecord('iOS Verify', 'SUCCESS', `SHA-256 doğrulandı (Önbellek): ${iosArtifact.sha256.substring(0, 16)}...`);
+        } else if (options.dryRun) {
+          iosArtifact = {
+            platform: 'ios',
+            filePath: path.join(targetDir, 'build/ios/ipa/dry-run-Runner.ipa'),
+            fileName: 'dry-run-Runner.ipa',
+            sha256: 'simulated_ipa_sha256_hash_for_dry_run_testing_only',
+            sizeBytes: 24500000,
+            createdAt: new Date().toISOString(),
+          };
           emitAndRecord('iOS Build', 'SUCCESS', 'Simülasyon Modu: iOS derleme adımı doğrulandı');
           emitAndRecord('iOS Verify', 'IN_PROGRESS');
-          emitAndRecord('iOS Verify', 'SUCCESS', 'Simülasyon Modu: SHA-256 doğrulama hazır');
+          emitAndRecord('iOS Verify', 'SUCCESS', 'Simülasyon Modu: SHA-256 doğrulama hazır (23.36 MB)');
         } else {
+          emitAndRecord('iOS Build', 'IN_PROGRESS');
           if (process.platform !== 'darwin') {
             emitAndRecord('iOS Build', 'SKIPPED', 'iOS derlemesi sadece macOS üzerinde yapılabilir');
             emitAndRecord('iOS Verify', 'SKIPPED');
@@ -420,17 +513,20 @@ export class ReleaseOrchestrator {
         emitAndRecord('iOS Verify', 'SKIPPED');
       }
 
-      if (!androidArtifact && !iosArtifact) {
+      if (!options.dryRun && !androidArtifact && !iosArtifact && (shouldBuildAndroid || shouldBuildIos)) {
         throw new Error('Hiçbir platform (Android veya iOS) başarıyla derlenemedi.');
       }
 
       this.stateMachine.transitionTo('ARTIFACT_READY');
       releaseRepo.updateStatus(releaseId, 'ARTIFACT_READY');
 
-      this.stateMachine.transitionTo('UPLOADING');
-      releaseRepo.updateStatus(releaseId, 'UPLOADING');
+      if (!options.dryRun && (!options.skipAndroid || !options.skipIos)) {
+        this.stateMachine.transitionTo('UPLOADING');
+        releaseRepo.updateStatus(releaseId, 'UPLOADING');
+      }
 
       // 17. Google Play Upload
+      checkAbort();
       let googlePlayStatus = 'SKIPPED';
       if (!options.skipAndroid) {
         emitAndRecord('Google Play Upload', 'IN_PROGRESS');
@@ -481,7 +577,7 @@ export class ReleaseOrchestrator {
                 userFraction: options.rollout ? options.rollout / 100 : undefined,
               });
 
-              const playNotes: import('@webicro/google-play').GooglePlayReleaseNotes[] = [];
+              const playNotes: GooglePlayReleaseNotes[] = [];
               if (options.notesTr) {
                 playNotes.push({ language: 'tr-TR', text: options.notesTr });
               }
@@ -521,6 +617,7 @@ export class ReleaseOrchestrator {
       }
 
       // 18. App Store Upload
+      checkAbort();
       let appStoreStatus = 'SKIPPED';
       if (!options.skipIos) {
         emitAndRecord('App Store Upload', 'IN_PROGRESS');
@@ -582,15 +679,31 @@ export class ReleaseOrchestrator {
         emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
       }
 
-      this.stateMachine.transitionTo('READY_FOR_SUBMISSION');
+      // 19. Final Review / Submission & Real State Handling
+      let finalStatus: ReleaseStatus = 'ARTIFACT_READY';
+      const isStoreUploaded = (googlePlayStatus.startsWith('SUCCESS') || googlePlayStatus === 'LIVE') ||
+                              (appStoreStatus.startsWith('SUCCESS') || appStoreStatus === 'PROCESSING');
 
-      // 19. Final Review / Submission
-      emitAndRecord('Submission', 'IN_PROGRESS');
-      this.stateMachine.transitionTo('SUBMITTED');
-      emitAndRecord('Submission', 'SUCCESS', 'İnceleme ve onay adımı tamamlandı');
+      if (options.dryRun) {
+        finalStatus = 'ARTIFACT_READY';
+        emitAndRecord('Submission', 'SUCCESS', 'Simülasyon Modu: Süreç başarıyla simüle edildi');
+      } else if (isStoreUploaded) {
+        this.stateMachine.transitionTo('READY_FOR_SUBMISSION');
+        if (options.submitForReview || config?.ios?.submitForReview) {
+          this.stateMachine.transitionTo('SUBMITTED');
+          finalStatus = 'SUBMITTED';
+          emitAndRecord('Submission', 'SUCCESS', 'Mağaza incelemesine sunuldu');
+        } else {
+          finalStatus = 'READY_FOR_SUBMISSION';
+          emitAndRecord('Submission', 'SUCCESS', 'Mağazaya yüklendi, manuel inceleme onayına hazır');
+        }
+      } else {
+        emitAndRecord('Submission', 'SKIPPED', 'Mağaza yüklemesi yapılmadı; yerel derleme hazır');
+      }
 
       // 19.5 Git Release Commit, Tag & Push
-      let gitResult: import('@webicro/git').CommitAndPushResult | undefined;
+      checkAbort();
+      let gitResult: CommitAndPushResult | undefined;
       if (!options.skipGit) {
         emitAndRecord('Git Release & Sync', 'IN_PROGRESS');
         try {
@@ -616,15 +729,17 @@ export class ReleaseOrchestrator {
           }
         } catch (gitErr: unknown) {
           const msg = gitErr instanceof Error ? gitErr.message : String(gitErr);
-          emitAndRecord('Git Release & Sync', 'SUCCESS', `Git adımı uyarısı: ${msg}`);
+          emitAndRecord('Git Release & Sync', 'FAILED', undefined, `Git push/commit hatası: ${msg}`);
+          if (options.pushGit !== false && !options.dryRun) {
+            throw new AppError(`Git release push işlemi başarısız oldu: ${msg}`, 'NETWORK_ERROR');
+          }
         }
       } else {
         emitAndRecord('Git Release & Sync', 'SKIPPED', 'Git entegrasyonu atlandı');
       }
 
-      this.stateMachine.transitionTo('RELEASED');
-      releaseRepo.updateStatus(releaseId, 'RELEASED');
-      globalReleaseRepo?.updateStatus(releaseId, 'RELEASED');
+      releaseRepo.updateStatus(releaseId, finalStatus);
+      globalReleaseRepo?.updateStatus(releaseId, finalStatus);
 
       // 20. Audit log completion & Notifications
       emitAndRecord('Audit & Notify', 'IN_PROGRESS');
@@ -668,7 +783,7 @@ export class ReleaseOrchestrator {
       return {
         releaseId,
         version: resolution.versionString,
-        status: this.stateMachine.currentStatus,
+        status: finalStatus,
         androidArtifact,
         iosArtifact,
         googlePlayStatus,

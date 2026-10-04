@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { readFileSync } from 'node:fs';
-import { AppStoreConfig } from './types.js';
+import type { AppStoreConfig } from './types.js';
 
 export function generateAppStoreToken(config: AppStoreConfig): string {
   let privateKey = config.privateKeyContent;

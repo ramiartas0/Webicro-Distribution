@@ -2,12 +2,12 @@ import type { ReleaseNotesMap } from '@webicro/validation';
 
 export interface AIContext {
   version: string;
-  commits: Array<{
+  commits: {
     type: string;
     scope: string | null;
     message: string;
     isBreakingChange: boolean;
-  }>;
+  }[];
   languages: string[];
 }
 

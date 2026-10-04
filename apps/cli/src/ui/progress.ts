@@ -7,11 +7,11 @@ export interface ProgressStep {
 
 export class ProgressReporter {
   private spinner: Ora | null = null;
-  private totalSteps: number = 0;
-  private currentStepIndex: number = 0;
+  private totalSteps = 0;
+  private currentStepIndex = 0;
   private isHeadless: boolean;
 
-  constructor(totalSteps: number, isHeadless: boolean = false) {
+  constructor(totalSteps: number, isHeadless = false) {
     this.totalSteps = totalSteps;
     this.isHeadless = isHeadless;
   }

@@ -21,7 +21,7 @@ export async function waitForBuildProcessing(
       throw new Error(`Failed to fetch builds: ${res.statusText}`);
     }
 
-    const data = await res.json() as { data: Array<{ id: string, attributes: { processingState: string } }> };
+    const data = await res.json() as { data: { id: string, attributes: { processingState: string } }[] };
     
     if (!data.data || data.data.length === 0) {
       // Build might not be visible yet

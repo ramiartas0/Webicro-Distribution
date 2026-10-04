@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
-import type { GitAnalysis, ParsedCommit } from './types.js';
+import type { GitAnalysis, ParsedCommit, GitRemoteInfo } from './types.js';
 import { parseConventionalCommit, determineVersionBump } from './commit-parser.js';
 import { detectNativeChanges } from './change-detector.js';
 
@@ -43,7 +43,7 @@ export class GitAnalyzer {
     }
   }
 
-  async getRemoteInfo(): Promise<import('./types.js').GitRemoteInfo | null> {
+  async getRemoteInfo(): Promise<GitRemoteInfo | null> {
     try {
       const { GitOperations } = await import('./operations.js');
       const ops = new GitOperations(this.targetDir);
