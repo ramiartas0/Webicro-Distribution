@@ -58,3 +58,14 @@ export interface AIDiagnosisResult {
   autoFixAction?: AutoFixActionType;
   autoFixDescription?: string;
 }
+
+export interface StoreRejectionDiagnosis {
+  store: 'apple' | 'google';
+  guidelineOrPolicy: string;
+  categoryTitle: string;
+  rootCause: string;
+  explanation: string;
+  solutionSteps: string[];
+  appealLetterDraft: string;
+}
+

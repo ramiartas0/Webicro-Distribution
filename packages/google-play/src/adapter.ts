@@ -5,6 +5,8 @@ import type {
   GooglePlayUploadResult,
   GooglePlaySafeTrackResult,
   GooglePlayDraftResult,
+  GooglePlayTrackReleaseStatus,
+  GooglePlayListing,
 } from './types.js';
 import { getGoogleAccessToken } from './auth.js';
 import { GooglePlayError } from '@webicro/shared';
@@ -474,6 +476,170 @@ export class GooglePlayAdapter {
     };
   }
 
+  /**
+   * Belirtilen track (üretim, beta, alpha, dahili) için son sürümün güncel mağaza durumunu çeker.
+   */
+  public async getTrackReleaseStatus(
+    targetTrack?: string,
+  ): Promise<GooglePlayTrackReleaseStatus | null> {
+    const trackName = targetTrack ?? this.config.track ?? 'production';
+    let editId = '';
+    let token = '';
+
+    try {
+      token = await getGoogleAccessToken(this.config);
+    } catch {
+      return null;
+    }
+
+    try {
+      const editRes = await fetch(
+        `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+      );
+
+      if (!editRes.ok) return null;
+      const editData = (await editRes.json()) as { id?: string };
+      editId = editData.id ?? '';
+
+      const trackRes = await fetch(
+        `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/tracks/${trackName}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!trackRes.ok) {
+        if (editId) {
+          await fetch(
+            `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`,
+            {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            },
+          ).catch(() => {});
+        }
+        return null;
+      }
+
+      interface TrackData {
+        track?: string;
+        releases?: {
+          status?: string;
+          versionCodes?: string[];
+          userFraction?: number;
+          releaseNotes?: { language?: string; text?: string }[];
+        }[];
+      }
+
+      const data = (await trackRes.json()) as TrackData;
+      const latestRelease = data.releases?.[0];
+
+      if (editId) {
+        await fetch(
+          `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        ).catch(() => {});
+      }
+
+      if (!latestRelease) return null;
+
+      const vCodes = (latestRelease.versionCodes ?? []).map((v) => parseInt(v, 10)).filter((n) => !isNaN(n));
+
+      return {
+        track: trackName,
+        status: latestRelease.status ?? 'unknown',
+        versionCodes: vCodes,
+        userFraction: latestRelease.userFraction,
+        releaseNotes: latestRelease.releaseNotes?.map((r) => ({
+          language: r.language ?? 'tr-TR',
+          text: r.text ?? '',
+        })),
+      };
+    } catch {
+      if (editId && token) {
+        await fetch(
+          `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        ).catch(() => {});
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Google Play mağaza listeleme detaylarını (başlık, kısa açıklama, tam açıklama) günceller.
+   */
+  public async syncListings(editId: string, listings: GooglePlayListing[]): Promise<void> {
+    const token = await getGoogleAccessToken(this.config);
+
+    for (const listing of listings) {
+      const payload: Record<string, string> = { language: listing.language };
+      if (listing.title) payload['title'] = listing.title;
+      if (listing.shortDescription) payload['shortDescription'] = listing.shortDescription;
+      if (listing.fullDescription) payload['fullDescription'] = listing.fullDescription;
+
+      const res = await fetch(
+        `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/listings/${listing.language}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!res.ok) {
+        throw new Error(
+          `Listing (${listing.language}) güncellenemedi: ${res.status} ${await res.text()}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Google Play mağaza ekran görüntülerini veya simgelerini yükler.
+   */
+  public async uploadListingImage(
+    editId: string,
+    language: string,
+    imageType: 'phoneScreenshots' | 'sevenInchScreenshots' | 'tenInchScreenshots' | 'icon' | 'featureGraphic',
+    imagePath: string,
+  ): Promise<void> {
+    const token = await getGoogleAccessToken(this.config);
+    const fileBuffer = fs.readFileSync(imagePath);
+
+    const res = await fetch(
+      `https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/${this.packageName}/edits/${editId}/listings/${language}/${imageType}?uploadType=media`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'image/png',
+        },
+        body: fileBuffer,
+      },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Ekran görüntüsü yüklenemedi (${imageType}): ${res.status} ${await res.text()}`);
+    }
+  }
+
   private handleError(error: unknown, operation: string): never {
     let message = error instanceof Error ? error.message : String(error);
 
@@ -486,3 +652,4 @@ export class GooglePlayAdapter {
     });
   }
 }
+

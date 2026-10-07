@@ -1,4 +1,9 @@
-import type { AIDiagnosisContext, AIDiagnosisResult, AIProviderType } from './types.js';
+import type {
+  AIDiagnosisContext,
+  AIDiagnosisResult,
+  AIProviderType,
+  StoreRejectionDiagnosis,
+} from './types.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 
@@ -415,4 +420,243 @@ ${(ctx.recentLogs || []).slice(-15).join('\n')}`;
       autoFixAction: 'NONE',
     };
   }
+
+  /**
+   * Apple App Store veya Google Play Store inceleme reddi (rejection) mesajını analiz eder,
+   * guideline ihlalini tespit eder, çözüm adımları ve itiraz/cevap mektubu taslağı oluşturur.
+   */
+  public static diagnoseStoreRejection(
+    store: 'apple' | 'google',
+    rawRejectionMessage: string,
+    context?: { appName?: string; version?: string },
+  ): StoreRejectionDiagnosis {
+    const text = rawRejectionMessage.toLowerCase();
+    const appName = context?.appName || 'Uygulama';
+    const version = context?.version || '1.0.0';
+
+    if (store === 'apple') {
+      // Guideline 2.1 - App Completeness / Test Credentials
+      if (
+        text.includes('guideline 2.1') ||
+        text.includes('app completeness') ||
+        text.includes('demo account') ||
+        text.includes('login credentials') ||
+        text.includes('user name and password') ||
+        text.includes('unable to review')
+      ) {
+        return {
+          store: 'apple',
+          guidelineOrPolicy: 'Guideline 2.1 - Performance: App Completeness (Giriş / Demo Hesabı Eksikliği)',
+          categoryTitle: 'Apple İnceleme Ekibi İçin Test / Giriş Hesabı Sağlanmalı',
+          rootCause:
+            'Apple inceleme ekibi uygulamanıza giriş yapamadı veya tam işlevselliği test etmek için gereken demo kullanıcı adı ve şifresi sağlanmadı.',
+          explanation:
+            'Apple App Store inceleme uzmanları, uygulamanın arka planındaki özellikleri denetlemek için çalışan bir test hesabına ihtiyaç duyar. Eğer uygulamanız SMS doğrulama veya özel giriş gerektiriyorsa, App Store Connect üzerinde sabit bir test hesabı belirtilmelidir.',
+          solutionSteps: [
+            'App Store Connect -> Uygulamanız -> Sürüm Sayfası -> "Uygulama İnceleme Bilgileri" (App Review Information) bölümüne gidin.',
+            '"Oturum açma bilgileri gereklidir" kutucuğunu işaretleyin.',
+            'Apple inceleme uzmanı için geçerli bir demo kullanıcı adı ve şifre girin (ör: testuser@domain.com / TestPass123!).',
+            'Ekran görüntüsü veya özel bir yönlendirme gerekiyorsa "Notlar" bölümüne kısa bir açıklama ekleyin.',
+            'Aşağıdaki itiraz/yanıt taslağını Resolution Center üzerinden Apple ekibine gönderip incelemeyi yeniden başlatın.',
+          ],
+          appealLetterDraft: `Dear Apple Review Team,
+
+Thank you for your feedback regarding Guideline 2.1 - App Completeness.
+
+We have provided active demo credentials for testing the full functionality of ${appName} (v${version}) in App Store Connect under the "App Review Information" section:
+- Username: [TEST_USERNAME]
+- Password: [TEST_PASSWORD]
+
+The account is pre-configured with active sample data. Please let us know if you need any additional verification steps or information.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+
+      // Guideline 5.1.1 - Privacy / Data Collection / Purpose String
+      if (
+        text.includes('guideline 5.1.1') ||
+        text.includes('privacy') ||
+        text.includes('purpose string') ||
+        text.includes('infoplist') ||
+        text.includes('nscamerausagedescription') ||
+        text.includes('nslocationwheninuseusagedescription')
+      ) {
+        return {
+          store: 'apple',
+          guidelineOrPolicy: 'Guideline 5.1.1 - Legal: Privacy & Data Collection (Eksik İzin Açıklaması)',
+          categoryTitle: 'Info.plist İçinde İzin Kullanım Açıklaması (Purpose String) Yetersiz veya Eksik',
+          rootCause:
+            'Kamera, konum, galeri veya mikrofon gibi hassas izinlerin neden istendiğini belirten Info.plist açıklama metinleri (NSCameraUsageDescription vb.) eksik veya jenerik.',
+          explanation:
+            'Apple, kullanıcıdan izin istenirken popup penceresinde net ve amaca uygun bir Türkçe/İngilizce açıklama gösterilmesini zorunlu kılar. "Uygulama kamerayı kullanır" gibi jenerik ifadeler reddedilir.',
+          solutionSteps: [
+            'ios/Runner/Info.plist dosyasını açın.',
+            'İlgili izin anahtarlarını (NSCameraUsageDescription, NSPhotoLibraryUsageDescription, NSLocationWhenInUseUsageDescription) kontrol edin.',
+            'Açıklamayı uygulamanın amacıyla uyumlu olacak şekilde detaylandırın (ör: "Profil fotoğrafı yükleyebilmeniz ve kurye teslimat kanıtı çekebilmeniz için kameranıza ihtiyaç duyulur.").',
+            'Yeni bir derleme alıp mağazaya yükleyin.',
+          ],
+          appealLetterDraft: `Dear Apple Review Team,
+
+Thank you for reviewing ${appName} (v${version}). Regarding Guideline 5.1.1, we have updated our Info.plist usage descriptions to explicitly explain why each permission is required for the user experience.
+
+We have uploaded a new build that includes these transparent descriptions and updated our privacy disclosures accordingly.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+
+      // Guideline 4.3 - Spam / Template / Repetitive
+      if (
+        text.includes('guideline 4.3') ||
+        text.includes('design: spam') ||
+        text.includes('duplicate') ||
+        text.includes('template')
+      ) {
+        return {
+          store: 'apple',
+          guidelineOrPolicy: 'Guideline 4.3 - Design: Spam & Template Apps',
+          categoryTitle: 'Tasarım veya Benzer Uygulama Çokluğu Uyarısı (Guideline 4.3)',
+          rootCause:
+            'Apple inceleme algoritması uygulamanızı mağazadaki mevcut başka bir uygulamaya çok benzer veya şablon tabanlı buldu.',
+          explanation:
+            'Eğer aynı firmanın birden fazla şubesi/şehri için ayrı uygulamalar yüklüyorsanız veya tek bir kurumsal hesap yerine benzer tasarımlar kullanıyorsanız Apple bunu spam olarak niteleyebilir. Uygulamanın kendine has marka değerini ve bağımsız işlevlerini açıklayan bir itiraz yazılmalıdır.',
+          solutionSteps: [
+            'Uygulamanın işletmeye, markaya veya belirli bir kullanıcı kitlesine özel olduğunu belgeleyin.',
+            'Gerekirse marka tescil belgesi veya yetki yazısını ek dosya olarak App Store Connect Resolution Center üzerinden yükleyin.',
+            'Aşağıdaki profesyonel itiraz taslağını kullanarak yanıt verin.',
+          ],
+          appealLetterDraft: `Dear Apple Review Team,
+
+Thank you for your review of ${appName} (v${version}). We respectfully request a re-evaluation regarding Guideline 4.3.
+
+${appName} is an official, proprietary mobile platform specifically tailored for our distinct business operations and registered user base. It provides unique real-time services, specialized workflows, and secure infrastructure that cannot be combined with third-party applications.
+
+We have attached our brand authorization documentation to confirm the distinct identity and legitimate purpose of this application.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+
+      // Guideline 3.1.1 - In-App Purchase
+      if (
+        text.includes('guideline 3.1.1') ||
+        text.includes('in-app purchase') ||
+        text.includes('iap') ||
+        text.includes('external payment')
+      ) {
+        return {
+          store: 'apple',
+          guidelineOrPolicy: 'Guideline 3.1.1 - Business: Payments & In-App Purchase',
+          categoryTitle: 'Apple Uygulama İçi Satın Alma (IAP) Zorunluluğu',
+          rootCause:
+            'Dijital içerik, üyelik veya uygulama içi kilitli özellikler için harici ödeme yöntemi (kredi kartı, web yönlendirmesi) kullanılması reddedildi.',
+          explanation:
+            'Apple, fiziksel mal/hizmet (ör: restoran siparişi, kargo) dışındaki tüm dijital ürün ve aboneliklerin Apple In-App Purchase sistemi üzerinden satılmasını şart koşar.',
+          solutionSteps: [
+            'Eğer satılan hizmet fiziksel teslimat/hizmet ise (ör: kurye, restoran siparişi, taşımacılık), bunun fiziksel ürün olduğunu itiraz mektubunda belirtin.',
+            'Eğer dijital içerik veya yazılım aboneliği ise StoreKit / Flutter in_app_purchase entegrasyonunu tamamlayın.',
+          ],
+          appealLetterDraft: `Dear Apple Review Team,
+
+Thank you for your feedback regarding Guideline 3.1.1.
+
+We would like to clarify that ${appName} processes payments strictly for real-world physical goods and logistic delivery services consumed outside the digital application, which is compliant under Guideline 3.1.5(a) / Physical Goods and Services. No digital content, unlocks, or digital media are sold within the app.
+
+We kindly request a re-review under these physical delivery service provisions.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+    }
+
+    if (store === 'google') {
+      // Photo / Video Permissions
+      if (
+        text.includes('photo and video permissions') ||
+        text.includes('read_media_images') ||
+        text.includes('read_external_storage')
+      ) {
+        return {
+          store: 'google',
+          guidelineOrPolicy: 'Google Play User Data: Photo and Video Permissions Policy',
+          categoryTitle: 'Gereksiz Medya İzinleri (READ_MEDIA_IMAGES) İhlali',
+          rootCause:
+            'Google Play, uygulamanın çekirdek işlevi bir galeri veya dosya yöneticisi olmadığı halde geniş medya izinleri istemesini kısıtlar.',
+          explanation:
+            'Android 13+ Photo Picker sistemi kullanıcıya izin sormadan güvenli fotoğraf seçimi sunar. AndroidManifest.xml dosyasından bu izinlerin kaldırılması sorunu anında çözer.',
+          solutionSteps: [
+            'android/app/src/main/AndroidManifest.xml dosyasından READ_MEDIA_IMAGES ve READ_EXTERNAL_STORAGE satırlarını silin.',
+            'Yeni sürümü derleyip Google Play Console üzerinden yayınlayın.',
+          ],
+          appealLetterDraft: `Dear Google Play Policy Team,
+
+We have resolved the Photo and Video Permissions policy finding for ${appName} (v${version}). We have removed the READ_MEDIA_IMAGES and READ_EXTERNAL_STORAGE permissions from AndroidManifest.xml in the newly submitted bundle, utilizing the standard Android Photo Picker instead.
+
+We kindly request approval of the updated release.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+
+      // Broken Functionality / App Crash
+      if (
+        text.includes('broken functionality') ||
+        text.includes('crash') ||
+        text.includes('freeze') ||
+        text.includes('not responding')
+      ) {
+        return {
+          store: 'google',
+          guidelineOrPolicy: 'Google Play Minimum Functionality: Broken Functionality',
+          categoryTitle: 'Uygulama Başlatma Sırasında Çökme veya Donma Tespit Edildi',
+          rootCause:
+            'Google Play test cihazları (Firebase Test Lab) uygulamanın açılışta çöktüğünü veya tepki vermediğini tespit etti.',
+          explanation:
+            'Çoğunlukla internet bağlantısı olmadığında uygulamanın hata yakalayamaması veya eksik Firebase/Google Services yapılandırmasından kaynaklanır.',
+          solutionSteps: [
+            'Google Play Console -> Yayın Genel Bakışı -> Ön İnceleme Raporu (Pre-launch Report) sekmesindeki yığın izlerini (stack trace) inceleyin.',
+            'Uygulama açılışında try/catch blokları ekleyin ve internet yokken düzgün bir hata ekranı gösterin.',
+          ],
+          appealLetterDraft: `Dear Google Play Review Team,
+
+Thank you for reporting the stability issue for ${appName}. We have investigated the Pre-launch Report logs, identified the crash condition during initialization, and released a hotfix build that includes proper offline fallback handling.
+
+We appreciate your review and look forward to approval.
+
+Best regards,
+The Engineering Team`,
+        };
+      }
+    }
+
+    // Genel Mağaza Reddi (Generic Fallback)
+    return {
+      store,
+      guidelineOrPolicy: store === 'apple' ? 'App Store Review Guidelines' : 'Google Play Developer Policy',
+      categoryTitle: `${store === 'apple' ? 'Apple App Store' : 'Google Play'} İnceleme Reddi`,
+      rootCause: rawRejectionMessage.slice(0, 150) || 'Mağaza politikası veya teknik inceleme şartı karşılanmadı.',
+      explanation:
+        'Mağaza inceleme ekibi sürümü reddetti. İnceleme panelinde belirtilen gerekçelere uygun teknik veya açıklama düzenlemesi yapılması gerekmektedir.',
+      solutionSteps: [
+        'Mağaza konsolundaki inceleme notunu ve eklenen ekran görüntülerini inceleyin.',
+        'Gerekli kod veya meta veri düzeltmesini yapıp yeni bir derleme yükleyin.',
+        'Aşağıdaki yanıt taslağını mağaza paneli üzerinden inceleme ekibine iletin.',
+      ],
+      appealLetterDraft: `Dear ${store === 'apple' ? 'Apple Review' : 'Google Play Policy'} Team,
+
+Thank you for your feedback regarding ${appName} (v${version}). We have reviewed your remarks and made the necessary adjustments to comply with all store policies.
+
+Please let us know if any further clarification or evidence is needed.
+
+Best regards,
+The Engineering Team`,
+    };
+  }
 }
+

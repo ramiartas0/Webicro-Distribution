@@ -2,7 +2,15 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { AppStoreConfig, AppStoreUploadHooks, AppStoreUploadResult } from './types.js';
+import type {
+  AppStoreConfig,
+  AppStoreUploadHooks,
+  AppStoreUploadResult,
+  AppStoreVersionStatusResult,
+  AppStoreMetadataLocalization,
+  AppStoreCertificateInfo,
+  AppStoreProfileInfo,
+} from './types.js';
 import { generateAppStoreToken } from './auth.js';
 import { waitForBuildProcessing } from './polling.js';
 
@@ -571,4 +579,198 @@ export class AppStoreAdapter {
       submittedForReview: submitted,
     };
   }
+
+  /**
+   * App Store Connect üzerindeki sürümün güncel durumunu (WAITING_FOR_REVIEW, IN_REVIEW, READY_FOR_SALE vb.) sorgular.
+   */
+  public async getAppStoreVersionStatus(
+    appId?: string,
+    versionString?: string,
+  ): Promise<AppStoreVersionStatusResult | null> {
+    const targetAppId = appId || (await this.getAppId());
+    const filter = versionString
+      ? `/apps/${targetAppId}/appStoreVersions?filter[versionString]=${encodeURIComponent(versionString)}&filter[platform]=IOS`
+      : `/apps/${targetAppId}/appStoreVersions?filter[platform]=IOS`;
+
+    const res = (await this.fetchApi(filter)) as {
+      data?: {
+        id: string;
+        attributes?: {
+          versionString?: string;
+          appStoreState?: string;
+          appVersionState?: string;
+        };
+      }[];
+    };
+
+    const versions = res?.data ?? [];
+    if (versions.length === 0) return null;
+
+    const item = versions[0];
+    if (!item) return null;
+
+    const state =
+      item.attributes?.appVersionState || item.attributes?.appStoreState || 'UNKNOWN';
+
+    const isRejected = ['REJECTED', 'METADATA_REJECTED', 'DEVELOPER_REJECTED'].includes(state);
+    let rejectionReasons: string[] | undefined;
+
+    if (isRejected) {
+      rejectionReasons = await this.getResolutionCenterMessages(item.id).catch(() => []);
+    }
+
+    return {
+      versionId: item.id,
+      versionString: item.attributes?.versionString || versionString || '',
+      appStoreState: state,
+      rawState: item.attributes?.appStoreState,
+      rejectionReasons,
+    };
+  }
+
+  /**
+   * Reddedilen veya incelemede olan sürümün Resolution Center / İnceleme mesajlarını çeker.
+   */
+  public async getResolutionCenterMessages(versionId: string): Promise<string[]> {
+    try {
+      const res = (await this.fetchApi(
+        `/appStoreVersions/${versionId}/customerReviews`,
+      )) as {
+        data?: { attributes?: { body?: string; title?: string } }[];
+      };
+      const messages: string[] = [];
+      for (const item of res?.data ?? []) {
+        if (item.attributes?.body) {
+          messages.push(item.attributes.body);
+        }
+      }
+      return messages;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Sürüm meta verilerini (açıklama, anahtar kelimeler, vb.) günceller.
+   */
+  public async syncVersionMetadata(
+    versionId: string,
+    metadata: AppStoreMetadataLocalization,
+  ): Promise<void> {
+    const localizations = (await this.fetchApi(
+      `/appStoreVersions/${versionId}/appStoreVersionLocalizations`,
+    )) as { data: { id: string; attributes: { locale: string } }[] };
+
+    let localizationId = localizations.data?.find((l) => l.attributes.locale === metadata.locale)?.id;
+
+    if (!localizationId) {
+      const locPayload = {
+        data: {
+          type: 'appStoreVersionLocalizations',
+          attributes: { locale: metadata.locale },
+          relationships: {
+            appStoreVersion: { data: { type: 'appStoreVersions', id: versionId } },
+          },
+        },
+      };
+      const created = (await this.fetchApi('/appStoreVersionLocalizations', {
+        method: 'POST',
+        body: JSON.stringify(locPayload),
+      })) as { data: { id: string } };
+      localizationId = created.data.id;
+    }
+
+    const attributesToUpdate: Record<string, string> = {};
+    if (metadata.description) attributesToUpdate['description'] = metadata.description;
+    if (metadata.keywords) attributesToUpdate['keywords'] = metadata.keywords;
+    if (metadata.promotionalText) attributesToUpdate['promotionalText'] = metadata.promotionalText;
+    if (metadata.supportUrl) attributesToUpdate['supportUrl'] = metadata.supportUrl;
+    if (metadata.marketingUrl) attributesToUpdate['marketingUrl'] = metadata.marketingUrl;
+    if (metadata.whatsNew) attributesToUpdate['whatsNew'] = metadata.whatsNew;
+
+    if (Object.keys(attributesToUpdate).length > 0) {
+      const updatePayload = {
+        data: {
+          type: 'appStoreVersionLocalizations',
+          id: localizationId,
+          attributes: attributesToUpdate,
+        },
+      };
+      await this.fetchApi(`/appStoreVersionLocalizations/${localizationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updatePayload),
+      });
+    }
+  }
+
+  /**
+   * Apple Dağıtım Sertifikalarının (iOS Distribution) geçerlilik durumunu denetler.
+   */
+  public async getCertificates(): Promise<AppStoreCertificateInfo[]> {
+    interface ApiCert {
+      id: string;
+      attributes?: {
+        name?: string;
+        certificateType?: string;
+        expirationDate?: string;
+        platform?: string;
+      };
+    }
+    const res = (await this.fetchApi('/certificates')) as { data?: ApiCert[] };
+    const certs: AppStoreCertificateInfo[] = [];
+
+    for (const item of res?.data ?? []) {
+      const expStr = item.attributes?.expirationDate;
+      const expDate = expStr ? new Date(expStr) : new Date();
+      const daysRemaining = Math.floor((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+      certs.push({
+        id: item.id,
+        name: item.attributes?.name ?? 'Bilinmeyen Sertifika',
+        certificateType: item.attributes?.certificateType ?? 'DISTRIBUTION',
+        expirationDate: expStr ?? '',
+        daysRemaining,
+        isExpired: daysRemaining <= 0,
+        platform: item.attributes?.platform,
+      });
+    }
+
+    return certs;
+  }
+
+  /**
+   * Apple Provisioning Profillerinin geçerlilik durumunu denetler.
+   */
+  public async getProfiles(): Promise<AppStoreProfileInfo[]> {
+    interface ApiProfile {
+      id: string;
+      attributes?: {
+        name?: string;
+        profileType?: string;
+        expirationDate?: string;
+        profileState?: string;
+      };
+    }
+    const res = (await this.fetchApi('/profiles')) as { data?: ApiProfile[] };
+    const profiles: AppStoreProfileInfo[] = [];
+
+    for (const item of res?.data ?? []) {
+      const expStr = item.attributes?.expirationDate;
+      const expDate = expStr ? new Date(expStr) : new Date();
+      const daysRemaining = Math.floor((expDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+
+      profiles.push({
+        id: item.id,
+        name: item.attributes?.name ?? 'Bilinmeyen Profil',
+        profileType: item.attributes?.profileType ?? 'IOS_APP_STORE',
+        expirationDate: expStr ?? '',
+        daysRemaining,
+        isExpired: daysRemaining <= 0,
+        profileState: item.attributes?.profileState ?? 'ACTIVE',
+      });
+    }
+
+    return profiles;
+  }
 }
+

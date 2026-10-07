@@ -18,3 +18,24 @@ export interface ReleaseRiskAssessment {
   factors: RiskFactor[];
   requiresApproval: boolean;
 }
+
+export type CertificateHealthStatus = 'HEALTHY' | 'WARNING' | 'EXPIRED' | 'NOT_CONFIGURED';
+
+export interface CertificateItemStatus {
+  name: string;
+  type: 'APPLE_CERT' | 'APPLE_PROFILE' | 'ANDROID_KEYSTORE';
+  expirationDate: string;
+  daysRemaining: number;
+  isExpired: boolean;
+  status: 'VALID' | 'WARNING' | 'EXPIRED';
+  details?: string;
+}
+
+export interface CertificateHealthReport {
+  overallStatus: CertificateHealthStatus;
+  minDaysRemaining: number;
+  items: CertificateItemStatus[];
+  warnings: string[];
+  errors: string[];
+}
+

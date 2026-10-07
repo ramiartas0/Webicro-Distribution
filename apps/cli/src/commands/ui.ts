@@ -70,7 +70,9 @@ import {
   type AutoFixActionType,
 } from '@webicro/ai';
 import { ReleaseNotesValidator, type ReleaseNotesMap } from '@webicro/validation';
-import { PubspecVersionUpdater } from '@webicro/flutter';
+import { PubspecVersionUpdater, ShorebirdRunner } from '@webicro/flutter';
+import { CertificateHealthMonitor } from '@webicro/security';
+import { StoreAssetSync } from '@webicro/artifacts';
 import { createGoogleAuth, GooglePlayAdapter } from '@webicro/google-play';
 import { generateAppStoreToken, AppStoreAdapter } from '@webicro/app-store';
 import {
@@ -2694,6 +2696,125 @@ export const uiCommand = new Command('ui')
             res.end(
               JSON.stringify({
                 error: `Desteklenmeyen otomatik düzeltme eylemi: ${payload.action}`,
+              }),
+            );
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/release/ota-patch') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              projectPath?: string;
+              platform?: 'android' | 'ios-framework' | 'both';
+              releaseVersion?: string;
+              dryRun?: boolean;
+            };
+
+            const targetDir = path.resolve(payload.projectPath || activeProjectDir);
+            if (!isSafeProjectPath(targetDir)) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Geçersiz veya yetkisiz proje dizini' }));
+              return;
+            }
+
+            const result = await ShorebirdRunner.patch({
+              targetDir,
+              platform: payload.platform || 'android',
+              releaseVersion: payload.releaseVersion,
+              dryRun: Boolean(payload.dryRun),
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(result));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/credentials/health') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              projectPath?: string;
+            };
+
+            const targetDir = path.resolve(payload.projectPath || activeProjectDir);
+            const creds = getStoreCredentials(targetDir);
+
+            let appleAdapter: AppStoreAdapter | undefined;
+            if (creds.appStore?.keyId && creds.appStore?.issuerId) {
+              appleAdapter = new AppStoreAdapter({
+                keyId: creds.appStore.keyId,
+                issuerId: creds.appStore.issuerId,
+                privateKeyPath: creds.appStore.privateKeyPath,
+                privateKeyContent: creds.appStore.privateKey,
+                bundleId: 'dummy.health.check',
+              });
+            }
+
+            const keystoreCandidates = [
+              path.join(targetDir, 'android/app/upload-keystore.jks'),
+              path.join(targetDir, 'android/app/key.jks'),
+              path.join(targetDir, 'upload-keystore.jks'),
+            ];
+            const androidKeystorePath = keystoreCandidates.find((k) => fs.existsSync(k));
+
+            const report = await CertificateHealthMonitor.generateHealthReport({
+              appleAdapter,
+              androidKeystorePath,
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, report }));
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          }
+        });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/stores/assets-sync') {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
+        });
+        req.on('end', async () => {
+          try {
+            const payload = JSON.parse(body || '{}') as {
+              projectPath?: string;
+            };
+
+            const targetDir = path.resolve(payload.projectPath || activeProjectDir);
+            const metaDir = path.join(targetDir, '.release/metadata');
+            const screenDir = path.join(targetDir, '.release/screenshots');
+
+            const metadata = StoreAssetSync.discoverLocalMetadata(metaDir);
+            const screenshots = StoreAssetSync.discoverLocalScreenshots(screenDir);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                success: true,
+                metadataLocales: Object.keys(metadata.locales),
+                screenshotCount: screenshots.items.length,
               }),
             );
           } catch (err) {

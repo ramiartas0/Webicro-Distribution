@@ -23,3 +23,25 @@ export interface PubspecInfo {
   version: string;
   description?: string;
 }
+
+export type ShorebirdPlatform = 'android' | 'ios-framework' | 'both';
+
+export interface ShorebirdPatchOptions {
+  targetDir?: string;
+  platform: ShorebirdPlatform;
+  releaseVersion?: string;
+  allowUncommittedChanges?: boolean;
+  dryRun?: boolean;
+  onProgress?: (message: string) => void;
+  signal?: AbortSignal;
+}
+
+export interface ShorebirdPatchResult {
+  success: boolean;
+  platform: ShorebirdPlatform;
+  releaseVersion?: string;
+  patchNumber?: number;
+  output: string;
+  error?: string;
+}
+

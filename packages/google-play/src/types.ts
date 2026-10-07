@@ -34,3 +34,20 @@ export interface GooglePlaySafeTrackResult {
   releaseNotes?: GooglePlayReleaseNotes[];
   message?: string;
 }
+
+export interface GooglePlayTrackReleaseStatus {
+  track: string;
+  status: string;
+  versionCodes: number[];
+  userFraction?: number;
+  releaseNotes?: GooglePlayReleaseNotes[];
+}
+
+export interface GooglePlayListing {
+  language: string;
+  title?: string;
+  shortDescription?: string;
+  fullDescription?: string;
+}
+
+

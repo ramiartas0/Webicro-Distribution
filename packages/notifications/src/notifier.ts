@@ -1,4 +1,4 @@
-import type { NotificationPayload } from './types.js';
+import type { NotificationPayload, ReviewNotificationPayload } from './types.js';
 
 export class ReleaseNotifier {
   public async notify(payload: NotificationPayload, webhooks?: string[]): Promise<void> {
@@ -24,6 +24,69 @@ export class ReleaseNotifier {
         }
       } catch (err) {
         console.error(`Error sending notification to ${webhookUrl}:`, err);
+      }
+    });
+
+    await Promise.allSettled(promises);
+  }
+
+  public async notifyReviewStatus(
+    payload: ReviewNotificationPayload,
+    webhooks?: string[],
+  ): Promise<void> {
+    if (!webhooks || webhooks.length === 0) {
+      console.log(
+        `\n=== [Review Watcher] ${payload.store.toUpperCase()} - ${payload.project} v${payload.version} ===`,
+      );
+      console.log(`Durum Değişimi: ${payload.oldStatus ?? 'BAŞLANGIÇ'} ➔ ${payload.newStatus}`);
+      if (payload.rejectionDiagnosis) {
+        console.log(`[AI Teşhisi]: ${payload.rejectionDiagnosis.guidelineOrPolicy}`);
+        console.log(`[Kök Neden]: ${payload.rejectionDiagnosis.rootCause}`);
+        if (payload.rejectionDiagnosis.appealDraft) {
+          console.log(`[İtiraz Taslağı Hazır]:\n${payload.rejectionDiagnosis.appealDraft}`);
+        }
+      }
+      console.log('========================================================\n');
+      return;
+    }
+
+    const isRejected = ['REJECTED', 'METADATA_REJECTED', 'DEVELOPER_REJECTED', 'HALTED'].includes(
+      payload.newStatus.toUpperCase(),
+    );
+    const isApproved = ['READY_FOR_SALE', 'COMPLETED', 'RELEASED'].includes(
+      payload.newStatus.toUpperCase(),
+    );
+    const color = isApproved ? 0x00ff00 : isRejected ? 0xff0000 : 0xffff00;
+
+    let text = `*Store Review Status Update*\n*Project*: ${payload.project}\n*Store*: ${payload.store.toUpperCase()}\n*Version*: ${payload.version}\n*Status*: ${payload.oldStatus ?? 'INITIAL'} ➔ *${payload.newStatus}*\n`;
+
+    if (payload.rejectionDiagnosis) {
+      text += `\n*AI Rejection Diagnosis*:\n- *Policy/Guideline*: ${payload.rejectionDiagnosis.guidelineOrPolicy}\n- *Root Cause*: ${payload.rejectionDiagnosis.rootCause}\n`;
+    }
+
+    const message = {
+      content: text,
+      embeds: [
+        {
+          title: `Mağaza İnceleme Güncellemesi: ${payload.project} (${payload.store.toUpperCase()})`,
+          description: text,
+          color,
+        },
+      ],
+    };
+
+    const promises = webhooks.map(async (webhookUrl) => {
+      try {
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message),
+        });
+        if (!response.ok) {
+          console.error(`Failed to send review notification to ${webhookUrl}: ${response.statusText}`);
+        }
+      } catch (err) {
+        console.error(`Error sending review notification to ${webhookUrl}:`, err);
       }
     });
 
@@ -68,3 +131,4 @@ export class ReleaseNotifier {
     };
   }
 }
+

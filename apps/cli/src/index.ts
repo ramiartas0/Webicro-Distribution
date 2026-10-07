@@ -7,6 +7,7 @@ import { rollbackCommand } from './commands/rollback.js';
 import { logsCommand } from './commands/logs.js';
 import { approveCommand } from './commands/approve.js';
 import { uiCommand } from './commands/ui.js';
+import { patchCommand } from './commands/patch.js';
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
   program.addCommand(rollbackCommand);
   program.addCommand(logsCommand);
   program.addCommand(approveCommand);
+  program.addCommand(patchCommand);
+
 
   await program.parseAsync(process.argv);
 }

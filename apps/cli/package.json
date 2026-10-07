@@ -24,6 +24,8 @@
     "@webicro/flutter": "workspace:*",
     "@webicro/google-play": "workspace:*",
     "@webicro/app-store": "workspace:*",
+    "@webicro/artifacts": "workspace:*",
+    "@webicro/security": "workspace:*",
     "@webicro/core": "workspace:*",
     "commander": "catalog:",
     "@clack/prompts": "catalog:",

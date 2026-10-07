@@ -16,3 +16,31 @@ export interface ArtifactValidationResult {
   actualSha256?: string;
   error?: string;
 }
+
+export interface StoreLocaleMetadata {
+  locale: string;
+  title?: string;
+  shortDescription?: string;
+  fullDescription?: string;
+  keywords?: string;
+  whatsNew?: string;
+  supportUrl?: string;
+  marketingUrl?: string;
+  privacyUrl?: string;
+}
+
+export interface LocalStoreMetadata {
+  locales: Record<string, StoreLocaleMetadata>;
+}
+
+export interface LocalScreenshotItem {
+  platform: 'android' | 'ios';
+  locale: string;
+  deviceType: 'phone' | 'sevenInch' | 'tenInch';
+  filePath: string;
+}
+
+export interface LocalStoreScreenshots {
+  items: LocalScreenshotItem[];
+}
+

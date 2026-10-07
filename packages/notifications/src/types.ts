@@ -9,3 +9,17 @@ export interface NotificationPayload {
   error?: string;
   notes?: string;
 }
+
+export interface ReviewNotificationPayload {
+  project: string;
+  version: string;
+  store: 'apple' | 'google';
+  oldStatus?: string;
+  newStatus: string;
+  rejectionDiagnosis?: {
+    guidelineOrPolicy: string;
+    rootCause: string;
+    appealDraft?: string;
+  };
+}
+
