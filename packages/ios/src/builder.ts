@@ -12,6 +12,8 @@ export class IosBuilder {
       throw new Error('BuildError: iOS builds are only supported on macOS.');
     }
 
+    await this.verifyXcodeEnvironment();
+
     const startTime = Date.now();
     const workDir = cwd ?? process.cwd();
 
@@ -99,4 +101,23 @@ export class IosBuilder {
       }
     } catch {}
   }
+
+  private async verifyXcodeEnvironment(): Promise<void> {
+    try {
+      await execAsync('/usr/bin/xcrun --find xcodebuild');
+    } catch {
+      let activeDevDir = '';
+      try {
+        const { stdout } = await execAsync('xcode-select -p');
+        activeDevDir = stdout.trim();
+      } catch {}
+
+      const hint = activeDevDir.includes('CommandLineTools')
+        ? `Etkin geliştirici dizini (${activeDevDir}) yalnızca macOS Command Line Tools içermektedir. iOS IPA derlemesi için tam Xcode.app kurulmalı ve 'sudo xcode-select -s /Applications/Xcode.app/Contents/Developer' komutuyla etkinleştirilmelidir.`
+        : "Sistemde 'xcodebuild' aracı bulunamadı. Lütfen Xcode'un kurulu olduğundan ve xcode-select ile yapılandırıldığından emin olun.";
+
+      throw new Error(`XcodeError: iOS IPA derlemesi için xcodebuild gereklidir. ${hint}`);
+    }
+  }
 }
+

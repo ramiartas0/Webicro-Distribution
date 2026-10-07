@@ -3753,7 +3753,8 @@ export const uiCommand = new Command('ui')
               if (!currentStatus) return;
 
               const stageId = mapStepNameToStageId(event.step);
-              const logLine = `[${new Date().toLocaleTimeString()}] [${event.status}] ${event.step} ${event.message ? '- ' + event.message : ''}`;
+              const detail = event.message || event.error;
+              const logLine = `[${new Date().toLocaleTimeString()}] [${event.status}] ${event.step}${detail ? ' - ' + detail : ''}`;
               currentStatus.logs.push(logLine);
 
               for (const st of currentStatus.stages) {
@@ -3764,16 +3765,16 @@ export const uiCommand = new Command('ui')
                 } else if (st.id === stageId) {
                   if (event.status === 'SKIPPED') {
                     st.status = 'skipped';
-                    if (event.message) st.details = event.message;
+                    if (detail) st.details = detail;
                   } else if (event.status === 'RUNNING' || event.status === 'IN_PROGRESS') {
                     st.status = 'running';
-                    if (event.message) st.details = event.message;
+                    if (detail) st.details = detail;
                   } else if (event.status === 'COMPLETED' || event.status === 'SUCCESS') {
                     st.status = 'success';
-                    if (event.message) st.details = event.message;
+                    if (detail) st.details = detail;
                   } else if (event.status === 'FAILED') {
                     st.status = 'failed';
-                    if (event.error) st.details = event.error;
+                    if (detail) st.details = detail;
                   }
                 } else {
                   if (st.status !== 'skipped') {

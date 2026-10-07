@@ -641,7 +641,7 @@ export class ReleaseOrchestrator {
             );
           } catch (buildErr: unknown) {
             const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-            emitAndRecord('Android Build', 'FAILED', undefined, msg);
+            emitAndRecord('Android Build', 'FAILED', msg, msg);
             throw buildErr;
           }
         }
@@ -730,7 +730,7 @@ export class ReleaseOrchestrator {
               );
             } catch (buildErr: unknown) {
               const msg = buildErr instanceof Error ? buildErr.message : String(buildErr);
-              emitAndRecord('iOS Build', 'FAILED', undefined, msg);
+              emitAndRecord('iOS Build', 'FAILED', msg, msg);
               emitAndRecord(
                 'iOS Verify',
                 'SKIPPED',
@@ -806,14 +806,22 @@ export class ReleaseOrchestrator {
         }
       }
 
+      const hasGoogleCreds = Boolean(
+        creds.googlePlay?.serviceAccountJson || creds.googlePlay?.keyPath,
+      );
+      const hasAppStoreCreds = Boolean(
+        creds.appStore?.keyId &&
+          creds.appStore?.issuerId &&
+          (creds.appStore?.privateKey || creds.appStore?.privateKeyPath),
+      );
+
       const willUploadAndroid = Boolean(
-        !options.skipAndroid && androidArtifact && creds.googlePlay,
+        !options.skipAndroid && androidArtifact && hasGoogleCreds,
       );
       const willUploadIos = Boolean(
         !options.skipIos &&
           iosArtifact &&
-          creds.appStore?.keyId &&
-          creds.appStore?.issuerId,
+          hasAppStoreCreds,
       );
 
       const effectiveIosBundleId =
@@ -922,14 +930,26 @@ export class ReleaseOrchestrator {
         GooglePlayDraftResult | GooglePlayUploadResult | null
       > => {
         if (!willUploadAndroid || !googleAdapter || !androidArtifact) {
-          if (!options.skipAndroid) {
+          if (options.skipAndroid) {
+            emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
+          } else if (!androidArtifact) {
             emitAndRecord(
               'Google Play Upload',
               'SKIPPED',
-              'Android artifact veya Service Account bulunamadı',
+              'Android AAB/APK derleme paketi (artifact) bulunamadı',
+            );
+          } else if (!hasGoogleCreds) {
+            emitAndRecord(
+              'Google Play Upload',
+              'SKIPPED',
+              'Google Play Service Account kimliği bulunamadı',
             );
           } else {
-            emitAndRecord('Google Play Upload', 'SKIPPED', 'Android yüklemesi devre dışı');
+            emitAndRecord(
+              'Google Play Upload',
+              'SKIPPED',
+              'Google Play yükleme adaptörü başlatılamadı',
+            );
           }
           return null;
         }
@@ -993,14 +1013,26 @@ export class ReleaseOrchestrator {
         signal?: AbortSignal,
       ): Promise<AppStoreUploadResult | null> => {
         if (!willUploadIos || !appStoreAdapter || !iosArtifact) {
-          if (!options.skipIos) {
+          if (options.skipIos) {
+            emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
+          } else if (!iosArtifact) {
             emitAndRecord(
               'App Store Upload',
               'SKIPPED',
-              'iOS artifact veya API anahtarları bulunamadı',
+              'iOS IPA derleme paketi (artifact) bulunamadı (iOS derlemesi başarısız oldu veya atlandı)',
+            );
+          } else if (!hasAppStoreCreds) {
+            emitAndRecord(
+              'App Store Upload',
+              'SKIPPED',
+              'App Store Connect API anahtarları (Key ID, Issuer ID veya Özel Anahtar) bulunamadı',
             );
           } else {
-            emitAndRecord('App Store Upload', 'SKIPPED', 'iOS yüklemesi devre dışı');
+            emitAndRecord(
+              'App Store Upload',
+              'SKIPPED',
+              'App Store yükleme adaptörü başlatılamadı',
+            );
           }
           return null;
         }
