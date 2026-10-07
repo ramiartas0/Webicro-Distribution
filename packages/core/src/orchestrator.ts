@@ -977,6 +977,7 @@ export class ReleaseOrchestrator {
             const uploadRes = await googleAdapter.uploadAndRelease(
               androidArtifact.filePath,
               playNotes.length > 0 ? playNotes : undefined,
+              false,
             );
             storeSubmissionRepo.create({
               releaseId,
@@ -994,10 +995,14 @@ export class ReleaseOrchestrator {
               production: 'Üretim',
             };
             const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+            const managedNote =
+              uploadRes.track === 'production' || uploadRes.track === 'beta'
+                ? ' [İnceleme Talep Edildi]'
+                : '';
             emitAndRecord(
               'Google Play Upload',
               'SUCCESS',
-              `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+              `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})${managedNote}`,
             );
             return uploadRes;
           }
@@ -1039,12 +1044,18 @@ export class ReleaseOrchestrator {
 
         emitAndRecord('App Store Upload', 'IN_PROGRESS');
         try {
+          const whatsNew: Record<string, string> = {};
+          if (options.notesTr) whatsNew['tr-TR'] = options.notesTr;
+          if (options.notesEn) whatsNew['en-US'] = options.notesEn;
+
+          const shouldSubmitForReview = options.submitForReview !== false;
+
           const uploadRes = await appStoreAdapter.uploadAndRelease(
             iosArtifact.filePath,
             effectiveIosVersion,
             effectiveIosBuildNumber,
-            undefined,
-            undefined,
+            Object.keys(whatsNew).length > 0 ? whatsNew : undefined,
+            shouldSubmitForReview,
             {
               signal,
               onProgress: (m: string) => emitProgress('App Store Upload', m),
@@ -1059,10 +1070,13 @@ export class ReleaseOrchestrator {
             error: null,
           });
           appStoreStatus = `SUCCESS (${uploadRes.buildId})`;
+          const submissionLabel = uploadRes.submittedForReview
+            ? 'Resmi İncelemeye Teslim Edildi (Waiting for Review)'
+            : 'Yüklendi (Taslak)';
           emitAndRecord(
             'App Store Upload',
             'SUCCESS',
-            `App Store Connect'e yüklendi: Paket ${effectiveIosBundleId} (${uploadRes.buildId})`,
+            `App Store Connect'e yüklendi ve işlendi (${submissionLabel}): Paket ${effectiveIosBundleId} (${uploadRes.buildId})`,
           );
           return uploadRes;
         } catch (asErr: unknown) {
@@ -1094,6 +1108,7 @@ export class ReleaseOrchestrator {
           const uploadRes = await googleAdapter.commitDraft(
             playResult.editId,
             playResult.versionCode,
+            false,
           );
           storeSubmissionRepo.create({
             releaseId,
@@ -1111,10 +1126,14 @@ export class ReleaseOrchestrator {
             production: 'Üretim',
           };
           const trackDisplayName = trackDisplayNames[uploadRes.track] || uploadRes.track;
+          const managedNote =
+            uploadRes.track === 'production' || uploadRes.track === 'beta'
+              ? ' [İnceleme Talep Edildi]'
+              : '';
           emitAndRecord(
             'Google Play Upload',
             'SUCCESS',
-            `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})`,
+            `Google Play'e yüklendi: Paket ${resolvedPackage} #${uploadRes.versionCode} (${trackDisplayName})${managedNote}`,
           );
           draftHolder.draft = null;
         }

@@ -3619,6 +3619,7 @@ export const uiCommand = new Command('ui')
               parallelStoreUpload?: boolean;
               atomicRelease?: boolean;
               validateStoresPreflight?: boolean;
+              submitForReview?: boolean;
             };
 
             const trNotes = options.notesTr?.trim();
@@ -3835,6 +3836,7 @@ export const uiCommand = new Command('ui')
                 parallelStoreUpload: options.parallelStoreUpload !== false,
                 atomicRelease: options.atomicRelease !== false,
                 validateStoresPreflight: options.validateStoresPreflight !== false,
+                submitForReview: options.submitForReview !== false,
                 signal: abortCtrl.signal,
               });
 

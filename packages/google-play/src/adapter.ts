@@ -343,11 +343,12 @@ export class GooglePlayAdapter {
     }
   }
 
-  public async commit(editId: string): Promise<void> {
+  public async commit(editId: string, changesNotSentForReview = false): Promise<void> {
     try {
       const token = await getGoogleAccessToken(this.config);
+      const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}:commit?changesNotSentForReview=${changesNotSentForReview}`;
       const res = await fetch(
-        `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${this.packageName}/edits/${editId}:commit`,
+        url,
         {
           method: 'POST',
           headers: {
@@ -366,6 +367,7 @@ export class GooglePlayAdapter {
   public async uploadAndRelease(
     aabPath: string,
     notes?: GooglePlayReleaseNotes[],
+    changesNotSentForReview = false,
   ): Promise<GooglePlayUploadResult> {
     const editId = await this.createEdit();
     GooglePlayAdapter.activeReleaseEdits.set(this.packageName, editId);
@@ -373,7 +375,7 @@ export class GooglePlayAdapter {
     try {
       versionCode = await this.uploadBundle(editId, aabPath);
       await this.assignTrack(editId, versionCode, notes);
-      await this.commit(editId);
+      await this.commit(editId, changesNotSentForReview);
     } catch (error: unknown) {
       const token = await getGoogleAccessToken(this.config).catch(() => '');
       if (token) {
@@ -447,9 +449,13 @@ export class GooglePlayAdapter {
     } catch {}
   }
 
-  public async commitDraft(editId: string, versionCode: number): Promise<GooglePlayUploadResult> {
+  public async commitDraft(
+    editId: string,
+    versionCode: number,
+    changesNotSentForReview = false,
+  ): Promise<GooglePlayUploadResult> {
     try {
-      await this.commit(editId);
+      await this.commit(editId, changesNotSentForReview);
     } finally {
       GooglePlayAdapter.activeReleaseEdits.delete(this.packageName);
     }

@@ -242,6 +242,22 @@ export class AppStoreAdapter {
     });
   }
 
+  public async setExportCompliance(buildId: string, usesEncryption = false): Promise<void> {
+    const payload = {
+      data: {
+        type: 'builds',
+        id: buildId,
+        attributes: {
+          usesNonExemptEncryption: usesEncryption,
+        },
+      },
+    };
+    await this.fetchApi(`/builds/${buildId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
   public async attachBuildToVersion(versionId: string, buildId: string): Promise<void> {
     const payload = {
       data: {
@@ -473,6 +489,14 @@ export class AppStoreAdapter {
     }
     throwIfAborted();
 
+    report?.('Apple build işlemesi tamamlandı. İhracat uyumluluğu (Export Compliance / Non-exempt encryption) otomatik onaylanıyor...');
+    try {
+      await this.setExportCompliance(buildId, false);
+      report?.('İhracat uyumluluğu başarıyla onaylandı (usesNonExemptEncryption=false).');
+    } catch (compErr: unknown) {
+      report?.(`Uyumluluk otomatik doğrulama notu: ${compErr instanceof Error ? compErr.message : String(compErr)}`);
+    }
+
     const versionId = await this.createAppStoreVersion(appId, versionString, 'IOS').catch(
       async (e) => {
         // 1. Önce tam olarak aynı sürüm numarasına (versionString) sahip kayıtları ara
@@ -528,8 +552,15 @@ export class AppStoreAdapter {
 
     let submitted = false;
     if (submitReview) {
-      await this.submitForReview(versionId, appId);
-      submitted = true;
+      report?.('Sürüm resmi Apple inceleme kuyruğuna (Submit for Review) teslim ediliyor...');
+      try {
+        await this.submitForReview(versionId, appId);
+        submitted = true;
+        report?.('Sürüm başarıyla Apple inceleme kuyruğuna teslim edildi (In Review / Waiting for Review).');
+      } catch (submitErr: unknown) {
+        const subMsg = submitErr instanceof Error ? submitErr.message : String(submitErr);
+        report?.(`Otomatik incelemeye gönderme notu: ${subMsg}`);
+      }
     }
 
     return {

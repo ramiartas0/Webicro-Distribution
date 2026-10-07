@@ -404,6 +404,34 @@ describe('Store Adapters Reliability & Isolation', () => {
     expect(patchedVersions.length).toBe(1);
     expect(patchedVersions[0]?.versionString).toBe('1.11.0');
   });
+
+  it('should patch build with usesNonExemptEncryption: false for automatic compliance', async () => {
+    let patchedBody: unknown = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: unknown, options?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.endsWith('/builds/build-456') && options?.method === 'PATCH') {
+        patchedBody = JSON.parse(options.body as string);
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+
+    const { AppStoreAdapter } = await import('../packages/app-store/src/adapter.js');
+    const adapter = new AppStoreAdapter({
+      keyId: 'KEY123',
+      issuerId: 'ISS123',
+      bundleId: 'com.webicro.test',
+      privateKeyContent: 'dummy-key',
+    });
+    vi.spyOn(adapter, 'authenticate').mockReturnValue('mock-jwt');
+
+    await adapter.setExportCompliance('build-456', false);
+    const parsed = patchedBody as { data?: { type?: string; attributes?: { usesNonExemptEncryption?: boolean } } };
+    expect(parsed).toBeDefined();
+    expect(parsed?.data?.type).toBe('builds');
+    expect(parsed?.data?.attributes?.usesNonExemptEncryption).toBe(false);
+  });
 });
+
 
 
