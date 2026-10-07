@@ -370,6 +370,34 @@ export default function App() {
   const [isAutoFixing, setIsAutoFixing] = useState<boolean>(false);
   const [autoFixSuccessMsg, setAutoFixSuccessMsg] = useState<string | null>(null);
 
+  // Shorebird OTA Modal State
+  const [showOtaPatchModal, setShowOtaPatchModal] = useState<boolean>(false);
+  const [otaPlatform, setOtaPlatform] = useState<'android' | 'ios-framework' | 'both'>('android');
+  const [otaReleaseVersion, setOtaReleaseVersion] = useState<string>('');
+  const [otaDryRun, setOtaDryRun] = useState<boolean>(false);
+  const [isDeployingOta, setIsDeployingOta] = useState<boolean>(false);
+  const [otaResult, setOtaResult] = useState<{ success: boolean; message: string; output?: string } | null>(null);
+
+  // Certificate & Keystore Health State
+  const [showCertHealthModal, setShowCertHealthModal] = useState<boolean>(false);
+  const [isLoadingCertHealth, setIsLoadingCertHealth] = useState<boolean>(false);
+  const [certHealthReport, setCertHealthReport] = useState<{
+    overallStatus: 'HEALTHY' | 'WARNING' | 'EXPIRED' | 'NOT_CONFIGURED';
+    minDaysRemaining: number;
+    items: {
+      name: string;
+      type: string;
+      expirationDate: string;
+      daysRemaining: number;
+      isExpired: boolean;
+      status: string;
+      details?: string;
+    }[];
+    warnings: string[];
+    errors: string[];
+  } | null>(null);
+
+
   const [projectName, setProjectName] = useState<string>('');
   const [projectPackage, setProjectPackage] = useState<string>('');
   const [projectIosBundleId, setProjectIosBundleId] = useState<string>('');
@@ -1414,6 +1442,85 @@ export default function App() {
       setIsSyncingStores(false);
     }
   };
+
+  const fetchCertHealth = async () => {
+    setIsLoadingCertHealth(true);
+    try {
+      const res = await authFetch('/api/credentials/health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProjectPath }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCertHealthReport(data.report);
+      }
+    } catch (err) {
+      console.error('Cert health fetch error:', err);
+    } finally {
+      setIsLoadingCertHealth(false);
+    }
+  };
+
+  const handleDeployOtaPatch = async () => {
+    setIsDeployingOta(true);
+    setOtaResult(null);
+    try {
+      const res = await authFetch('/api/release/ota-patch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: activeProjectPath,
+          platform: otaPlatform,
+          releaseVersion: otaReleaseVersion || undefined,
+          dryRun: otaDryRun,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOtaResult({
+          success: true,
+          message: `OTA yaması başarıyla dağıtıldı! ${data.patchNumber ? `(Yama #${data.patchNumber})` : ''}`,
+          output: data.output,
+        });
+        toast.success('Shorebird OTA yaması yayınlandı!');
+      } else {
+        setOtaResult({
+          success: false,
+          message: data.error || 'Yama dağıtımı başarısız oldu.',
+          output: data.output,
+        });
+        toast.error('Shorebird yama dağıtımı başarısız oldu.');
+      }
+    } catch (err) {
+      setOtaResult({
+        success: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      toast.error('Sunucu bağlantı hatası');
+    } finally {
+      setIsDeployingOta(false);
+    }
+  };
+
+  const handleSyncAssets = async () => {
+    try {
+      const res = await authFetch('/api/stores/assets-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeProjectPath }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(
+          `Meta veri (${data.metadataLocales?.length || 0} dil) ve ${data.screenshotCount || 0} ekran görüntüsü mağazalara eşitlendi!`,
+        );
+      }
+    } catch {
+      toast.error('Varlık eşitleme hatası');
+    }
+  };
+
 
   const handleSyncStoreVersion = async (
     source: 'smart' | 'google_play' | 'app_store' = 'smart',
@@ -3056,6 +3163,42 @@ export default function App() {
               >
                 <Key className="w-3.5 h-3.5 text-primary" />
                 <span>{t('header.configureApi')}</span>
+              </button>
+            </Tooltip>
+
+            <Tooltip content="Shorebird ile anında mağazasız canlı yama (OTA Hotfix)" position="bottom">
+              <button
+                onClick={() => {
+                  setOtaReleaseVersion(currentVersion);
+                  setShowOtaPatchModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/20 transition-all cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>OTA Yama</span>
+              </button>
+            </Tooltip>
+
+            <Tooltip content="Apple ve Android sertifika / keystore geçerlilik durumunu denetle" position="bottom">
+              <button
+                onClick={() => {
+                  setShowCertHealthModal(true);
+                  void fetchCertHealth();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                <span>Sertifikalar</span>
+              </button>
+            </Tooltip>
+
+            <Tooltip content="Yerel meta verileri ve ekran görüntülerini mağazalara eşitle" position="bottom">
+              <button
+                onClick={() => void handleSyncAssets()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-background text-xs font-medium hover:bg-secondary transition-all cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5 text-primary" />
+                <span>Varlıkları Eşitle</span>
               </button>
             </Tooltip>
 
@@ -6202,6 +6345,234 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ===================== MODAL: SHOREBIRD OTA YAMA ===================== */}
+      {showOtaPatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl max-w-xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
+                <Zap className="w-5 h-5 text-amber-500" />
+                <span>⚡ Shorebird OTA Canlı Yama Dağıtımı</span>
+              </h3>
+              <button
+                onClick={() => setShowOtaPatchModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Mağaza inceleme kuyruğunu beklemeden, mevcut canlı sürüme doğrudan Over-The-Air (OTA) Dart düzeltmesi gönderin.
+            </p>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="font-semibold block mb-1.5 text-foreground">Hedef Platform</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['android', 'ios-framework', 'both'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setOtaPlatform(p)}
+                      className={`py-2 px-3 rounded-lg border text-xs font-medium cursor-pointer transition-all ${
+                        otaPlatform === p
+                          ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold'
+                          : 'border-border bg-background text-muted-foreground hover:bg-secondary'
+                      }`}
+                    >
+                      {p === 'android' ? 'Android' : p === 'ios-framework' ? 'iOS' : 'Android + iOS'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1 text-foreground">Hedef Canlı Sürüm</label>
+                <input
+                  type="text"
+                  value={otaReleaseVersion}
+                  onChange={(e) => setOtaReleaseVersion(e.target.value)}
+                  placeholder="ör. 2.7.0"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-foreground text-xs font-mono"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="otaDryRun"
+                  checked={otaDryRun}
+                  onChange={(e) => setOtaDryRun(e.target.checked)}
+                  className="rounded border-border text-primary cursor-pointer"
+                />
+                <label htmlFor="otaDryRun" className="text-muted-foreground cursor-pointer">
+                  Simülasyon Modu (Dry-Run - Komut çalıştırılmadan doğrulanır)
+                </label>
+              </div>
+
+              {otaResult && (
+                <div
+                  className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+                    otaResult.success
+                      ? 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300'
+                      : 'border-destructive/40 bg-destructive/10 text-destructive'
+                  }`}
+                >
+                  <p className="font-bold">{otaResult.message}</p>
+                  {otaResult.output && (
+                    <pre className="text-[10px] p-2 rounded bg-black/40 text-white font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+                      {otaResult.output}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowOtaPatchModal(false)}
+                  className="px-4 py-2 rounded-lg border border-border bg-background text-muted-foreground text-xs font-medium cursor-pointer"
+                >
+                  Kapat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeployOtaPatch()}
+                  disabled={isDeployingOta}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-500 text-white text-xs font-bold shadow hover:bg-amber-600 transition-all cursor-pointer disabled:opacity-60"
+                >
+                  <Zap className={`w-3.5 h-3.5 ${isDeployingOta ? 'animate-spin' : ''}`} />
+                  <span>{isDeployingOta ? 'Dağıtılıyor...' : 'Yamayı Yayınla'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: SERTİFİKA VE KEYSTORE SAĞLIK DENETİMİ ===================== */}
+      {showCertHealthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-card border border-border rounded-xl shadow-xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-base flex items-center gap-2 text-foreground">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                <span>🔐 Sertifika ve Keystore Sağlık Raporu</span>
+              </h3>
+              <button
+                onClick={() => setShowCertHealthModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isLoadingCertHealth ? (
+              <div className="py-8 text-center text-xs text-muted-foreground space-y-2">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-primary" />
+                <p>Apple ve Android sertifikaları inceleniyor...</p>
+              </div>
+            ) : certHealthReport ? (
+              <div className="space-y-4 text-xs">
+                {/* GENEL DURUM ROZETİ */}
+                <div
+                  className={`p-3 rounded-lg border flex items-center justify-between ${
+                    certHealthReport.overallStatus === 'HEALTHY'
+                      ? 'border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300'
+                      : certHealthReport.overallStatus === 'WARNING'
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                        : 'border-destructive/40 bg-destructive/10 text-destructive'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-bold">
+                      Genel Durum: {certHealthReport.overallStatus}
+                    </p>
+                    <p className="text-[11px] opacity-80">
+                      En Yakın Bitiş: {certHealthReport.minDaysRemaining} gün kaldı
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void fetchCertHealth()}
+                    className="p-1.5 rounded-md hover:bg-background/40 cursor-pointer"
+                    title="Yenile"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* UYARILAR */}
+                {certHealthReport.warnings.map((w, idx) => (
+                  <div key={idx} className="p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-[11px]">
+                    {w}
+                  </div>
+                ))}
+
+                {/* HATALAR */}
+                {certHealthReport.errors.map((e, idx) => (
+                  <div key={idx} className="p-2.5 rounded bg-destructive/10 border border-destructive/30 text-destructive text-[11px]">
+                    {e}
+                  </div>
+                ))}
+
+                {/* SERTİFİKA VE PROFİL LİSTESİ */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-secondary/60 text-[11px] font-semibold text-muted-foreground">
+                      <tr>
+                        <th className="p-2.5">Sertifika / Dosya</th>
+                        <th className="p-2.5">Tür</th>
+                        <th className="p-2.5">Kalan Gün</th>
+                        <th className="p-2.5">Durum</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border text-[11px]">
+                      {certHealthReport.items.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-secondary/30">
+                          <td className="p-2.5 font-medium text-foreground">{item.name}</td>
+                          <td className="p-2.5 text-muted-foreground">{item.type}</td>
+                          <td className="p-2.5 font-mono">{item.daysRemaining} gün</td>
+                          <td className="p-2.5">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                item.status === 'VALID'
+                                  ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                  : item.status === 'WARNING'
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                    : 'bg-destructive/10 text-destructive'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowCertHealthModal(false)}
+                    className="px-4 py-2 rounded-lg border border-border bg-background text-muted-foreground text-xs font-medium cursor-pointer"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                Sertifika bilgisi bulunamadı veya yapılandırılmadı.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

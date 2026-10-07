@@ -850,11 +850,11 @@ export class ReleaseOrchestrator {
           // Pre-flight kontrolü: App Store Connect üzerinde uygulama gerçekten kayıtlı mı?
           try {
             const preflightAppStore = new AppStoreAdapter({
-              keyId: creds.appStore!.keyId!,
-              issuerId: creds.appStore!.issuerId!,
+              keyId: creds.appStore?.keyId ?? '',
+              issuerId: creds.appStore?.issuerId ?? '',
               bundleId: effectiveIosBundleId,
-              privateKeyPath: creds.appStore!.privateKeyPath,
-              privateKeyContent: creds.appStore!.privateKey,
+              privateKeyPath: creds.appStore?.privateKeyPath,
+              privateKeyContent: creds.appStore?.privateKey,
             });
             await preflightAppStore.validateAppExists();
           } catch (preflightErr: unknown) {
@@ -904,24 +904,24 @@ export class ReleaseOrchestrator {
           ? String(options.iosBuildNumber)
           : resolution.buildNumberString;
 
-      if (willUploadAndroid) {
+      if (willUploadAndroid && creds.googlePlay) {
         const effectiveTrack = options.googleTrack || config?.android?.track || 'internal';
         googleAdapter = new GooglePlayAdapter({
           packageName: resolvedPackage,
-          serviceAccountJson: creds.googlePlay!.serviceAccountJson,
-          serviceAccountJsonPath: creds.googlePlay!.keyPath,
+          serviceAccountJson: creds.googlePlay.serviceAccountJson,
+          serviceAccountJsonPath: creds.googlePlay.keyPath,
           track: effectiveTrack,
           userFraction: options.rollout ? options.rollout / 100 : undefined,
         });
       }
 
-      if (willUploadIos) {
+      if (willUploadIos && creds.appStore) {
         appStoreAdapter = new AppStoreAdapter({
-          keyId: creds.appStore!.keyId!,
-          issuerId: creds.appStore!.issuerId!,
+          keyId: creds.appStore.keyId ?? '',
+          issuerId: creds.appStore.issuerId ?? '',
           bundleId: effectiveIosBundleId,
-          privateKeyPath: creds.appStore!.privateKeyPath,
-          privateKeyContent: creds.appStore!.privateKey,
+          privateKeyPath: creds.appStore.privateKeyPath,
+          privateKeyContent: creds.appStore.privateKey,
         });
       }
 
